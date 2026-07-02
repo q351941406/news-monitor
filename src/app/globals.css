@@ -2,26 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+    --color-primary: #DC2626;
+    --color-primary-light: #EF4444;
+    --color-cta: #1E40AF;
+    --color-bg: #FAFAF9;
+    --color-text: #1C1917;
+    --color-text-muted: #57534E;
+    --color-border: #D6D3D1;
+  }
+
+  body {
+    font-family: var(--font-roboto), system-ui, sans-serif;
+    color: var(--color-text);
+    background-color: var(--color-bg);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-newsreader), Georgia, serif;
   }
 }
 
-body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+@layer components {
+  .card-unread {
+    @apply border-l-4 border-red-600 bg-white;
+  }
+
+  .card-read {
+    @apply border-l-4 border-transparent bg-stone-100 opacity-70;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D6D3D1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #A8A29E;
 }

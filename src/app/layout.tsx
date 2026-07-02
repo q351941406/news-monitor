@@ -1,12 +1,21 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Newsreader, Roboto } from 'next/font/google'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
+const newsreader = Newsreader({
+  subsets: ['latin'],
+  variable: '--font-newsreader',
+})
+
+const roboto = Roboto({
+  weight: ['300', '400', '500', '700'],
+  subsets: ['latin'],
+  variable: '--font-roboto',
+})
 
 export const metadata: Metadata = {
-  title: 'News Monitor - 热点新闻监控',
-  description: '每日热点新闻汇总与领域知识发现',
+  title: 'News Monitor',
+  description: '热点新闻监控与领域知识发现',
 }
 
 export default function RootLayout({
@@ -15,8 +24,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="zh-CN">
-      <body className={inter.className}>{children}</body>
+    <html lang="zh-CN" className={`${newsreader.variable} ${roboto.variable}`}>
+      <body className="font-sans antialiased bg-stone-50 text-stone-900">
+        {children}
+      </body>
     </html>
   )
 }

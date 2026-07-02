@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Header from './components/Header'
+import SourceTabs from './components/SourceTabs'
+import TopicGroup from './components/TopicGroup'
 
 interface NewsItem {
   id: string
@@ -13,94 +16,45 @@ interface NewsItem {
   isRead: boolean
 }
 
-const sourceLabels: Record<string, { name: string; icon: string }> = {
-  github: { name: 'GitHub Trending', icon: '🐙' },
-  producthunt: { name: 'Product Hunt', icon: '🚀' },
-  twitter: { name: 'X / Twitter', icon: '𝕏' },
+// 临时主题分组（后续用 AI 自动生成）
+const topicConfig: Record<string, { icon: string; label: string }> = {
+  'ai': { icon: '🤖', label: 'AI / 人工智能' },
+  'web': { icon: '🌐', label: 'Web 开发' },
+  'tools': { icon: '🛠️', label: '开发工具' },
+  'finance': { icon: '💰', label: '金融量化' },
+  'other': { icon: '📦', label: '其他' },
 }
 
-function NewsCard({ item, onMarkRead }: { item: NewsItem; onMarkRead: (id: string) => void }) {
-  const rawData = item.rawData
+// 简单的主题分类逻辑（后续用 AI 替代）
+function categorizeItem(item: NewsItem): string {
+  const text = JSON.stringify(item.rawData).toLowerCase()
+  const title = (item.title || '').toLowerCase()
 
-  const getDescription = () => {
-    switch (item.source) {
-      case 'github':
-        return rawData.description as string
-      case 'producthunt':
-        return rawData.tagline as string
-      case 'twitter':
-        return (rawData.text as string)?.slice(0, 200)
-      default:
-        return ''
-    }
+  if (text.includes('ai') || text.includes('llm') || text.includes('agent') || text.includes('机器学习') || title.includes('ai')) {
+    return 'ai'
   }
-
-  const getMetrics = () => {
-    switch (item.source) {
-      case 'github':
-        return `⭐ ${(rawData.stars as number)?.toLocaleString()}`
-      case 'producthunt':
-        return `▲ ${rawData.votes}`
-      case 'twitter':
-        return `♡ ${rawData.likes}`
-      default:
-        return ''
-    }
+  if (text.includes('react') || text.includes('vue') || text.includes('next') || text.includes('frontend') || text.includes('web')) {
+    return 'web'
   }
-
-  return (
-    <div className={`border rounded-lg p-4 transition-all ${
-      item.isRead
-        ? 'bg-gray-50 opacity-60 border-gray-200'
-        : 'bg-white hover:shadow-lg border-blue-200 border-l-4'
-    }`}>
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="font-semibold text-lg leading-tight">
-          <a href={item.url} target="_blank" rel="noopener noreferrer"
-             className="hover:text-blue-600 transition-colors">
-            {item.title}
-          </a>
-        </h3>
-        <span className="text-sm text-gray-500 whitespace-nowrap">
-          {getMetrics()}
-        </span>
-      </div>
-
-      <p className="text-gray-600 text-sm mt-1">{getDescription()}</p>
-
-      {item.summary && (
-        <div className="mt-3 p-3 bg-gray-50 rounded text-sm whitespace-pre-line">
-          {item.summary}
-        </div>
-      )}
-
-      <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
-        <span>{sourceLabels[item.source]?.name}</span>
-        <div className="flex items-center gap-2">
-          <span>{new Date(item.fetchedAt).toLocaleString('zh-CN')}</span>
-          {!item.isRead && (
-            <button
-              onClick={() => onMarkRead(item.id)}
-              className="text-blue-500 hover:text-blue-700 underline"
-            >
-              已读
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
+  if (text.includes('cli') || text.includes('terminal') || text.includes('editor') || text.includes('tool') || text.includes('devtool')) {
+    return 'tools'
+  }
+  if (text.includes('trading') || text.includes('quant') || text.includes('finance') || text.includes('crypto') || text.includes('量化')) {
+    return 'finance'
+  }
+  return 'other'
 }
 
 export default function Home() {
   const [news, setNews] = useState<Record<string, NewsItem[]>>({})
   const [loading, setLoading] = useState(true)
-  const [showAll, setShowAll] = useState(false)
+  const [showRead, setShowRead] = useState(false)
+  const [activeSource, setActiveSource] = useState('all')
 
   const fetchNews = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/news?showAll=${showAll}`)
+      const res = await fetch(`/api/news?showAll=${showRead}`)
       const data = await res.json()
       setNews(data.data || {})
     } catch (error) {
@@ -112,7 +66,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchNews()
-  }, [showAll])
+  }, [showRead])
 
   const handleMarkRead = async (itemId: string) => {
     try {
@@ -122,7 +76,6 @@ export default function Home() {
         body: JSON.stringify({ action: 'read', itemId }),
       })
 
-      // 更新本地状态
       setNews(prev => {
         const updated = { ...prev }
         for (const source of Object.keys(updated)) {
@@ -137,20 +90,29 @@ export default function Home() {
     }
   }
 
-  const handleMarkAllRead = async (source?: string) => {
+  const handleMarkGroupRead = async (topic: string) => {
+    const itemsToMark = allItems.filter(item => {
+      const itemTopic = categorizeItem(item)
+      return itemTopic === topic && !item.isRead
+    })
+
+    for (const item of itemsToMark) {
+      await handleMarkRead(item.id)
+    }
+  }
+
+  const handleMarkAllRead = async () => {
     try {
       await fetch('/api/news', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'readAll', source }),
+        body: JSON.stringify({ action: 'readAll' }),
       })
 
-      // 更新本地状态
       setNews(prev => {
         const updated = { ...prev }
-        const sources = source ? [source] : Object.keys(updated)
-        for (const s of sources) {
-          updated[s] = updated[s].map(item => ({ ...item, isRead: true }))
+        for (const source of Object.keys(updated)) {
+          updated[source] = updated[source].map(item => ({ ...item, isRead: true }))
         }
         return updated
       })
@@ -159,87 +121,94 @@ export default function Home() {
     }
   }
 
-  const totalCount = Object.values(news).reduce((sum, items) => sum + items.length, 0)
-  const unreadCount = Object.values(news).reduce(
-    (sum, items) => sum + items.filter(i => !i.isRead).length, 0
+  // 合并所有新闻
+  const allItems = Object.values(news).flat()
+
+  // 按来源筛选
+  const filteredItems = activeSource === 'all'
+    ? allItems
+    : allItems.filter(item => item.source === activeSource)
+
+  // 按主题分组
+  const groupedItems: Record<string, NewsItem[]> = {}
+  for (const item of filteredItems) {
+    const topic = categorizeItem(item)
+    if (!groupedItems[topic]) {
+      groupedItems[topic] = []
+    }
+    groupedItems[topic].push(item)
+  }
+
+  // 按未读数量排序主题
+  const sortedTopics = Object.entries(groupedItems).sort(
+    ([, a], [, b]) => b.filter(i => !i.isRead).length - a.filter(i => !i.isRead).length
   )
 
+  // 来源统计
+  const sources = [
+    { id: 'github', label: 'GitHub', icon: '🐙', count: news.github?.length || 0, unread: news.github?.filter(i => !i.isRead).length || 0 },
+    { id: 'producthunt', label: 'Product Hunt', icon: '🚀', count: news.producthunt?.length || 0, unread: news.producthunt?.filter(i => !i.isRead).length || 0 },
+    { id: 'twitter', label: 'X / Twitter', icon: '𝕏', count: news.twitter?.length || 0, unread: news.twitter?.filter(i => !i.isRead).length || 0 },
+  ]
+
+  const totalUnread = allItems.filter(i => !i.isRead).length
+  const totalCount = allItems.length
+
   return (
-    <main className="min-h-screen p-4 md:p-8 max-w-6xl mx-auto">
-      <header className="mb-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold">📰 热点新闻监控</h1>
-            <p className="text-gray-500 mt-1">
-              共 {totalCount} 条 · {unreadCount} 条未读
+    <div className="min-h-screen bg-stone-50">
+      <Header
+        unreadCount={totalUnread}
+        totalCount={totalCount}
+        showRead={showRead}
+        onShowReadChange={setShowRead}
+        onMarkAllRead={handleMarkAllRead}
+      />
+
+      <main className="max-w-6xl mx-auto px-4 py-6">
+        {/* Source Tabs */}
+        <div className="mb-6">
+          <SourceTabs
+            sources={sources}
+            activeSource={activeSource}
+            onSourceChange={setActiveSource}
+          />
+        </div>
+
+        {/* Content */}
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin mb-4" />
+            <p className="text-stone-500">加载中...</p>
+          </div>
+        ) : sortedTopics.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <p className="text-stone-400 text-lg">
+              {showRead ? '暂无数据' : '没有未读内容 🎉'}
             </p>
           </div>
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={showAll}
-                onChange={(e) => setShowAll(e.target.checked)}
-                className="rounded"
-              />
-              显示已读
-            </label>
-            <button
-              onClick={() => handleMarkAllRead()}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-            >
-              全部已读
-            </button>
+        ) : (
+          <div className="space-y-4">
+            {sortedTopics.map(([topic, items]) => {
+              const config = topicConfig[topic] || topicConfig['other']
+              return (
+                <TopicGroup
+                  key={topic}
+                  topic={config.label}
+                  icon={config.icon}
+                  items={items}
+                  onMarkRead={handleMarkRead}
+                  onMarkGroupRead={handleMarkGroupRead}
+                />
+              )
+            })}
           </div>
-        </div>
-      </header>
+        )}
+      </main>
 
-      {loading ? (
-        <div className="text-center py-12">
-          <p className="text-gray-400">加载中...</p>
-        </div>
-      ) : (
-        <div className="grid gap-8">
-          {Object.entries(sourceLabels).map(([slug, meta]) => {
-            const items = news[slug] || []
-            return (
-              <section key={slug}>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">{meta.icon}</span>
-                    <h2 className="text-xl font-semibold">{meta.name}</h2>
-                    <span className="text-sm text-gray-400">
-                      ({items.filter(i => !i.isRead).length}/{items.length})
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleMarkAllRead(slug)}
-                    className="text-sm text-blue-500 hover:text-blue-700"
-                  >
-                    本组已读
-                  </button>
-                </div>
-
-                {items.length === 0 ? (
-                  <p className="text-gray-400 italic">
-                    {showAll ? '暂无数据' : '没有未读内容'}
-                  </p>
-                ) : (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {items.map(item => (
-                      <NewsCard key={item.id} item={item} onMarkRead={handleMarkRead} />
-                    ))}
-                  </div>
-                )}
-              </section>
-            )
-          })}
-        </div>
-      )}
-
-      <footer className="mt-12 text-center text-sm text-gray-400 pb-8">
+      {/* Footer */}
+      <footer className="max-w-6xl mx-auto px-4 py-8 text-center text-sm text-stone-400">
         <p>数据由 GitHub Actions 每 4 小时自动抓取</p>
       </footer>
-    </main>
+    </div>
   )
 }
