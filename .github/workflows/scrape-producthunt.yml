@@ -1,27 +1,14 @@
-name: Scrape News Sources
+name: Scrape Product Hunt
 
 on:
   schedule:
-    # 每 4 小时运行一次
-    - cron: '0 */4 * * *'
+    # 每小时
+    - cron: '0 * * * *'
   workflow_dispatch:
-    inputs:
-      source:
-        description: 'Source to scrape (leave empty for all)'
-        required: false
-        type: choice
-        options:
-          - ''
-          - github
-          - producthunt
-          - twitter
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        source: ${{ fromJson(github.event.inputs.source && format('["{0}"]', github.event.inputs.source) || '["github", "producthunt", "twitter"]') }}
 
     steps:
       - name: Checkout
@@ -43,9 +30,8 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
           PRODUCTHUNT_TOKEN: ${{ secrets.PRODUCTHUNT_TOKEN }}
-          RSSHUB_URL: ${{ secrets.RSSHUB_URL }}
-        run: npx tsx scripts/scrape.ts --source=${{ matrix.source }}
+        run: npx tsx scripts/scrape.ts --source=producthunt
 
       - name: Report
         if: always()
-        run: echo "Scrape completed for ${{ matrix.source }}"
+        run: echo "Product Hunt scrape completed"
