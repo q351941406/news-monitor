@@ -1,4 +1,4 @@
-import { pgTable, text, bigint, jsonb, timestamp } from 'drizzle-orm/pg-core'
+import { pgTable, text, bigint, jsonb, timestamp, boolean } from 'drizzle-orm/pg-core'
 
 // 原始内容表
 export const rawItems = pgTable('raw_items', {
@@ -7,6 +7,7 @@ export const rawItems = pgTable('raw_items', {
   title: text('title'),                  // 标题
   url: text('url').notNull(),            // 原文链接
   rawData: jsonb('raw_data').notNull(),  // 原始数据
+  isRead: boolean('is_read').default(false).notNull(),  // 已读状态
   fetchedAt: bigint('fetched_at', { mode: 'number' }).notNull(),  // 抓取时间戳
   createdAt: timestamp('created_at').defaultNow(),
 })

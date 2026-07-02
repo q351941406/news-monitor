@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-http'
-import { eq, and, isNull, desc, lt } from 'drizzle-orm'
+import { eq, and, isNull, desc, lt, ne } from 'drizzle-orm'
 import { rawItems, aiAnalysis, type RawItem, type NewRawItem } from './schema'
 
 // Re-export types
@@ -22,6 +22,7 @@ export interface NewsItem {
   rawData: Record<string, unknown>
   summary: string | null
   fetchedAt: number
+  isRead: boolean
 }
 
 // 初始化数据库表（Drizzle 不自动建表，需要手动或用 push）
@@ -36,6 +37,7 @@ export async function initDatabase() {
       title TEXT,
       url TEXT NOT NULL,
       raw_data JSONB NOT NULL,
+      is_read BOOLEAN DEFAULT FALSE NOT NULL,
       fetched_at BIGINT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
@@ -121,9 +123,51 @@ export async function existsItem(itemId: string): Promise<boolean> {
   return result.length > 0
 }
 
-// 获取新闻列表（带 AI 摘要）
-export async function getNews(source: string, limit: number = 50): Promise<NewsItem[]> {
+// 标记为已读
+export async function markAsRead(itemId: string): Promise<void> {
   const db = getDb()
+
+  await db.update(rawItems)
+    .set({ isRead: true })
+    .where(eq(rawItems.id, itemId))
+}
+
+// 批量标记已读
+export async function markAllAsRead(source?: string): Promise<void> {
+  const db = getDb()
+
+  if (source) {
+    await db.update(rawItems)
+      .set({ isRead: true })
+      .where(eq(rawItems.source, source))
+  } else {
+    await db.update(rawItems)
+      .set({ isRead: true })
+  }
+}
+
+// 获取未读数量
+export async function getUnreadCount(source?: string): Promise<number> {
+  const db = getDb()
+
+  const condition = source
+    ? and(eq(rawItems.source, source), eq(rawItems.isRead, false))
+    : eq(rawItems.isRead, false)
+
+  const result = await db.select({ count: rawItems.id })
+    .from(rawItems)
+    .where(condition)
+
+  return result.length
+}
+
+// 获取新闻列表（默认只显示未读）
+export async function getNews(source: string, limit: number = 50, showAll: boolean = false): Promise<NewsItem[]> {
+  const db = getDb()
+
+  const whereCondition = showAll
+    ? eq(rawItems.source, source)
+    : and(eq(rawItems.source, source), eq(rawItems.isRead, false))
 
   const results = await db.select({
     id: rawItems.id,
@@ -133,10 +177,11 @@ export async function getNews(source: string, limit: number = 50): Promise<NewsI
     rawData: rawItems.rawData,
     summary: aiAnalysis.summary,
     fetchedAt: rawItems.fetchedAt,
+    isRead: rawItems.isRead,
   })
     .from(rawItems)
     .leftJoin(aiAnalysis, eq(rawItems.id, aiAnalysis.itemId))
-    .where(eq(rawItems.source, source))
+    .where(whereCondition)
     .orderBy(desc(rawItems.fetchedAt))
     .limit(limit)
 
@@ -144,13 +189,13 @@ export async function getNews(source: string, limit: number = 50): Promise<NewsI
 }
 
 // 获取所有数据源的新闻
-export async function getAllNews(limit: number = 50): Promise<Record<string, NewsItem[]>> {
+export async function getAllNews(limit: number = 50, showAll: boolean = false): Promise<Record<string, NewsItem[]>> {
   const sources = ['github', 'producthunt', 'twitter']
   const results: Record<string, NewsItem[]> = {}
 
   await Promise.all(
     sources.map(async (source) => {
-      results[source] = await getNews(source, limit)
+      results[source] = await getNews(source, limit, showAll)
     })
   )
 

@@ -1,17 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAllNews, getNews } from '@/lib/db'
+import { getAllNews, getNews, markAsRead, markAllAsRead } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   const source = request.nextUrl.searchParams.get('source')
   const limit = parseInt(request.nextUrl.searchParams.get('limit') || '50')
+  const showAll = request.nextUrl.searchParams.get('showAll') === 'true'
 
   if (source) {
-    const items = await getNews(source, limit)
+    const items = await getNews(source, limit, showAll)
     return NextResponse.json({ source, items, count: items.length })
   }
 
-  const allNews = await getAllNews(limit)
+  const allNews = await getAllNews(limit, showAll)
   const totalCount = Object.values(allNews).reduce((sum, items) => sum + items.length, 0)
 
   return NextResponse.json({ data: allNews, count: totalCount })
+}
+
+// 标记已读
+export async function POST(request: NextRequest) {
+  const body = await request.json()
+  const { action, itemId, source } = body
+
+  if (action === 'read' && itemId) {
+    await markAsRead(itemId)
+    return NextResponse.json({ success: true })
+  }
+
+  if (action === 'readAll') {
+    await markAllAsRead(source || undefined)
+    return NextResponse.json({ success: true })
+  }
+
+  return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
 }
