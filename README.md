@@ -1,82 +1,102 @@
-# News Cron Monitor
+# News Monitor - 热点新闻监控
 
-基于 Docker 的定时监控系统，使用 Kimi API 进行 AI 处理。
+每日热点新闻汇总与领域知识发现系统。
+
+🔗 **在线访问**: https://news.myaicode.qzz.io
 
 ## 功能
 
-1. **X (Twitter) 监控** - 每小时检查推荐时间线，AI 翻译科技/AI/编程相关推文
-2. **GitHub Trending 监控** - 每天 9 点 (UTC+8) 抓取热门仓库，AI 总结翻译
+- **GitHub Trending** - 每 4 小时自动抓取热门仓库，AI 翻译总结
+- **Product Hunt** - 监控新产品发布（需配置 token）
+- **X / Twitter** - 追踪科技/AI/编程相关推文
 
-## 快速开始
+## 技术栈
 
-```bash
-# 构建并启动
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
-
-# 停止
-docker-compose down
-```
-
-## 手动构建
-
-```bash
-# 构建镜像
-docker build -t news-monitor .
-
-# 运行容器
-docker run -d \
-  --name news-cron \
-  -v news-data:/app/data \
-  -e KIMI_API_KEY=your-api-key \
-  news-monitor
-```
-
-## 配置
-
-环境变量在 `docker-compose.yml` 中配置：
-
-| 变量 | 说明 |
+| 组件 | 技术 |
 |------|------|
-| KIMI_API_KEY | Kimi API 密钥 |
-| KIMI_BASE_URL | Kimi API 地址 |
-| KIMI_MODEL | 使用的模型 |
-| TWITTER_AUTH_TOKEN | Twitter 认证 token |
-| TWITTER_CT0 | Twitter CT0 cookie |
-| TZ | 时区 (默认 Asia/Shanghai) |
+| 前端 | Next.js 15 + Tailwind CSS |
+| 数据库 | Neon PostgreSQL (Serverless) |
+| 部署 | Vercel |
+| 定时任务 | GitHub Actions |
+| CDN | Cloudflare |
+| AI | DeepSeek API |
 
-## 文件说明
+## 架构
 
-- `x_monitor.sh` - X 监控脚本
-- `x_processor.py` - X 内容处理 (AI 翻译过滤)
-- `github_trending_monitor.sh` - GitHub Trending 监控脚本
-- `github_trending_processor.py` - GitHub Trending 处理 (AI 总结)
-- `Dockerfile` - Docker 镜像定义
-- `docker-compose.yml` - Docker Compose 配置
+```
+GitHub Actions (每 4 小时)
+    ↓ 抓取数据
+Neon PostgreSQL ← Vercel 展示 → news.myaicode.qzz.io
+    ↑
+Cloudflare CDN (加速 + SSL)
+```
 
-## Cron 调度
+## 本地开发
 
-| 任务 | 频率 | 说明 |
+```bash
+# 安装依赖
+npm install
+
+# 配置环境变量
+cp .env.example .env.local
+# 编辑 .env.local 填入配置
+
+# 初始化数据库
+npm run db:init
+
+# 启动开发服务器
+npm run dev
+
+# 手动抓取
+npm run scrape -- --source=github
+```
+
+## 环境变量
+
+| 变量 | 说明 | 必需 |
 |------|------|------|
-| X 监控 | 每小时 | 检查推荐时间线新推文 |
-| GitHub Trending | 每天 9:00 | 抓取当日热门仓库 |
+| `DATABASE_URL` | Neon PostgreSQL 连接字符串 | ✅ |
+| `ANTHROPIC_API_KEY` | DeepSeek API Key | ✅ |
+| `ANTHROPIC_BASE_URL` | API 地址 | ✅ |
+| `ANTHROPIC_MODEL` | 模型名称 | ✅ |
+| `PRODUCTHUNT_TOKEN` | Product Hunt API Token | ❌ |
+| `RSSHUB_URL` | RSSHub 实例地址 | ❌ |
 
-## 数据持久化
+## 添加新数据源
 
-所有状态数据存储在 Docker volume `news-data` 中：
-- `.x_sent_ids.txt` - 已发送推文记录
-- `.github_sent_repos.txt` - 已发送仓库记录
-- `.x_monitor.log` - X 监控日志
-- `.github_trending.log` - GitHub Trending 日志
-- `cron.log` - Cron 执行日志
+1. 在 `src/sources/` 创建新文件
+2. 实现 `NewsSource` 接口
+3. 在 `src/sources/index.ts` 注册
 
-## 目标
+```typescript
+// src/sources/custom.ts
+import { NewsSource, NewsItem } from './types'
 
-- Telegram 群组: `-1003734489320`
-  - X 推文: 话题 13
-  - GitHub Trending: 话题 206
-- Discord Webhooks:
-  - X 推文: 已配置
-  - GitHub Trending: 已配置
+export const customSource: NewsSource = {
+  name: '自定义源',
+  slug: 'custom',
+  async fetch(): Promise<NewsItem[]> {
+    // 抓取逻辑
+    return []
+  }
+}
+```
+
+## 项目结构
+
+```
+├── src/
+│   ├── sources/          # 数据源插件
+│   ├── lib/db.ts         # 数据库操作
+│   └── app/              # Next.js 页面
+├── scripts/
+│   ├── scrape.ts         # 抓取脚本
+│   └── init-db.ts        # 数据库初始化
+├── .github/workflows/
+│   └── scrape.yml        # GitHub Actions 配置
+└── legacy/               # 旧版 Python 脚本
+```
+
+## License
+
+MIT
