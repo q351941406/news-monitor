@@ -16,6 +16,7 @@ interface NewsItem {
 interface NewsCardProps {
   item: NewsItem
   onMarkRead: (id: string) => void
+  onMarkUnread: (id: string) => void
 }
 
 const sourceConfig: Record<string, { label: string; color: string }> = {
@@ -24,7 +25,7 @@ const sourceConfig: Record<string, { label: string; color: string }> = {
   twitter: { label: 'X / Twitter', color: 'bg-blue-500 text-white' },
 }
 
-export default function NewsCard({ item, onMarkRead }: NewsCardProps) {
+export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardProps) {
   const rawData = item.rawData
   const source = sourceConfig[item.source] || { label: item.source, color: 'bg-stone-500 text-white' }
 
@@ -111,7 +112,7 @@ export default function NewsCard({ item, onMarkRead }: NewsCardProps) {
               <ExternalLink className="w-3.5 h-3.5" />
               <span>原文</span>
             </a>
-            {!item.isRead && (
+            {!item.isRead ? (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -121,6 +122,17 @@ export default function NewsCard({ item, onMarkRead }: NewsCardProps) {
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>已读</span>
+              </button>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onMarkUnread(item.id)
+                }}
+                className="flex items-center gap-1 hover:text-amber-600 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>未读</span>
               </button>
             )}
           </div>

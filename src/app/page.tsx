@@ -90,6 +90,28 @@ export default function Home() {
     }
   }
 
+  const handleMarkUnread = async (itemId: string) => {
+    try {
+      await fetch('/api/news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unread', itemId }),
+      })
+
+      setNews(prev => {
+        const updated = { ...prev }
+        for (const source of Object.keys(updated)) {
+          updated[source] = updated[source].map(item =>
+            item.id === itemId ? { ...item, isRead: false } : item
+          )
+        }
+        return updated
+      })
+    } catch (error) {
+      console.error('Failed to mark as unread:', error)
+    }
+  }
+
   const handleMarkGroupRead = async (topic: string) => {
     const itemsToMark = allItems.filter(item => {
       const itemTopic = categorizeItem(item)
@@ -197,6 +219,7 @@ export default function Home() {
                   icon={config.icon}
                   items={items}
                   onMarkRead={handleMarkRead}
+                  onMarkUnread={handleMarkUnread}
                   onMarkGroupRead={handleMarkGroupRead}
                 />
               )

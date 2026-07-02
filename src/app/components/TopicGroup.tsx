@@ -21,6 +21,7 @@ interface TopicGroupProps {
   items: NewsItem[]
   groupSummary?: string
   onMarkRead: (id: string) => void
+  onMarkUnread: (id: string) => void
   onMarkGroupRead: (topic: string) => void
 }
 
@@ -30,6 +31,7 @@ export default function TopicGroup({
   items,
   groupSummary,
   onMarkRead,
+  onMarkUnread,
   onMarkGroupRead,
 }: TopicGroupProps) {
   const [isExpanded, setIsExpanded] = useState(false)
@@ -85,7 +87,7 @@ export default function TopicGroup({
         <div className="border-t border-stone-100">
           <div className="p-4 space-y-3">
             {items.map(item => (
-              <NewsCard key={item.id} item={item} onMarkRead={onMarkRead} />
+              <NewsCard key={item.id} item={item} onMarkRead={onMarkRead} onMarkUnread={onMarkUnread} />
             ))}
           </div>
         </div>

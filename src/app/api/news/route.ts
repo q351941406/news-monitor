@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAllNews, getNews, markAsRead, markAllAsRead } from '@/lib/db'
+import { getAllNews, getNews, markAsRead, markAsUnread, markAllAsRead } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   const source = request.nextUrl.searchParams.get('source')
@@ -24,6 +24,11 @@ export async function POST(request: NextRequest) {
 
   if (action === 'read' && itemId) {
     await markAsRead(itemId)
+    return NextResponse.json({ success: true })
+  }
+
+  if (action === 'unread' && itemId) {
+    await markAsUnread(itemId)
     return NextResponse.json({ success: true })
   }
 

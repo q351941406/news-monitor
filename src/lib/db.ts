@@ -132,6 +132,15 @@ export async function markAsRead(itemId: string): Promise<void> {
     .where(eq(rawItems.id, itemId))
 }
 
+// 标记为未读
+export async function markAsUnread(itemId: string): Promise<void> {
+  const db = getDb()
+
+  await db.update(rawItems)
+    .set({ isRead: false })
+    .where(eq(rawItems.id, itemId))
+}
+
 // 批量标记已读
 export async function markAllAsRead(source?: string): Promise<void> {
   const db = getDb()
