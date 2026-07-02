@@ -82,7 +82,10 @@ export const productHuntSource: NewsSource = {
 
   async fetch(): Promise<NewsItem[]> {
     const token = process.env.PRODUCTHUNT_TOKEN
-    if (!token) throw new Error('PRODUCTHUNT_TOKEN not configured')
+    if (!token) {
+      console.log('  ⚠️ PRODUCTHUNT_TOKEN not configured, skipping')
+      return []
+    }
 
     const query = `{
       posts(first: 10, order: NEWEST) {
