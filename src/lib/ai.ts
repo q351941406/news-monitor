@@ -1,13 +1,13 @@
-import { createOpenAI } from '@ai-sdk/openai'
+import { createAnthropic } from '@ai-sdk/anthropic'
 import { generateText } from 'ai'
 
-// DeepSeek 兼容 OpenAI API
-const deepseek = createOpenAI({
+// DeepSeek 兼容 Anthropic API
+const anthropic = createAnthropic({
   baseURL: process.env.ANTHROPIC_BASE_URL || 'https://api.deepseek.com/anthropic',
   apiKey: process.env.ANTHROPIC_API_KEY || '',
 })
 
-const model = deepseek(process.env.ANTHROPIC_MODEL || 'deepseek-v4-flash')
+const model = anthropic(process.env.ANTHROPIC_MODEL || 'deepseek-v4-flash')
 
 export interface AIOptions {
   system?: string
