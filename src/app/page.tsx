@@ -143,6 +143,26 @@ export default function Home() {
     }
   }
 
+  const handleResetAllRead = async () => {
+    try {
+      await fetch('/api/news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resetAll' }),
+      })
+
+      setNews(prev => {
+        const updated = { ...prev }
+        for (const source of Object.keys(updated)) {
+          updated[source] = updated[source].map(item => ({ ...item, isRead: false }))
+        }
+        return updated
+      })
+    } catch (error) {
+      console.error('Failed to reset all read:', error)
+    }
+  }
+
   // 合并所有新闻
   const allItems = Object.values(news).flat()
 
@@ -184,6 +204,7 @@ export default function Home() {
         showRead={showRead}
         onShowReadChange={setShowRead}
         onMarkAllRead={handleMarkAllRead}
+        onResetAllRead={handleResetAllRead}
       />
 
       <main className="max-w-6xl mx-auto px-4 py-6">

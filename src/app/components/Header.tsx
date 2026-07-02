@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Menu, X, CheckCheck, Settings } from 'lucide-react'
+import { Menu, X, CheckCheck, RotateCcw, Settings } from 'lucide-react'
 
 interface HeaderProps {
   unreadCount: number
@@ -9,6 +9,7 @@ interface HeaderProps {
   showRead: boolean
   onShowReadChange: (show: boolean) => void
   onMarkAllRead: () => void
+  onResetAllRead: () => void
 }
 
 export default function Header({
@@ -17,6 +18,7 @@ export default function Header({
   showRead,
   onShowReadChange,
   onMarkAllRead,
+  onResetAllRead,
 }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
@@ -52,6 +54,13 @@ export default function Header({
               <CheckCheck className="w-4 h-4" />
               全部已读
             </button>
+            <button
+              onClick={onResetAllRead}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-600 bg-stone-100 rounded-lg hover:bg-stone-200 transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
+              撤销已读
+            </button>
           </div>
 
           {/* Mobile Menu Button */}
@@ -85,6 +94,16 @@ export default function Header({
               >
                 <CheckCheck className="w-4 h-4" />
                 全部已读
+              </button>
+              <button
+                onClick={() => {
+                  onResetAllRead()
+                  setMobileMenuOpen(false)
+                }}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-stone-600 bg-stone-100 rounded-lg hover:bg-stone-200 transition-colors"
+              >
+                <RotateCcw className="w-4 h-4" />
+                撤销已读
               </button>
             </div>
           </div>

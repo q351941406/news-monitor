@@ -155,6 +155,20 @@ export async function markAllAsRead(source?: string): Promise<void> {
   }
 }
 
+// 重置所有已读为未读
+export async function resetAllRead(source?: string): Promise<void> {
+  const db = getDb()
+
+  if (source) {
+    await db.update(rawItems)
+      .set({ isRead: false })
+      .where(eq(rawItems.source, source))
+  } else {
+    await db.update(rawItems)
+      .set({ isRead: false })
+  }
+}
+
 // 获取未读数量
 export async function getUnreadCount(source?: string): Promise<number> {
   const db = getDb()
