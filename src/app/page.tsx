@@ -1,4 +1,4 @@
-import { getAllNews, type NewsItem } from '@/lib/redis'
+import { getAllNews, type NewsItem } from '@/lib/db'
 
 const sourceLabels: Record<string, { name: string; icon: string; color: string }> = {
   github: { name: 'GitHub Trending', icon: '🐙', color: 'bg-gray-900' },

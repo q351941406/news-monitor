@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAllNews, getNews } from '@/lib/redis'
+import { getAllNews, getNews } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   const source = request.nextUrl.searchParams.get('source')

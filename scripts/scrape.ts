@@ -2,9 +2,13 @@
  * 独立抓取脚本 - 由 GitHub Actions 调用
  * 用法: npx tsx scripts/scrape.ts --source=github
  */
-import 'dotenv/config'
+import dotenv from 'dotenv'
+import path from 'path'
+
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
+
 import { sources, getSource } from '../src/sources'
-import { storeNews, isProcessed, markProcessed } from '../src/lib/redis'
+import { storeNews, isProcessed } from '../src/lib/db'
 
 async function main() {
   const args = process.argv.slice(2)
@@ -35,15 +39,14 @@ async function main() {
     for (const item of items) {
       if (!(await isProcessed(source.slug, item.id))) {
         newItems.push(item)
-        await markProcessed(source.slug, item.id)
       }
     }
 
     console.log(`  ${newItems.length} new items after dedup`)
 
     if (newItems.length > 0) {
-      await storeNews(source.slug, newItems)
-      console.log(`  ✅ Stored ${newItems.length} items to Redis`)
+      await storeNews(newItems)
+      console.log(`  ✅ Stored ${newItems.length} items to database`)
     } else {
       console.log('  No new items to store')
     }

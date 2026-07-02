@@ -1,14 +1,6 @@
-export interface NewsItem {
-  id: string
-  source: string
-  title: string
-  description: string
-  url: string
-  author?: string
-  metrics?: Record<string, number>
-  summary?: string
-  fetchedAt: number
-}
+// Re-export from db module
+import type { NewsItem } from '@/lib/db'
+export type { NewsItem }
 
 export interface NewsSource {
   name: string
