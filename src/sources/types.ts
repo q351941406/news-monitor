@@ -1,14 +1,14 @@
-// Re-export from db module
-import type { NewsItem } from '@/lib/db'
-export type { NewsItem }
+export interface RawItem {
+  id: string
+  source: string
+  title?: string
+  url: string
+  rawData: Record<string, unknown>
+  fetchedAt: number
+}
 
 export interface NewsSource {
   name: string
   slug: string
-  fetch(): Promise<NewsItem[]>
-}
-
-export interface SourceConfig {
-  enabled: boolean
-  schedule?: string  // cron 表达式
+  fetch(): Promise<RawItem[]>
 }

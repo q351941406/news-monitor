@@ -13,5 +13,4 @@ export function getSource(slug: string): NewsSource | undefined {
   return sources.find(s => s.slug === slug)
 }
 
-export type { NewsItem } from '@/lib/db'
-export type { NewsSource } from './types'
+export type { RawItem, NewsSource } from './types'

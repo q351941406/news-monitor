@@ -1,14 +1,43 @@
 import { getAllNews, type NewsItem } from '@/lib/db'
 
-const sourceLabels: Record<string, { name: string; icon: string; color: string }> = {
-  github: { name: 'GitHub Trending', icon: '🐙', color: 'bg-gray-900' },
-  producthunt: { name: 'Product Hunt', icon: '🚀', color: 'bg-orange-500' },
-  twitter: { name: 'X / Twitter', icon: '𝕏', color: 'bg-blue-500' },
+const sourceLabels: Record<string, { name: string; icon: string }> = {
+  github: { name: 'GitHub Trending', icon: '🐙' },
+  producthunt: { name: 'Product Hunt', icon: '🚀' },
+  twitter: { name: 'X / Twitter', icon: '𝕏' },
 }
 
 function NewsCard({ item }: { item: NewsItem }) {
+  const rawData = item.rawData
+
+  // 根据数据源提取显示信息
+  const getDescription = () => {
+    switch (item.source) {
+      case 'github':
+        return rawData.description as string
+      case 'producthunt':
+        return rawData.tagline as string
+      case 'twitter':
+        return (rawData.text as string)?.slice(0, 200)
+      default:
+        return ''
+    }
+  }
+
+  const getMetrics = () => {
+    switch (item.source) {
+      case 'github':
+        return `⭐ ${(rawData.stars as number)?.toLocaleString()}`
+      case 'producthunt':
+        return `▲ ${rawData.votes}`
+      case 'twitter':
+        return `♡ ${rawData.likes}`
+      default:
+        return ''
+    }
+  }
+
   return (
-    <div className="border rounded-lg p-4 hover:shadow-lg transition-shadow">
+    <div className="border rounded-lg p-4 hover:shadow-lg transition-shadow bg-white">
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-semibold text-lg leading-tight">
           <a href={item.url} target="_blank" rel="noopener noreferrer"
@@ -16,22 +45,12 @@ function NewsCard({ item }: { item: NewsItem }) {
             {item.title}
           </a>
         </h3>
-        {item.metrics?.stars && (
-          <span className="text-sm text-gray-500 whitespace-nowrap">
-            ⭐ {item.metrics.stars.toLocaleString()}
-            {item.metrics.todayStars > 0 && (
-              <span className="text-green-500"> +{item.metrics.todayStars}</span>
-            )}
-          </span>
-        )}
-        {item.metrics?.votes && (
-          <span className="text-sm text-gray-500 whitespace-nowrap">
-            ▲ {item.metrics.votes}
-          </span>
-        )}
+        <span className="text-sm text-gray-500 whitespace-nowrap">
+          {getMetrics()}
+        </span>
       </div>
 
-      <p className="text-gray-600 text-sm mt-1">{item.description}</p>
+      <p className="text-gray-600 text-sm mt-1">{getDescription()}</p>
 
       {item.summary && (
         <div className="mt-3 p-3 bg-gray-50 rounded text-sm whitespace-pre-line">
@@ -39,9 +58,8 @@ function NewsCard({ item }: { item: NewsItem }) {
         </div>
       )}
 
-      <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
-        {item.author && <span>by {item.author}</span>}
-        <span>•</span>
+      <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
+        <span>{sourceLabels[item.source]?.name}</span>
         <span>{new Date(item.fetchedAt).toLocaleString('zh-CN')}</span>
       </div>
     </div>
@@ -51,11 +69,13 @@ function NewsCard({ item }: { item: NewsItem }) {
 export default async function Home() {
   const allNews = await getAllNews()
 
+  const totalCount = Object.values(allNews).reduce((sum, items) => sum + items.length, 0)
+
   return (
-    <main className="min-h-screen p-8 max-w-6xl mx-auto">
+    <main className="min-h-screen p-4 md:p-8 max-w-6xl mx-auto">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold">📰 热点新闻监控</h1>
-        <p className="text-gray-500 mt-2">每日热点新闻汇总与领域知识发现</p>
+        <h1 className="text-2xl md:text-3xl font-bold">📰 热点新闻监控</h1>
+        <p className="text-gray-500 mt-2">每日热点新闻汇总与领域知识发现 · 共 {totalCount} 条</p>
       </header>
 
       <div className="grid gap-8">
@@ -66,7 +86,7 @@ export default async function Home() {
               <div className="flex items-center gap-2 mb-4">
                 <span className="text-2xl">{meta.icon}</span>
                 <h2 className="text-xl font-semibold">{meta.name}</h2>
-                <span className="text-sm text-gray-400">({items.length} 条)</span>
+                <span className="text-sm text-gray-400">({items.length})</span>
               </div>
 
               {items.length === 0 ? (
@@ -83,7 +103,7 @@ export default async function Home() {
         })}
       </div>
 
-      <footer className="mt-12 text-center text-sm text-gray-400">
+      <footer className="mt-12 text-center text-sm text-gray-400 pb-8">
         <p>数据由 GitHub Actions 每 4 小时自动抓取</p>
       </footer>
     </main>

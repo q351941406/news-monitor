@@ -1,5 +1,5 @@
-import { NewsSource, NewsItem } from './types'
-import { aiSummarizeWithRetry } from '@/lib/ai'
+import { NewsSource, RawItem } from './types'
+import { storeRawItems } from '@/lib/db'
 
 interface Tweet {
   id: string
@@ -61,7 +61,7 @@ export const twitterSource: NewsSource = {
   name: 'X / Twitter',
   slug: 'twitter',
 
-  async fetch(): Promise<NewsItem[]> {
+  async fetch(): Promise<RawItem[]> {
     const rsshubUrl = process.env.RSSHUB_URL || 'https://rsshub.app'
     const lists = ['AI', 'tech', 'crypto']
 
@@ -84,44 +84,30 @@ export const twitterSource: NewsSource = {
     }
 
     // 关键词过滤
-    const techTweets = allTweets.filter(t => isTechRelated(t.text)).slice(0, 10)
+    const techTweets = allTweets.filter(t => isTechRelated(t.text)).slice(0, 20)
 
-    if (techTweets.length === 0) return []
-
-    // 批量 AI 处理
-    const tweetsText = techTweets.map((t, i) => `
-${i + 1}. 作者: ${t.author} (@${t.username})
-   内容: ${t.text}
-   链接: ${t.url}`).join('\n')
-
-    const aiResult = await aiSummarizeWithRetry({
-      prompt: `以下是 ${techTweets.length} 条 X (Twitter) 推文，请为每条生成中文简介（翻译 + 一句话总结）。
-
-推文列表:
-${tweetsText}
-
-按顺序输出，每条用 "---" 分隔。简洁有吸引力。`,
-    })
-
-    if (!aiResult) return []
-
-    const summaries = aiResult.split('---').filter(s => s.trim())
-
-    return techTweets
-      .filter((_, i) => summaries[i])
-      .map((t, i) => ({
-        id: `x-${t.id}`,
-        source: 'twitter',
-        title: `@${t.username}`,
-        description: t.text.slice(0, 200),
-        url: t.url,
+    // 构建原始数据
+    const items: RawItem[] = techTweets.map(t => ({
+      id: `x:${t.id}`,
+      source: 'twitter',
+      title: `@${t.username}`,
+      url: t.url,
+      rawData: {
         author: t.author,
-        metrics: {
-          likes: t.likes,
-          retweets: t.retweets
-        },
-        summary: summaries[i]?.trim() || t.text.slice(0, 100),
-        fetchedAt: Date.now()
-      }))
+        username: t.username,
+        text: t.text,
+        likes: t.likes,
+        retweets: t.retweets,
+      },
+      fetchedAt: Date.now(),
+    }))
+
+    // 存储原始数据
+    if (items.length > 0) {
+      await storeRawItems(items)
+      console.log(`  📦 Stored ${items.length} raw items`)
+    }
+
+    return items
   }
 }

@@ -1,5 +1,6 @@
-import { NewsSource, NewsItem } from './types'
+import { NewsSource, RawItem } from './types'
 import { aiSummarizeWithRetry } from '@/lib/ai'
+import { storeRawItems, storeAIAnalysis, existsItem } from '@/lib/db'
 
 interface TrendingRepo {
   author: string
@@ -25,7 +26,7 @@ async function fetchReadme(owner: string, repo: string): Promise<string> {
         })
         if (res.ok) {
           const text = await res.text()
-          return text.slice(0, 3000)
+          return text.slice(0, 5000)
         }
       } catch {
         continue
@@ -35,20 +36,11 @@ async function fetchReadme(owner: string, repo: string): Promise<string> {
   return ''
 }
 
-function cleanReadme(readme: string): string {
-  return readme
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/!\[.*?\]\(.*?\)/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/#{1,6}\s*/g, '')
-    .slice(0, 2000)
-}
-
 export const githubSource: NewsSource = {
   name: 'GitHub Trending',
   slug: 'github',
 
-  async fetch(): Promise<NewsItem[]> {
+  async fetch(): Promise<RawItem[]> {
     const today = new Date()
     today.setDate(today.getDate() - 1)
     const dateStr = today.toISOString().split('T')[0]
@@ -68,6 +60,7 @@ export const githubSource: NewsSource = {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: any = await res.json()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const repos: TrendingRepo[] = data.items.map((item: any) => ({
       author: item.owner?.login || 'unknown',
       name: item.name,
@@ -78,43 +71,64 @@ export const githubSource: NewsSource = {
       language: item.language || 'Unknown',
     }))
 
-    const topRepos = repos.slice(0, 10)
-
-    // 并行获取 README 和 AI 总结
-    const items = await Promise.all(
-      topRepos.map(async (repo) => {
+    // 获取 README 并构建原始数据
+    const items: RawItem[] = await Promise.all(
+      repos.map(async (repo) => {
         const readme = await fetchReadme(repo.author, repo.name)
-        const cleanContent = cleanReadme(readme)
-
-        const summary = await aiSummarizeWithRetry({
-          prompt: `请用中文简洁总结以下 GitHub 仓库，控制在 400 字以内。
-
-仓库名：${repo.fullname}
-语言：${repo.language}
-原描述：${repo.description || '无'}
-
-README：
-${cleanContent || '无'}
-
-格式要求（直接输出，不要用 Markdown 符号）：
-• 项目简介：一句话说明
-• 核心功能：2-3 个要点
-• 适用人群：谁适合用`,
-        })
 
         return {
-          id: repo.fullname,
+          id: `github:${repo.fullname}`,
           source: 'github',
           title: repo.fullname,
-          description: repo.description || '',
           url: repo.url,
-          author: repo.author,
-          metrics: { stars: repo.stars },
-          summary: summary || repo.description || '暂无描述',
-          fetchedAt: Date.now()
+          rawData: {
+            fullname: repo.fullname,
+            description: repo.description,
+            stars: repo.stars,
+            language: repo.language,
+            readme,
+          },
+          fetchedAt: Date.now(),
         }
       })
     )
+
+    // 存储原始数据
+    await storeRawItems(items)
+    console.log(`  📦 Stored ${items.length} raw items`)
+
+    // 为新项目生成 AI 摘要
+    for (const item of items) {
+      if (!(await existsItem(item.id))) continue
+
+      const readme = (item.rawData.readme as string) || ''
+      const cleanReadme = readme
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/!\[.*?\]\(.*?\)/g, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/#{1,6}\s*/g, '')
+        .slice(0, 2000)
+
+      const summary = await aiSummarizeWithRetry({
+        prompt: `请用中文简洁总结以下 GitHub 仓库。
+
+仓库名：${item.rawData.fullname}
+语言：${item.rawData.language}
+原描述：${item.rawData.description || '无'}
+
+README：
+${cleanReadme || '无'}
+
+格式要求：
+• 项目简介：一句话说明
+• 核心功能：2-3 个要点
+• 适用人群：谁适合用`,
+      })
+
+      if (summary) {
+        await storeAIAnalysis(item.id, summary)
+      }
+    }
 
     return items
   }

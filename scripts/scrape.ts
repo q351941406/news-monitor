@@ -8,7 +8,6 @@ import path from 'path'
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
 
 import { sources, getSource } from '../src/sources'
-import { storeNews, isProcessed } from '../src/lib/db'
 
 async function main() {
   const args = process.argv.slice(2)
@@ -32,30 +31,12 @@ async function main() {
 
   try {
     const items = await source.fetch()
-    console.log(`  Fetched ${items.length} items`)
-
-    // 过滤已处理的
-    const newItems = []
-    for (const item of items) {
-      if (!(await isProcessed(source.slug, item.id))) {
-        newItems.push(item)
-      }
-    }
-
-    console.log(`  ${newItems.length} new items after dedup`)
-
-    if (newItems.length > 0) {
-      await storeNews(newItems)
-      console.log(`  ✅ Stored ${newItems.length} items to database`)
-    } else {
-      console.log('  No new items to store')
-    }
+    console.log(`  ✅ Fetched ${items.length} items`)
 
     // 输出 JSON 结果供 GitHub Actions 使用
     console.log(JSON.stringify({
       source: source.slug,
       total: items.length,
-      new: newItems.length,
       timestamp: Date.now()
     }))
   } catch (error) {

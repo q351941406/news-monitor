@@ -15,6 +15,8 @@ async function main() {
   try {
     await initDatabase()
     console.log('✅ Database tables created successfully')
+    console.log('  - raw_items (原始数据)')
+    console.log('  - ai_analysis (AI 摘要)')
   } catch (error) {
     console.error('❌ Failed to initialize database:', error)
     process.exit(1)
