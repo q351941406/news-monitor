@@ -1,42 +1,34 @@
 import { neon } from '@neondatabase/serverless'
+import { drizzle } from 'drizzle-orm/neon-http'
+import { eq, and, isNull, desc, lt } from 'drizzle-orm'
+import { rawItems, aiAnalysis, type RawItem, type NewRawItem } from './schema'
 
-function getSql() {
-  return neon(process.env.DATABASE_URL!)
+// Re-export types
+export type { RawItem, NewRawItem }
+export type { AIAnalysis, NewAIAnalysis } from './schema'
+
+// 数据库连接
+function getDb() {
+  const sql = neon(process.env.DATABASE_URL!)
+  return drizzle(sql)
 }
 
-// 原始数据接口
-export interface RawItem {
-  id: string
-  source: string
-  title?: string
-  url: string
-  rawData: Record<string, unknown>
-  fetchedAt: number
-}
-
-// AI 分析结果接口
-export interface AIAnalysis {
-  itemId: string
-  summary: string
-  processedAt?: number
-}
-
-// 带 AI 摘要的新闻项（用于展示）
+// 新闻展示类型
 export interface NewsItem {
   id: string
   source: string
-  title?: string
+  title: string | null
   url: string
   rawData: Record<string, unknown>
-  summary?: string
+  summary: string | null
   fetchedAt: number
 }
 
-// 初始化数据库表
+// 初始化数据库表（Drizzle 不自动建表，需要手动或用 push）
 export async function initDatabase() {
-  const sql = getSql()
+  // 使用 drizzle-kit push 或手动 SQL
+  const sql = neon(process.env.DATABASE_URL!)
 
-  // 原始内容表
   await sql`
     CREATE TABLE IF NOT EXISTS raw_items (
       id TEXT PRIMARY KEY,
@@ -57,7 +49,6 @@ export async function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_raw_items_fetched_at ON raw_items(fetched_at DESC)
   `
 
-  // AI 分析结果表
   await sql`
     CREATE TABLE IF NOT EXISTS ai_analysis (
       item_id TEXT PRIMARY KEY REFERENCES raw_items(id) ON DELETE CASCADE,
@@ -68,81 +59,88 @@ export async function initDatabase() {
 }
 
 // 存储原始数据
-export async function storeRawItems(items: RawItem[]): Promise<void> {
-  const sql = getSql()
+export async function storeRawItems(items: NewRawItem[]): Promise<void> {
+  const db = getDb()
 
   for (const item of items) {
-    await sql`
-      INSERT INTO raw_items (id, source, title, url, raw_data, fetched_at)
-      VALUES (${item.id}, ${item.source}, ${item.title || null}, ${item.url}, ${JSON.stringify(item.rawData)}, ${item.fetchedAt})
-      ON CONFLICT (id) DO UPDATE SET
-        raw_data = EXCLUDED.raw_data,
-        fetched_at = EXCLUDED.fetched_at
-    `
+    await db.insert(rawItems)
+      .values(item)
+      .onConflictDoUpdate({
+        target: rawItems.id,
+        set: {
+          rawData: item.rawData,
+          fetchedAt: item.fetchedAt,
+        },
+      })
   }
 }
 
 // 存储 AI 分析结果
 export async function storeAIAnalysis(itemId: string, summary: string): Promise<void> {
-  const sql = getSql()
+  const db = getDb()
 
-  await sql`
-    INSERT INTO ai_analysis (item_id, summary)
-    VALUES (${itemId}, ${summary})
-    ON CONFLICT (item_id) DO UPDATE SET
-      summary = EXCLUDED.summary,
-      processed_at = NOW()
-  `
+  await db.insert(aiAnalysis)
+    .values({ itemId, summary })
+    .onConflictDoUpdate({
+      target: aiAnalysis.itemId,
+      set: {
+        summary,
+        processedAt: new Date(),
+      },
+    })
 }
 
 // 获取未处理 AI 摘要的项目
 export async function getUnprocessedItems(source: string, limit: number = 20): Promise<RawItem[]> {
-  const sql = getSql()
+  const db = getDb()
 
-  const rows = await sql`
-    SELECT r.id, r.source, r.title, r.url, r.raw_data as "rawData", r.fetched_at as "fetchedAt"
-    FROM raw_items r
-    LEFT JOIN ai_analysis a ON r.id = a.item_id
-    WHERE r.source = ${source} AND a.item_id IS NULL
-    ORDER BY r.fetched_at DESC
-    LIMIT ${limit}
-  `
+  const results = await db.select()
+    .from(rawItems)
+    .leftJoin(aiAnalysis, eq(rawItems.id, aiAnalysis.itemId))
+    .where(
+      and(
+        eq(rawItems.source, source),
+        isNull(aiAnalysis.itemId)
+      )
+    )
+    .orderBy(desc(rawItems.fetchedAt))
+    .limit(limit)
 
-  return rows as RawItem[]
+  return results.map(r => r.raw_items)
 }
 
 // 检查是否已存在
 export async function existsItem(itemId: string): Promise<boolean> {
-  const sql = getSql()
+  const db = getDb()
 
-  const result = await sql`
-    SELECT 1 FROM raw_items WHERE id = ${itemId} LIMIT 1
-  `
+  const result = await db.select({ id: rawItems.id })
+    .from(rawItems)
+    .where(eq(rawItems.id, itemId))
+    .limit(1)
 
   return result.length > 0
 }
 
 // 获取新闻列表（带 AI 摘要）
 export async function getNews(source: string, limit: number = 50): Promise<NewsItem[]> {
-  const sql = getSql()
+  const db = getDb()
 
-  const rows = await sql`
-    SELECT
-      r.id,
-      r.source,
-      r.title,
-      r.url,
-      r.raw_data as "rawData",
-      a.summary,
-      r.fetched_at as "fetchedAt"
-    FROM raw_items r
-    LEFT JOIN ai_analysis a ON r.id = a.item_id
-    WHERE r.source = ${source}
-    ORDER BY r.fetched_at DESC
-    LIMIT ${limit}
-  `
+  const results = await db.select({
+    id: rawItems.id,
+    source: rawItems.source,
+    title: rawItems.title,
+    url: rawItems.url,
+    rawData: rawItems.rawData,
+    summary: aiAnalysis.summary,
+    fetchedAt: rawItems.fetchedAt,
+  })
+    .from(rawItems)
+    .leftJoin(aiAnalysis, eq(rawItems.id, aiAnalysis.itemId))
+    .where(eq(rawItems.source, source))
+    .orderBy(desc(rawItems.fetchedAt))
+    .limit(limit)
 
-  return rows as NewsItem[]
+  return results as NewsItem[]
 }
 
 // 获取所有数据源的新闻
@@ -161,11 +159,9 @@ export async function getAllNews(limit: number = 50): Promise<Record<string, New
 
 // 清理过期数据
 export async function cleanupOldData(days: number = 30): Promise<void> {
-  const sql = getSql()
+  const db = getDb()
   const cutoff = Date.now() - days * 86400 * 1000
 
-  // 外键会自动删除 ai_analysis 中的记录
-  await sql`
-    DELETE FROM raw_items WHERE fetched_at < ${cutoff}
-  `
+  await db.delete(rawItems)
+    .where(lt(rawItems.fetchedAt, cutoff))
 }
