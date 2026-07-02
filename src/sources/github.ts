@@ -98,15 +98,38 @@ export const githubSource: NewsSource = {
   slug: 'github',
 
   async fetch(): Promise<NewsItem[]> {
-    // 使用 gtrending API (无需认证)
+    // 使用 GitHub 搜索 API 获取今日热门仓库
+    const today = new Date()
+    today.setDate(today.getDate() - 1)
+    const dateStr = today.toISOString().split('T')[0]
+
     const res = await fetch(
-      'https://api.gitterapp.com/repositories?since=daily',
-      { signal: AbortSignal.timeout(15000) }
+      `https://api.github.com/search/repositories?q=created:>${dateStr}&sort=stars&order=desc&per_page=10`,
+      {
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'news-monitor'
+        },
+        signal: AbortSignal.timeout(15000)
+      }
     )
 
-    if (!res.ok) throw new Error(`GitHub Trending API error: ${res.status}`)
+    if (!res.ok) throw new Error(`GitHub API error: ${res.status}`)
 
-    const repos: TrendingRepo[] = await res.json()
+    const data = await res.json()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const repos: TrendingRepo[] = data.items.map((item: any) => ({
+      author: item.owner?.login || 'unknown',
+      name: item.name,
+      fullname: item.full_name,
+      description: item.description || '',
+      url: item.html_url,
+      stars: item.stargazers_count,
+      currentPeriodStars: item.stargazers_count,
+      language: item.language || 'Unknown',
+      languageColor: '',
+      builtBy: []
+    }))
 
     // 取前 10 个
     const topRepos = repos.slice(0, 10)
