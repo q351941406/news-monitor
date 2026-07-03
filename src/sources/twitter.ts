@@ -140,8 +140,8 @@ export const twitterSource: NewsSource = {
       const photos = media.filter(m => m.type === 'photo')
       const videos = media.filter(m => m.type === 'video')
 
-      // 视频没有可靠的缩略图 URL，只用图片作为预览
-      const previewImage = photos[0]?.url || null
+      // 预览图：优先用图片，否则用 Twitter 的媒体预览 API
+      const previewImage = photos[0]?.url || (videos[0] ? `https://jf.x.com/images/media-preview/${t.id}` : null)
 
       return {
         id: `x:${t.id}`,
