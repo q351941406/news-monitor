@@ -15,7 +15,8 @@ export const rawItems = pgTable('raw_items', {
 // AI 分析结果表
 export const aiAnalysis = pgTable('ai_analysis', {
   itemId: text('item_id').primaryKey().references(() => rawItems.id, { onDelete: 'cascade' }),
-  summary: text('summary').notNull(),    // AI 摘要
+  summary: text('summary').notNull(),    // 一句话摘要
+  details: text('details'),              // 详细内容
   processedAt: timestamp('processed_at').defaultNow(),
 })
 

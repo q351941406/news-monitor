@@ -1,6 +1,5 @@
 import { NewsSource, RawItem } from './types'
-import { aiSummarizeWithRetry } from '@/lib/ai'
-import { storeRawItems, storeAIAnalysis, existsItem } from '@/lib/db'
+import { storeRawItems } from '@/lib/db'
 
 interface TrendingRepo {
   author: string
@@ -34,34 +33,6 @@ async function fetchReadme(owner: string, repo: string): Promise<string> {
     }
   }
   return ''
-}
-
-function extractImagesFromReadme(readme: string, owner: string, repo: string): string[] {
-  const images: string[] = []
-
-  // 匹配 Markdown 图片语法
-  const imgRegex = /!\[.*?\]\((.*?)\)/g
-  let match
-  while ((match = imgRegex.exec(readme)) !== null) {
-    let url = match[1]
-    // 处理相对路径
-    if (url.startsWith('./') || url.startsWith('../')) {
-      url = `https://raw.githubusercontent.com/${owner}/${repo}/main/${url}`
-    }
-    if (url.startsWith('http')) {
-      images.push(url)
-    }
-  }
-
-  // 匹配 HTML img 标签
-  const htmlImgRegex = /<img[^>]+src=["']([^"']+)["']/g
-  while ((match = htmlImgRegex.exec(readme)) !== null) {
-    if (match[1].startsWith('http')) {
-      images.push(match[1])
-    }
-  }
-
-  return images.slice(0, 5) // 最多返回5张
 }
 
 export const githubSource: NewsSource = {
@@ -101,14 +72,10 @@ export const githubSource: NewsSource = {
 
     const topRepos = repos.slice(0, 10)
 
-    // 并行获取 README 和图片
+    // 并行获取 README
     const items = await Promise.all(
       topRepos.map(async (repo) => {
         const readme = await fetchReadme(repo.author, repo.name)
-        const images = extractImagesFromReadme(readme, repo.author, repo.name)
-
-        // 使用 GitHub 社交预览图或 README 中的第一张图
-        const previewImage = images[0] || `https://opengraph.githubassets.com/1/${repo.fullname}`
 
         return {
           id: `github:${repo.fullname}`,
@@ -121,8 +88,6 @@ export const githubSource: NewsSource = {
             stars: repo.stars,
             language: repo.language,
             readme,
-            images,
-            previewImage,
           },
           fetchedAt: Date.now(),
         }
@@ -132,39 +97,6 @@ export const githubSource: NewsSource = {
     // 存储原始数据
     await storeRawItems(items)
     console.log(`  📦 Stored ${items.length} raw items`)
-
-    // 为新项目生成 AI 摘要
-    for (const item of items) {
-      if (!(await existsItem(item.id))) continue
-
-      const readme = (item.rawData.readme as string) || ''
-      const cleanReadme = readme
-        .replace(/```[\s\S]*?```/g, '')
-        .replace(/!\[.*?\]\(.*?\)/g, '')
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-        .replace(/#{1,6}\s*/g, '')
-        .slice(0, 2000)
-
-      const summary = await aiSummarizeWithRetry({
-        prompt: `请用中文简洁总结以下 GitHub 仓库。
-
-仓库名：${item.rawData.fullname}
-语言：${item.rawData.language}
-原描述：${item.rawData.description || '无'}
-
-README：
-${cleanReadme || '无'}
-
-格式要求：
-• 项目简介：一句话说明
-• 核心功能：2-3 个要点
-• 适用人群：谁适合用`,
-      })
-
-      if (summary) {
-        await storeAIAnalysis(item.id, summary)
-      }
-    }
 
     return items
   }

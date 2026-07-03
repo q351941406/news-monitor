@@ -10,6 +10,7 @@ interface NewsItem {
   url: string
   rawData: Record<string, unknown>
   summary: string | null
+  details: string | null
   fetchedAt: number
   isRead: boolean
 }
@@ -110,11 +111,18 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
         </h3>
 
         {/* AI 摘要 */}
-        {item.summary && (
+        {(item.summary || item.details) && (
           <div className="bg-amber-50 rounded-md p-3 mb-3 border border-amber-100">
-            <p className="text-sm text-stone-700 leading-relaxed whitespace-pre-line">
-              {item.summary}
-            </p>
+            {item.summary && (
+              <p className="text-sm font-medium text-stone-800 mb-1">
+                {item.summary}
+              </p>
+            )}
+            {item.details && (
+              <p className="text-sm text-stone-600 leading-relaxed whitespace-pre-line">
+                {item.details}
+              </p>
+            )}
           </div>
         )}
 

@@ -12,6 +12,7 @@ interface NewsItem {
   url: string
   rawData: Record<string, unknown>
   summary: string | null
+  details: string | null
   fetchedAt: number
   isRead: boolean
 }

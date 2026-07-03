@@ -1,7 +1,5 @@
 import { NewsSource, RawItem } from './types'
-import { aiSummarizeWithRetry } from '@/lib/ai'
-import { storeRawItems, storeAIAnalysis, existsItem } from '@/lib/db'
-import { fetchOGData } from '@/lib/og'
+import { storeRawItems } from '@/lib/db'
 import { execSync } from 'child_process'
 
 interface Tweet {
@@ -196,26 +194,6 @@ export const twitterSource: NewsSource = {
     // 存储原始数据
     await storeRawItems(items)
     console.log(`  📦 Stored ${items.length} raw items`)
-
-    // 为新项目生成 AI 摘要
-    for (const item of items) {
-      if (!(await existsItem(item.id))) continue
-
-      const summary = await aiSummarizeWithRetry({
-        prompt: `请用中文简洁总结以下推文。
-
-作者：${item.rawData.author} (@${item.rawData.username})
-内容：${item.rawData.text}
-
-格式要求：
-• 一句话总结
-• 关键信息提取`,
-      })
-
-      if (summary) {
-        await storeAIAnalysis(item.id, summary)
-      }
-    }
 
     return items
   }

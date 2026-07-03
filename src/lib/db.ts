@@ -21,6 +21,7 @@ export interface NewsItem {
   url: string
   rawData: Record<string, unknown>
   summary: string | null
+  details: string | null
   fetchedAt: number
   isRead: boolean
 }
@@ -78,15 +79,16 @@ export async function storeRawItems(items: NewRawItem[]): Promise<void> {
 }
 
 // 存储 AI 分析结果
-export async function storeAIAnalysis(itemId: string, summary: string): Promise<void> {
+export async function storeAIAnalysis(itemId: string, summary: string, details?: string): Promise<void> {
   const db = getDb()
 
   await db.insert(aiAnalysis)
-    .values({ itemId, summary })
+    .values({ itemId, summary, details: details || null })
     .onConflictDoUpdate({
       target: aiAnalysis.itemId,
       set: {
         summary,
+        details: details || null,
         processedAt: new Date(),
       },
     })
@@ -199,6 +201,7 @@ export async function getNews(source: string, limit: number = 50, showAll: boole
     url: rawItems.url,
     rawData: rawItems.rawData,
     summary: aiAnalysis.summary,
+    details: aiAnalysis.details,
     fetchedAt: rawItems.fetchedAt,
     isRead: rawItems.isRead,
   })
