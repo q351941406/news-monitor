@@ -64,6 +64,16 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
       .replace(/\\n/g, '\n')
       .replace(/\\"/g, '"')
       .replace(/\\'/g, "'")
+      .replace(/\\\\/g, '\\')
+      .replace(/\\U0001F6A8/g, '🚨')
+      .replace(/\\U0001F447/g, '👇')
+      .replace(/\\U0001F680/g, '🚀')
+      .replace(/\\U0001F4C8/g, '📈')
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+      .replace(/\\U([0-9a-fA-F]{8})/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
   }
 
   return (
