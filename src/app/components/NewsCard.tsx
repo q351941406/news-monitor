@@ -1,6 +1,7 @@
 'use client'
 
-import { ExternalLink, Check } from 'lucide-react'
+import { useState } from 'react'
+import { ExternalLink, Check, X } from 'lucide-react'
 
 interface NewsItem {
   id: string
@@ -26,6 +27,7 @@ const sourceConfig: Record<string, { label: string; color: string }> = {
 }
 
 export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardProps) {
+  const [showImage, setShowImage] = useState(false)
   const rawData = item.rawData
   const source = sourceConfig[item.source] || { label: item.source, color: 'bg-stone-500 text-white' }
 
@@ -127,7 +129,13 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
 
         {/* 图片预览（原文下方） */}
         {previewImage && (
-          <div className="mb-3 rounded-lg overflow-hidden bg-stone-100">
+          <div
+            className="mb-3 rounded-lg overflow-hidden bg-stone-100 cursor-pointer hover:opacity-90 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation()
+              setShowImage(true)
+            }}
+          >
             <img
               src={previewImage}
               alt=""
@@ -176,6 +184,28 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
           )}
         </div>
       </div>
+
+      {/* 图片放大弹窗 */}
+      {showImage && previewImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setShowImage(false)}
+        >
+          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setShowImage(false)}
+              className="absolute -top-10 right-0 text-white hover:text-stone-300"
+            >
+              <X className="w-8 h-8" />
+            </button>
+            <img
+              src={previewImage}
+              alt=""
+              className="max-w-[90vw] max-h-[90vh] object-contain rounded"
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
