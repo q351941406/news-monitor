@@ -82,14 +82,14 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
     }`}>
       <div className="p-4">
         <div className="flex gap-4">
-          {/* 左侧大正方形图片 */}
+          {/* 左侧图片（按原始比例） */}
           {previewImage && (
             <div className="flex-shrink-0">
-              <div className="w-[140px] h-[140px] rounded-lg overflow-hidden bg-stone-100">
+              <div className="w-[160px] max-h-[200px] rounded-lg overflow-hidden bg-stone-100">
                 <img
                   src={previewImage}
                   alt=""
-                  className="w-full h-full object-cover"
+                  className="w-full h-auto object-contain"
                   loading="lazy"
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none'
