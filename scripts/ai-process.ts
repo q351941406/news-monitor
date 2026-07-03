@@ -80,9 +80,9 @@ ${keyInfo}`
 ${content}
 
 要求：
-- 每条返回 id、summary（一句话概括）、details（补充重要信息）
-- summary 严格控制在一句话
-- details 可以多行，使用简洁易读的格式
+- 每条返回 id、summary、details
+- summary：严格控制在一句话，概括核心内容
+- details：补充重要信息，可以多行，使用简洁易读的格式
 - 按顺序返回，不要遗漏任何一条`
 }
 
