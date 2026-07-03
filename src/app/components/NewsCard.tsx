@@ -62,16 +62,6 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
   const previewImage = rawData.previewImage as string | null
   const description = getDescription()
 
-  // 清理转义字符（Markdown 会处理换行和 HTML 实体）
-  const cleanText = (text: string) => {
-    return text
-      .replace(/\\"/g, '"')
-      .replace(/\\'/g, "'")
-      .replace(/\\\\/g, '\\')
-      .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
-      .replace(/\\U([0-9a-fA-F]{8})/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
-  }
-
   return (
     <div className={`group relative rounded-lg transition-all duration-200 cursor-pointer ${
       item.isRead ? 'card-read' : 'card-unread hover:shadow-md'
@@ -139,7 +129,7 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
                 ),
               }}
             >
-              {cleanText(description)}
+              {description}
             </ReactMarkdown>
           </div>
         )}
