@@ -12,7 +12,7 @@ import { generateObject } from 'ai'
 import { z } from 'zod'
 import { neon } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-http'
-import { eq, isNull, sql } from 'drizzle-orm'
+import { eq, isNull, and, sql } from 'drizzle-orm'
 import { rawItems, aiAnalysis } from '../src/lib/schema'
 
 // AI 配置
@@ -50,7 +50,7 @@ async function getUnprocessedItems(source: string) {
     .from(rawItems)
     .leftJoin(aiAnalysis, eq(rawItems.id, aiAnalysis.itemId))
     .where(
-      eq(rawItems.source, source) && isNull(aiAnalysis.itemId)
+      and(eq(rawItems.source, source), isNull(aiAnalysis.itemId))
     )
     .limit(50)
 
