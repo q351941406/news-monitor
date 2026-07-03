@@ -34,9 +34,26 @@ function parseYamlTweets(yaml: string): Tweet[] {
   let current: Partial<Tweet> = {}
   let inMedia = false
   let currentMedia: { type?: string; url?: string } = {}
+  let inText = false
+  let textBuffer = ''
 
   for (const line of lines) {
     const trimmed = line.trim()
+
+    // 处理多行文本字段
+    if (inText) {
+      // 检查是否遇到新的顶级字段（缩进减少）
+      if (line.match(/^[a-z]/) || line.match(/^  [a-z].*:/)) {
+        // 文本结束
+        current.text = textBuffer.trim().replace(/^['"]|['"]$/g, '').replace(/''/g, "'")
+        inText = false
+        textBuffer = ''
+        // 继续处理当前行
+      } else {
+        textBuffer += ' ' + trimmed
+        continue
+      }
+    }
 
     if (trimmed.startsWith('- id:') && !inMedia) {
       if (current.id && current.text) {
@@ -46,11 +63,19 @@ function parseYamlTweets(yaml: string): Tweet[] {
       inMedia = false
       currentMedia = {}
     } else if (trimmed.startsWith('text:') && current.id && !inMedia) {
-      current.text = trimmed.slice(5)?.trim().replace(/^["']|["']$/g, '')
+      const textContent = trimmed.slice(5)?.trim()
+      // 检查是否是多行文本（以引号开头但没有闭合）
+      if ((textContent.startsWith("'") && !textContent.endsWith("'")) ||
+          (textContent.startsWith('"') && !textContent.endsWith('"'))) {
+        inText = true
+        textBuffer = textContent
+      } else {
+        current.text = textContent.replace(/^['"]|['"]$/g, '').replace(/''/g, "'")
+      }
     } else if (trimmed.startsWith('name:') && !current.author && !inMedia) {
-      current.author = trimmed.slice(5)?.trim().replace(/^["']|["']$/g, '')
+      current.author = trimmed.slice(5)?.trim().replace(/^['"]|['"]$/g, '')
     } else if (trimmed.startsWith('screenName:') && !current.username && !inMedia) {
-      current.username = trimmed.slice(11)?.trim().replace(/^["']|["']$/g, '')
+      current.username = trimmed.slice(11)?.trim().replace(/^['"]|['"]$/g, '')
     } else if (trimmed.startsWith('likes:') && current.id && !inMedia) {
       current.likes = parseInt(trimmed.slice(6)?.trim()) || 0
     } else if (trimmed.startsWith('retweets:') && current.id && !inMedia) {
@@ -76,6 +101,10 @@ function parseYamlTweets(yaml: string): Tweet[] {
     }
   }
 
+  // 处理最后一条推文
+  if (inText && textBuffer) {
+    current.text = textBuffer.trim().replace(/^['"]|['"]$/g, '').replace(/''/g, "'")
+  }
   if (current.id && current.text) {
     tweets.push(current as Tweet)
   }
