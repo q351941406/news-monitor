@@ -1,6 +1,6 @@
 'use client'
 
-import { ExternalLink, Check, X } from 'lucide-react'
+import { ExternalLink, Check } from 'lucide-react'
 
 interface NewsItem {
   id: string
@@ -81,106 +81,99 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
       item.isRead ? 'card-read' : 'card-unread hover:shadow-md'
     }`}>
       <div className="p-4">
-        <div className="flex gap-4">
-          {/* 左侧图片（按原始比例） */}
-          {previewImage && (
-            <div className="flex-shrink-0">
-              <div className="w-[160px] max-h-[200px] rounded-lg overflow-hidden bg-stone-100">
-                <img
-                  src={previewImage}
-                  alt=""
-                  className="w-full h-auto object-contain"
-                  loading="lazy"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none'
-                  }}
-                />
-              </div>
-            </div>
+        {/* 标签和指标 */}
+        <div className="flex items-center gap-2 mb-2">
+          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${source.color}`}>
+            {source.label}
+          </span>
+          {getMetrics() && (
+            <span className="text-xs text-stone-500">{getMetrics()}</span>
           )}
+          <span className="text-xs text-stone-400 ml-auto">
+            {new Date(item.fetchedAt).toLocaleString('zh-CN')}
+          </span>
+        </div>
 
-          {/* 右侧内容 */}
-          <div className="flex-1 min-w-0 flex flex-col">
-            {/* 标签和指标 */}
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${source.color}`}>
-                {source.label}
-              </span>
-              {getMetrics() && (
-                <span className="text-xs text-stone-500">{getMetrics()}</span>
-              )}
-              <span className="text-xs text-stone-400 ml-auto">
-                {new Date(item.fetchedAt).toLocaleString('zh-CN')}
-              </span>
-            </div>
+        {/* 标题 */}
+        <h3 className="font-serif text-lg font-semibold leading-tight text-stone-900 mb-2">
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-red-600 transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {item.title}
+          </a>
+        </h3>
 
-            {/* 标题 */}
-            <h3 className="font-serif text-base font-semibold leading-tight text-stone-900 mb-2">
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-red-600 transition-colors"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {item.title}
-              </a>
-            </h3>
-
-            {/* AI 摘要 */}
-            {item.summary && (
-              <div className="bg-amber-50 rounded-md p-2 mb-2 border border-amber-100">
-                <p className="text-xs text-stone-700 leading-relaxed whitespace-pre-line">
-                  {item.summary}
-                </p>
-              </div>
-            )}
-
-            {/* 原文内容（完整显示） */}
-            {description && (
-              <div className="flex-1 overflow-y-auto max-h-[200px] mb-2">
-                <p className="text-sm text-stone-600 leading-relaxed whitespace-pre-wrap break-words">
-                  {cleanText(description)}
-                </p>
-              </div>
-            )}
-
-            {/* 底部操作 */}
-            <div className="flex items-center gap-2 mt-auto pt-2 border-t border-stone-100">
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700 transition-colors"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>原文</span>
-              </a>
-              {!item.isRead ? (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onMarkRead(item.id)
-                  }}
-                  className="flex items-center gap-1 text-xs text-stone-500 hover:text-green-600 transition-colors ml-auto"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>已读</span>
-                </button>
-              ) : (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onMarkUnread(item.id)
-                  }}
-                  className="flex items-center gap-1 text-xs text-stone-500 hover:text-amber-600 transition-colors ml-auto"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>未读</span>
-                </button>
-              )}
-            </div>
+        {/* AI 摘要 */}
+        {item.summary && (
+          <div className="bg-amber-50 rounded-md p-3 mb-3 border border-amber-100">
+            <p className="text-sm text-stone-700 leading-relaxed whitespace-pre-line">
+              {item.summary}
+            </p>
           </div>
+        )}
+
+        {/* 原文内容 */}
+        {description && (
+          <div className="mb-3 overflow-y-auto max-h-[300px]">
+            <p className="text-sm text-stone-600 leading-relaxed whitespace-pre-wrap break-words">
+              {cleanText(description)}
+            </p>
+          </div>
+        )}
+
+        {/* 图片预览（原文下方） */}
+        {previewImage && (
+          <div className="mb-3 rounded-lg overflow-hidden bg-stone-100">
+            <img
+              src={previewImage}
+              alt=""
+              className="w-full h-auto max-h-[400px] object-contain"
+              loading="lazy"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none'
+              }}
+            />
+          </div>
+        )}
+
+        {/* 底部操作 */}
+        <div className="flex items-center gap-2 pt-3 border-t border-stone-100">
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-sm text-stone-500 hover:text-stone-700 transition-colors"
+          >
+            <ExternalLink className="w-4 h-4" />
+            <span>原文</span>
+          </a>
+          {!item.isRead ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onMarkRead(item.id)
+              }}
+              className="flex items-center gap-1 text-sm text-stone-500 hover:text-green-600 transition-colors ml-auto"
+            >
+              <Check className="w-4 h-4" />
+              <span>已读</span>
+            </button>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onMarkUnread(item.id)
+              }}
+              className="flex items-center gap-1 text-sm text-stone-500 hover:text-amber-600 transition-colors ml-auto"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>未读</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
