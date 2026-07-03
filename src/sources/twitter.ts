@@ -1,5 +1,7 @@
 import { NewsSource, RawItem } from './types'
-import { storeRawItems } from '@/lib/db'
+import { aiSummarizeWithRetry } from '@/lib/ai'
+import { storeRawItems, storeAIAnalysis, existsItem } from '@/lib/db'
+import { execSync } from 'child_process'
 
 interface Tweet {
   id: string
@@ -24,37 +26,40 @@ function isTechRelated(text: string): boolean {
   return TECH_KEYWORDS.some(kw => lower.includes(kw))
 }
 
-function parseRSS(xml: string): Tweet[] {
-  const items: Tweet[] = []
-  const itemRegex = /<item>([\s\S]*?)<\/item>/g
-  let match
+function parseYamlTweets(yaml: string): Tweet[] {
+  const tweets: Tweet[] = []
+  const lines = yaml.split('\n')
+  let current: Partial<Tweet> = {}
 
-  while ((match = itemRegex.exec(xml)) !== null) {
-    const content = match[1]
-    const title = extractTag(content, 'title')
-    const link = extractTag(content, 'link')
-    const description = extractTag(content, 'description')
+  for (const line of lines) {
+    const trimmed = line.trim()
 
-    if (title && link) {
-      items.push({
-        id: link.split('/').pop() || String(Date.now()),
-        author: title.split(':')[0] || 'Unknown',
-        username: link.split('/')[3] || 'unknown',
-        text: description || title,
-        url: link,
-        likes: 0,
-        retweets: 0
-      })
+    if (trimmed.startsWith('- id:')) {
+      if (current.id && current.text) {
+        tweets.push(current as Tweet)
+      }
+      current = { id: trimmed.split(':')[1]?.trim().replace(/'/g, '') }
+    } else if (trimmed.startsWith('text:') && current.id) {
+      current.text = trimmed.slice(5)?.trim().replace(/^["']|["']$/g, '')
+    } else if (trimmed.startsWith('name:') && !current.author) {
+      current.author = trimmed.slice(5)?.trim().replace(/^["']|["']$/g, '')
+    } else if (trimmed.startsWith('screenName:') && !current.username) {
+      current.username = trimmed.slice(11)?.trim().replace(/^["']|["']$/g, '')
+    } else if (trimmed.startsWith('likes:') && current.id) {
+      current.likes = parseInt(trimmed.slice(6)?.trim()) || 0
+    } else if (trimmed.startsWith('retweets:') && current.id) {
+      current.retweets = parseInt(trimmed.slice(9)?.trim()) || 0
     }
   }
 
-  return items
-}
+  if (current.id && current.text) {
+    tweets.push(current as Tweet)
+  }
 
-function extractTag(xml: string, tag: string): string {
-  const regex = new RegExp(`<${tag}[^>]*>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?</${tag}>`, 's')
-  const match = xml.match(regex)
-  return match?.[1]?.trim() || ''
+  return tweets.map(t => ({
+    ...t,
+    url: `https://x.com/${t.username || 'unknown'}/status/${t.id}`
+  }))
 }
 
 export const twitterSource: NewsSource = {
@@ -62,29 +67,48 @@ export const twitterSource: NewsSource = {
   slug: 'twitter',
 
   async fetch(): Promise<RawItem[]> {
-    const rsshubUrl = process.env.RSSHUB_URL || 'https://rsshub.app'
-    const lists = ['AI', 'tech', 'crypto']
+    const authToken = process.env.TWITTER_AUTH_TOKEN
+    const ct0 = process.env.TWITTER_CT0
 
-    const allTweets: Tweet[] = []
-
-    for (const list of lists) {
-      try {
-        const res = await fetch(`${rsshubUrl}/twitter/list/${list}`, {
-          signal: AbortSignal.timeout(10000)
-        })
-
-        if (!res.ok) continue
-
-        const text = await res.text()
-        const items = parseRSS(text)
-        allTweets.push(...items)
-      } catch {
-        continue
-      }
+    if (!authToken || !ct0) {
+      console.log('  ⚠️ Twitter auth tokens not configured, skipping')
+      return []
     }
+
+    // 使用 twitter-cli 获取推荐时间线
+    let yamlOutput = ''
+    try {
+      yamlOutput = execSync('twitter feed --max 50 --yaml', {
+        env: {
+          ...process.env,
+          TWITTER_AUTH_TOKEN: authToken,
+          TWITTER_CT0: ct0,
+        },
+        timeout: 30000,
+        encoding: 'utf-8',
+      })
+    } catch (error) {
+      console.error('  ❌ twitter-cli failed:', error)
+      return []
+    }
+
+    if (!yamlOutput) {
+      console.log('  ⚠️ twitter-cli returned empty output')
+      return []
+    }
+
+    const allTweets = parseYamlTweets(yamlOutput)
+    console.log(`  📋 Parsed ${allTweets.length} tweets from twitter-cli`)
 
     // 关键词过滤
     const techTweets = allTweets.filter(t => isTechRelated(t.text)).slice(0, 20)
+
+    if (techTweets.length === 0) {
+      console.log('  ⚠️ No tech-related tweets found')
+      return []
+    }
+
+    console.log(`  🔍 Found ${techTweets.length} tech-related tweets`)
 
     // 构建原始数据
     const items: RawItem[] = techTweets.map(t => ({
@@ -103,9 +127,27 @@ export const twitterSource: NewsSource = {
     }))
 
     // 存储原始数据
-    if (items.length > 0) {
-      await storeRawItems(items)
-      console.log(`  📦 Stored ${items.length} raw items`)
+    await storeRawItems(items)
+    console.log(`  📦 Stored ${items.length} raw items`)
+
+    // 为新项目生成 AI 摘要
+    for (const item of items) {
+      if (!(await existsItem(item.id))) continue
+
+      const summary = await aiSummarizeWithRetry({
+        prompt: `请用中文简洁总结以下推文。
+
+作者：${item.rawData.author} (@${item.rawData.username})
+内容：${item.rawData.text}
+
+格式要求：
+• 一句话总结
+• 关键信息提取`,
+      })
+
+      if (summary) {
+        await storeAIAnalysis(item.id, summary)
+      }
     }
 
     return items
