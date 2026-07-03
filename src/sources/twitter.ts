@@ -129,9 +129,8 @@ export const twitterSource: NewsSource = {
 
     // 构建原始数据
     const items: RawItem[] = techTweets.map(t => {
-      const media = t.media || []
-      const photos = media.filter(m => m.type === 'photo')
-      const videos = media.filter(m => m.type === 'video')
+      // 使用 Twitter 的 OG 预览图
+      const previewImage = `https://unavatar.io/twitter/${t.username}`
 
       return {
         id: `x:${t.id}`,
@@ -144,11 +143,7 @@ export const twitterSource: NewsSource = {
           text: t.text,
           likes: t.likes,
           retweets: t.retweets,
-          photos: photos.map(m => m.url),
-          videos: videos.map(m => m.url),
-          previewImage: photos[0]?.url || null,
-          mediaType: videos.length > 0 ? 'video' : photos.length > 0 ? 'photo' : null,
-          mediaUrl: videos[0]?.url || photos[0]?.url || null,
+          previewImage,
         },
         fetchedAt: Date.now(),
       }
