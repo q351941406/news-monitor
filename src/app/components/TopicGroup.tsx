@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import NewsCard from './NewsCard'
 
 interface NewsItem {
@@ -39,52 +39,71 @@ export default function TopicGroup({
   const unreadCount = items.filter(i => !i.isRead).length
 
   return (
-    <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
-      {/* Group Header */}
+    <section className="bg-white rounded-xl border border-stone-200 overflow-hidden transition-shadow hover:shadow-sm">
+      {/* Group Header - Editorial Style */}
       <div
-        className="flex items-center justify-between p-4 cursor-pointer hover:bg-stone-50 transition-colors"
+        className="flex items-center gap-4 p-5 cursor-pointer select-none"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">{icon}</span>
-          <div>
-            <h2 className="font-serif text-xl font-semibold text-stone-900">{topic}</h2>
-            <p className="text-sm text-stone-500">
-              {unreadCount > 0 ? `${unreadCount} 条未读` : '全部已读'} · 共 {items.length} 条
-            </p>
-          </div>
+        {/* Icon */}
+        <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center text-2xl bg-stone-50 rounded-lg">
+          {icon}
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* Title & Meta */}
+        <div className="flex-1 min-w-0">
+          <h2 className="font-serif text-xl font-semibold text-stone-900 tracking-tight">
+            {topic}
+          </h2>
+          <p className="text-sm text-stone-500 mt-0.5">
+            {unreadCount > 0 ? (
+              <span className="text-red-600 font-medium">{unreadCount} 条未读</span>
+            ) : (
+              <span>全部已读</span>
+            )}
+            <span className="mx-1.5">·</span>
+            <span>共 {items.length} 条</span>
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-3">
           {unreadCount > 0 && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
                 onMarkGroupRead(topic)
               }}
-              className="px-3 py-1 text-xs font-medium text-green-700 bg-green-50 rounded-full hover:bg-green-100 transition-colors"
+              className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-full hover:bg-red-100 transition-colors"
             >
               全部已读
             </button>
           )}
-          {isExpanded ? (
-            <ChevronUp className="w-5 h-5 text-stone-400" />
-          ) : (
-            <ChevronDown className="w-5 h-5 text-stone-400" />
-          )}
+          <div className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${
+            isExpanded ? 'bg-stone-100' : 'bg-stone-50'
+          }`}>
+            {isExpanded ? (
+              <ChevronDown className="w-4 h-4 text-stone-600" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-stone-400" />
+            )}
+          </div>
         </div>
       </div>
 
       {/* Group Summary */}
       {groupSummary && (
-        <div className="px-4 pb-3">
-          <p className="text-sm text-stone-600 leading-relaxed bg-amber-50 rounded-lg p-3 border border-amber-100">
+        <div className="px-5 pb-4">
+          <p className="text-sm text-stone-600 leading-relaxed bg-stone-50 rounded-lg p-3 border border-stone-100">
             {groupSummary}
           </p>
         </div>
       )}
 
       {/* Expanded Content */}
-      {isExpanded && (
+      <div className={`transition-all duration-300 ease-in-out ${
+        isExpanded ? 'max-h-[10000px] opacity-100' : 'max-h-0 opacity-0'
+      } overflow-hidden`}>
         <div className="border-t border-stone-100">
           <div className="p-4 space-y-3">
             {items.map(item => (
@@ -92,32 +111,35 @@ export default function TopicGroup({
             ))}
           </div>
         </div>
-      )}
+      </div>
 
       {/* Collapsed Preview */}
       {!isExpanded && items.length > 0 && (
-        <div className="px-4 pb-4">
-          <div className="flex gap-2 overflow-x-auto pb-2">
-            {items.slice(0, 3).map(item => (
+        <div className="px-5 pb-4">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {items.slice(0, 4).map(item => (
               <div
                 key={item.id}
-                className={`flex-shrink-0 w-48 p-2 rounded border text-xs ${
+                className={`flex-shrink-0 w-40 p-2.5 rounded-lg border text-xs transition-colors ${
                   item.isRead
                     ? 'bg-stone-50 border-stone-200 text-stone-400'
-                    : 'bg-white border-stone-300 text-stone-700'
+                    : 'bg-white border-stone-300 text-stone-700 hover:border-stone-400'
                 }`}
               >
-                <p className="font-medium truncate">{item.title}</p>
+                <p className="font-medium truncate leading-snug">{item.title}</p>
+                {!item.isRead && (
+                  <div className="w-1.5 h-1.5 bg-red-500 rounded-full mt-1.5" />
+                )}
               </div>
             ))}
-            {items.length > 3 && (
-              <div className="flex-shrink-0 w-24 p-2 rounded border border-dashed border-stone-300 text-xs text-stone-400 flex items-center justify-center">
-                +{items.length - 3} 更多
+            {items.length > 4 && (
+              <div className="flex-shrink-0 w-20 p-2.5 rounded-lg border border-dashed border-stone-300 text-xs text-stone-400 flex items-center justify-center">
+                +{items.length - 4}
               </div>
             )}
           </div>
         </div>
       )}
-    </div>
+    </section>
   )
 }
