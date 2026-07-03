@@ -113,13 +113,16 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
         {/* AI 摘要 */}
         {(item.summary || item.details) && (
           <div className="bg-amber-50 rounded-md p-3 mb-3 border border-amber-100">
+            <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">AI</p>
             {item.summary && (
-              <p className="text-sm font-medium text-stone-800 mb-1">
+              <p className="text-sm text-stone-800 mb-2">
+                <span className="font-medium">Summary: </span>
                 {item.summary}
               </p>
             )}
             {item.details && (
               <p className="text-sm text-stone-600 leading-relaxed whitespace-pre-line">
+                <span className="font-medium">Details: </span>
                 {item.details}
               </p>
             )}
