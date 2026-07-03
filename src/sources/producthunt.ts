@@ -1,5 +1,6 @@
 import { NewsSource, RawItem } from './types'
-import { storeRawItems, storeAIAnalysis } from '@/lib/db'
+import { aiSummarizeWithRetry } from '@/lib/ai'
+import { storeRawItems, storeAIAnalysis, existsItem } from '@/lib/db'
 
 interface PHProduct {
   id: string
@@ -72,6 +73,29 @@ export const productHuntSource: NewsSource = {
     // 存储原始数据
     await storeRawItems(items)
     console.log(`  📦 Stored ${items.length} raw items`)
+
+    // 为新项目生成 AI 摘要
+    for (const item of items) {
+      if (!(await existsItem(item.id))) continue
+
+      const summary = await aiSummarizeWithRetry({
+        prompt: `请用中文简洁总结以下 Product Hunt 产品。
+
+产品名：${item.rawData.name}
+标语：${item.rawData.tagline}
+描述：${item.rawData.description || '无'}
+官网：${item.rawData.website || '无'}
+
+格式要求：
+• 产品简介：一句话说明
+• 核心功能：2-3 个要点
+• 适用人群：谁适合用`,
+      })
+
+      if (summary) {
+        await storeAIAnalysis(item.id, summary)
+      }
+    }
 
     return items
   }
