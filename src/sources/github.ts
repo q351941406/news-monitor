@@ -36,6 +36,34 @@ async function fetchReadme(owner: string, repo: string): Promise<string> {
   return ''
 }
 
+function extractImagesFromReadme(readme: string, owner: string, repo: string): string[] {
+  const images: string[] = []
+
+  // 匹配 Markdown 图片语法
+  const imgRegex = /!\[.*?\]\((.*?)\)/g
+  let match
+  while ((match = imgRegex.exec(readme)) !== null) {
+    let url = match[1]
+    // 处理相对路径
+    if (url.startsWith('./') || url.startsWith('../')) {
+      url = `https://raw.githubusercontent.com/${owner}/${repo}/main/${url}`
+    }
+    if (url.startsWith('http')) {
+      images.push(url)
+    }
+  }
+
+  // 匹配 HTML img 标签
+  const htmlImgRegex = /<img[^>]+src=["']([^"']+)["']/g
+  while ((match = htmlImgRegex.exec(readme)) !== null) {
+    if (match[1].startsWith('http')) {
+      images.push(match[1])
+    }
+  }
+
+  return images.slice(0, 5) // 最多返回5张
+}
+
 export const githubSource: NewsSource = {
   name: 'GitHub Trending',
   slug: 'github',
@@ -71,10 +99,16 @@ export const githubSource: NewsSource = {
       language: item.language || 'Unknown',
     }))
 
-    // 获取 README 并构建原始数据
-    const items: RawItem[] = await Promise.all(
-      repos.map(async (repo) => {
+    const topRepos = repos.slice(0, 10)
+
+    // 并行获取 README 和图片
+    const items = await Promise.all(
+      topRepos.map(async (repo) => {
         const readme = await fetchReadme(repo.author, repo.name)
+        const images = extractImagesFromReadme(readme, repo.author, repo.name)
+
+        // 使用 GitHub 社交预览图或 README 中的第一张图
+        const previewImage = images[0] || `https://opengraph.githubassets.com/1/${repo.fullname}`
 
         return {
           id: `github:${repo.fullname}`,
@@ -87,6 +121,8 @@ export const githubSource: NewsSource = {
             stars: repo.stars,
             language: repo.language,
             readme,
+            images,
+            previewImage,
           },
           fetchedAt: Date.now(),
         }

@@ -11,6 +11,7 @@ interface Tweet {
   url: string
   likes: number
   retweets: number
+  media?: Array<{ type: string; url: string }>
 }
 
 const TECH_KEYWORDS = [
@@ -30,6 +31,7 @@ function parseYamlTweets(yaml: string): Tweet[] {
   const tweets: Tweet[] = []
   const lines = yaml.split('\n')
   let current: Partial<Tweet> = {}
+  let inMedia = false
 
   for (const line of lines) {
     const trimmed = line.trim()
@@ -38,7 +40,8 @@ function parseYamlTweets(yaml: string): Tweet[] {
       if (current.id && current.text) {
         tweets.push(current as Tweet)
       }
-      current = { id: trimmed.split(':')[1]?.trim().replace(/'/g, '') }
+      current = { id: trimmed.split(':')[1]?.trim().replace(/'/g, ''), media: [] }
+      inMedia = false
     } else if (trimmed.startsWith('text:') && current.id) {
       current.text = trimmed.slice(5)?.trim().replace(/^["']|["']$/g, '')
     } else if (trimmed.startsWith('name:') && !current.author) {
@@ -49,6 +52,20 @@ function parseYamlTweets(yaml: string): Tweet[] {
       current.likes = parseInt(trimmed.slice(6)?.trim()) || 0
     } else if (trimmed.startsWith('retweets:') && current.id) {
       current.retweets = parseInt(trimmed.slice(9)?.trim()) || 0
+    } else if (trimmed === 'media:') {
+      inMedia = true
+    } else if (inMedia && trimmed.startsWith('- url:')) {
+      const url = trimmed.slice(6)?.trim().replace(/^["']|["']$/g, '')
+      if (url && current.media) {
+        // 根据 URL 判断类型
+        const isVideo = url.includes('.mp4') || url.includes('video')
+        current.media.push({
+          type: isVideo ? 'video' : 'photo',
+          url
+        })
+      }
+    } else if (inMedia && !trimmed.startsWith('-') && !trimmed.startsWith('url:')) {
+      inMedia = false
     }
   }
 
@@ -111,20 +128,31 @@ export const twitterSource: NewsSource = {
     console.log(`  🔍 Found ${techTweets.length} tech-related tweets`)
 
     // 构建原始数据
-    const items: RawItem[] = techTweets.map(t => ({
-      id: `x:${t.id}`,
-      source: 'twitter',
-      title: `@${t.username}`,
-      url: t.url,
-      rawData: {
-        author: t.author,
-        username: t.username,
-        text: t.text,
-        likes: t.likes,
-        retweets: t.retweets,
-      },
-      fetchedAt: Date.now(),
-    }))
+    const items: RawItem[] = techTweets.map(t => {
+      const media = t.media || []
+      const photos = media.filter(m => m.type === 'photo')
+      const videos = media.filter(m => m.type === 'video')
+
+      return {
+        id: `x:${t.id}`,
+        source: 'twitter',
+        title: `@${t.username}`,
+        url: t.url,
+        rawData: {
+          author: t.author,
+          username: t.username,
+          text: t.text,
+          likes: t.likes,
+          retweets: t.retweets,
+          photos: photos.map(m => m.url),
+          videos: videos.map(m => m.url),
+          previewImage: photos[0]?.url || null,
+          mediaType: videos.length > 0 ? 'video' : photos.length > 0 ? 'photo' : null,
+          mediaUrl: videos[0]?.url || photos[0]?.url || null,
+        },
+        fetchedAt: Date.now(),
+      }
+    })
 
     // 存储原始数据
     await storeRawItems(items)

@@ -11,6 +11,8 @@ interface PHProduct {
   website: string
   votesCount: number
   commentsCount: number
+  thumbnail: { url: string } | null
+  media: Array<{ type: string; url: string; oembed: { thumbnail_url?: string; html?: string } }> | null
   user: { name: string }
 }
 
@@ -30,6 +32,8 @@ export const productHuntSource: NewsSource = {
         edges {
           node {
             id name tagline description url votesCount commentsCount website
+            thumbnail { url }
+            media { type url oembed { thumbnail_url html } }
             user { name }
           }
         }
@@ -53,22 +57,40 @@ export const productHuntSource: NewsSource = {
     const products: PHProduct[] = data.data.posts.edges.map((e: any) => e.node)
 
     // 构建原始数据
-    const items: RawItem[] = products.map(p => ({
-      id: `ph:${p.id}`,
-      source: 'producthunt',
-      title: p.name,
-      url: p.url,
-      rawData: {
-        name: p.name,
-        tagline: p.tagline,
-        description: p.description,
-        votes: p.votesCount,
-        comments: p.commentsCount,
-        website: p.website,
-        author: p.user?.name,
-      },
-      fetchedAt: Date.now(),
-    }))
+    const items: RawItem[] = products.map(p => {
+      // 获取预览图
+      const previewImage = p.thumbnail?.url ||
+        p.media?.[0]?.oembed?.thumbnail_url ||
+        p.media?.[0]?.url ||
+        null
+
+      // 获取媒体
+      const mediaItems = p.media?.map(m => ({
+        type: m.type,
+        url: m.url,
+        embedHtml: m.oembed?.html || null,
+        thumbnail: m.oembed?.thumbnail_url || null,
+      })) || []
+
+      return {
+        id: `ph:${p.id}`,
+        source: 'producthunt',
+        title: p.name,
+        url: p.url,
+        rawData: {
+          name: p.name,
+          tagline: p.tagline,
+          description: p.description,
+          votes: p.votesCount,
+          comments: p.commentsCount,
+          website: p.website,
+          author: p.user?.name,
+          previewImage,
+          media: mediaItems,
+        },
+        fetchedAt: Date.now(),
+      }
+    })
 
     // 存储原始数据
     await storeRawItems(items)
