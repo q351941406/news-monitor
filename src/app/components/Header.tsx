@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Menu, X, CheckCheck, RotateCcw, Settings } from 'lucide-react'
 
 interface HeaderProps {
@@ -38,6 +39,12 @@ export default function Header({
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-4">
+            <Link
+              href="/settings"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm text-stone-600 hover:text-stone-900 transition-colors"
+            >
+              <Settings className="w-4 h-4" />
+            </Link>
             <label className="flex items-center gap-2 text-sm text-stone-600 cursor-pointer">
               <input
                 type="checkbox"
