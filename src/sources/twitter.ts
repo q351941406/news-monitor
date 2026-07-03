@@ -1,6 +1,7 @@
 import { NewsSource, RawItem } from './types'
 import { aiSummarizeWithRetry } from '@/lib/ai'
 import { storeRawItems, storeAIAnalysis, existsItem } from '@/lib/db'
+import { fetchOGData } from '@/lib/og'
 import { execSync } from 'child_process'
 
 interface Tweet {
@@ -127,27 +128,30 @@ export const twitterSource: NewsSource = {
 
     console.log(`  🔍 Found ${techTweets.length} tech-related tweets`)
 
-    // 构建原始数据
-    const items: RawItem[] = techTweets.map(t => {
-      // 使用 Twitter 的 OG 预览图
-      const previewImage = `https://unavatar.io/twitter/${t.username}`
+    // 构建原始数据（并行获取 OG 预览）
+    const items: RawItem[] = await Promise.all(
+      techTweets.map(async (t) => {
+        // 获取推文页面的 OG 图片
+        const og = await fetchOGData(t.url)
+        const previewImage = og.image || null
 
-      return {
-        id: `x:${t.id}`,
-        source: 'twitter',
-        title: `@${t.username}`,
-        url: t.url,
-        rawData: {
-          author: t.author,
-          username: t.username,
-          text: t.text,
-          likes: t.likes,
-          retweets: t.retweets,
-          previewImage,
-        },
-        fetchedAt: Date.now(),
-      }
-    })
+        return {
+          id: `x:${t.id}`,
+          source: 'twitter',
+          title: `@${t.username}`,
+          url: t.url,
+          rawData: {
+            author: t.author,
+            username: t.username,
+            text: t.text,
+            likes: t.likes,
+            retweets: t.retweets,
+            previewImage,
+          },
+          fetchedAt: Date.now(),
+        }
+      })
+    )
 
     // 存储原始数据
     await storeRawItems(items)
