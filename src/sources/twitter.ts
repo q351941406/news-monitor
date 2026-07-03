@@ -140,12 +140,8 @@ export const twitterSource: NewsSource = {
       const photos = media.filter(m => m.type === 'photo')
       const videos = media.filter(m => m.type === 'video')
 
-      // 视频缩略图：把 .mp4 URL 转成 .jpg
-      const getVideoThumbnail = (url: string) => {
-        return url.replace(/\/vid\/.*$/, '').replace(/\.mp4.*$/, '.jpg')
-      }
-
-      const previewImage = photos[0]?.url || (videos[0] ? getVideoThumbnail(videos[0].url) : null)
+      // 视频没有可靠的缩略图 URL，只用图片作为预览
+      const previewImage = photos[0]?.url || null
 
       return {
         id: `x:${t.id}`,
