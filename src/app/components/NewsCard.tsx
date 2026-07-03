@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { ExternalLink, Check, X } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 
 interface NewsItem {
   id: string
@@ -135,10 +136,19 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
 
         {/* 原文内容 */}
         {description && (
-          <div className="mb-3 overflow-y-auto max-h-[300px]">
-            <p className="text-sm text-stone-600 leading-relaxed whitespace-pre-wrap break-words">
+          <div className="mb-3 overflow-y-auto max-h-[300px] prose prose-sm prose-stone max-w-none">
+            <ReactMarkdown
+              components={{
+                a: ({ node, ...props }) => (
+                  <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" />
+                ),
+                p: ({ node, ...props }) => (
+                  <p {...props} className="text-sm text-stone-600 leading-relaxed mb-2" />
+                ),
+              }}
+            >
               {cleanText(description)}
-            </p>
+            </ReactMarkdown>
           </div>
         )}
 
