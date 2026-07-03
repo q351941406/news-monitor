@@ -33,40 +33,46 @@ function parseYamlTweets(yaml: string): Tweet[] {
   const lines = yaml.split('\n')
   let current: Partial<Tweet> = {}
   let inMedia = false
+  let currentMedia: { type?: string; url?: string } = {}
 
   for (const line of lines) {
     const trimmed = line.trim()
 
-    if (trimmed.startsWith('- id:')) {
+    if (trimmed.startsWith('- id:') && !inMedia) {
       if (current.id && current.text) {
         tweets.push(current as Tweet)
       }
       current = { id: trimmed.split(':')[1]?.trim().replace(/'/g, ''), media: [] }
       inMedia = false
-    } else if (trimmed.startsWith('text:') && current.id) {
+      currentMedia = {}
+    } else if (trimmed.startsWith('text:') && current.id && !inMedia) {
       current.text = trimmed.slice(5)?.trim().replace(/^["']|["']$/g, '')
-    } else if (trimmed.startsWith('name:') && !current.author) {
+    } else if (trimmed.startsWith('name:') && !current.author && !inMedia) {
       current.author = trimmed.slice(5)?.trim().replace(/^["']|["']$/g, '')
-    } else if (trimmed.startsWith('screenName:') && !current.username) {
+    } else if (trimmed.startsWith('screenName:') && !current.username && !inMedia) {
       current.username = trimmed.slice(11)?.trim().replace(/^["']|["']$/g, '')
-    } else if (trimmed.startsWith('likes:') && current.id) {
+    } else if (trimmed.startsWith('likes:') && current.id && !inMedia) {
       current.likes = parseInt(trimmed.slice(6)?.trim()) || 0
-    } else if (trimmed.startsWith('retweets:') && current.id) {
+    } else if (trimmed.startsWith('retweets:') && current.id && !inMedia) {
       current.retweets = parseInt(trimmed.slice(9)?.trim()) || 0
     } else if (trimmed === 'media:') {
       inMedia = true
-    } else if (inMedia && trimmed.startsWith('- url:')) {
-      const url = trimmed.slice(6)?.trim().replace(/^["']|["']$/g, '')
-      if (url && current.media) {
-        // 根据 URL 判断类型
-        const isVideo = url.includes('.mp4') || url.includes('video')
-        current.media.push({
-          type: isVideo ? 'video' : 'photo',
-          url
-        })
+      currentMedia = {}
+    } else if (inMedia) {
+      if (trimmed.startsWith('- type:')) {
+        currentMedia = { type: trimmed.slice(7)?.trim() }
+      } else if (trimmed.startsWith('url:') && currentMedia.type) {
+        currentMedia.url = trimmed.slice(4)?.trim()
+        if (currentMedia.url && current.media) {
+          current.media.push({
+            type: currentMedia.type as 'photo' | 'video',
+            url: currentMedia.url
+          })
+        }
+        currentMedia = {}
+      } else if (trimmed.startsWith('- id:') || trimmed.startsWith('urls:')) {
+        inMedia = false
       }
-    } else if (inMedia && !trimmed.startsWith('-') && !trimmed.startsWith('url:')) {
-      inMedia = false
     }
   }
 
@@ -128,30 +134,32 @@ export const twitterSource: NewsSource = {
 
     console.log(`  🔍 Found ${techTweets.length} tech-related tweets`)
 
-    // 构建原始数据（并行获取 OG 预览）
-    const items: RawItem[] = await Promise.all(
-      techTweets.map(async (t) => {
-        // 获取推文页面的 OG 图片
-        const og = await fetchOGData(t.url)
-        const previewImage = og.image || null
+    // 构建原始数据
+    const items: RawItem[] = techTweets.map(t => {
+      const media = t.media || []
+      const photos = media.filter(m => m.type === 'photo')
+      const videos = media.filter(m => m.type === 'video')
 
-        return {
-          id: `x:${t.id}`,
-          source: 'twitter',
-          title: `@${t.username}`,
-          url: t.url,
-          rawData: {
-            author: t.author,
-            username: t.username,
-            text: t.text,
-            likes: t.likes,
-            retweets: t.retweets,
-            previewImage,
-          },
-          fetchedAt: Date.now(),
-        }
-      })
-    )
+      return {
+        id: `x:${t.id}`,
+        source: 'twitter',
+        title: `@${t.username}`,
+        url: t.url,
+        rawData: {
+          author: t.author,
+          username: t.username,
+          text: t.text,
+          likes: t.likes,
+          retweets: t.retweets,
+          photos: photos.map(m => m.url),
+          videos: videos.map(m => m.url),
+          previewImage: photos[0]?.url || null,
+          mediaType: videos.length > 0 ? 'video' : photos.length > 0 ? 'photo' : null,
+          mediaUrl: videos[0]?.url || photos[0]?.url || null,
+        },
+        fetchedAt: Date.now(),
+      }
+    })
 
     // 存储原始数据
     await storeRawItems(items)
