@@ -62,7 +62,7 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
   const previewImage = rawData.previewImage as string | null
   const description = getDescription()
 
-  // 清理文本：解码 Unicode emoji 和转义字符
+  // 清理文本：解码 Unicode emoji、转义字符、URL 转链接
   const cleanText = (text: string) => {
     return text
       .replace(/\\U([0-9a-fA-F]{8})/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
@@ -70,7 +70,7 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
       .replace(/\\n/g, '\n')
       .replace(/\\\\/g, '\\')
       .replace(/\\ /g, ' ')
-      .replace(/(https?:\/\/[^\s]+);/g, '$1')  // 移除 URL 后面的分号
+      .replace(/(https?:\/\/[^\s;]+);?/g, '[$1]($1)')  // URL 转 Markdown 链接
   }
 
   return (
