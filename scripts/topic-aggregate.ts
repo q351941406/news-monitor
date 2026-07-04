@@ -77,12 +77,8 @@ function buildPrompt(items: Array<{ id: string; title: string | null; summary: s
 ${content}
 
 要求：
-- 根据内容的相关性自动识别主题
-- 每个主题包含 1-5 条相关内容
-- 主题名称简洁明了
 - 每个主题提供一句话概括
-- itemIds 使用每条开头的 ID 字段值
-- 不要遗漏任何一条`
+- itemIds 使用每条开头的 ID 字段值`
 }
 
 // 主题聚合函数
