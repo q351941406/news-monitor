@@ -75,14 +75,15 @@ function buildPrompt(items: Array<{ id: string; title: string | null; rawData: u
 ${keyInfo}`
   }).join('\n---\n')
 
-  return `请用中文分析以下 ${items.length} 条内容。
+  return `请用中文详细分析以下 ${items.length} 条内容。
 
 ${content}
 
 要求：
 - 每条返回 id、摘要、重点
-- 摘要：概括核心内容，自由发挥
-- 重点：提取关键重点，保留重要细节
+- 摘要：详细概括核心内容，包含关键背景和上下文
+- 重点：提取所有重要细节、技术要点、应用场景
+- 保留原文中的具体数据、技术术语、关键信息
 - 按顺序返回，不要遗漏任何一条`
 }
 
