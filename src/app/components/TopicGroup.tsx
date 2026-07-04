@@ -118,7 +118,7 @@ export default function TopicGroup({
                   case 'github':
                     return rawData.description as string
                   case 'producthunt':
-                    return rawData.tagline as string
+                    return rawData.description as string || rawData.tagline as string
                   case 'twitter':
                     return rawData.text as string
                   default:
