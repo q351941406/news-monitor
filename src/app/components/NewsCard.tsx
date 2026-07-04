@@ -70,6 +70,7 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
       .replace(/\\n/g, '\n')
       .replace(/\\\\/g, '\\')
       .replace(/\\ /g, ' ')
+      .replace(/(https?:\/\/[^\s]+);/g, '$1')  // 移除 URL 后面的分号
   }
 
   return (
