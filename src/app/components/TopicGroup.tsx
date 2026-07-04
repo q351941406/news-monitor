@@ -113,31 +113,21 @@ export default function TopicGroup({
         </div>
       </div>
 
-      {/* Collapsed Preview */}
+      {/* Collapsed Preview - 竖向排列，全部显示 */}
       {!isExpanded && items.length > 0 && (
-        <div className="px-5 pb-4">
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {items.slice(0, 4).map(item => (
-              <div
-                key={item.id}
-                className={`flex-shrink-0 w-48 p-2.5 rounded-lg border text-xs transition-colors ${
-                  item.isRead
-                    ? 'bg-stone-50 border-stone-200 text-stone-400'
-                    : 'bg-white border-stone-300 text-stone-700 hover:border-stone-400'
-                }`}
-              >
-                <p className="line-clamp-2 leading-snug">{item.summary || item.title}</p>
-                {!item.isRead && (
-                  <div className="w-1.5 h-1.5 bg-red-500 rounded-full mt-1.5" />
-                )}
-              </div>
-            ))}
-            {items.length > 4 && (
-              <div className="flex-shrink-0 w-20 p-2.5 rounded-lg border border-dashed border-stone-300 text-xs text-stone-400 flex items-center justify-center">
-                +{items.length - 4}
-              </div>
-            )}
-          </div>
+        <div className="px-5 pb-4 space-y-2">
+          {items.map(item => (
+            <div
+              key={item.id}
+              className={`p-2.5 rounded-lg border text-sm transition-colors ${
+                item.isRead
+                  ? 'bg-stone-50 border-stone-200 text-stone-400'
+                  : 'bg-white border-stone-300 text-stone-700'
+              }`}
+            >
+              <p className="leading-relaxed">{item.summary || item.title}</p>
+            </div>
+          ))}
         </div>
       )}
     </section>
