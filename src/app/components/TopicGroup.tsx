@@ -21,6 +21,8 @@ interface TopicGroupProps {
   icon: string
   items: NewsItem[]
   groupSummary?: string
+  isExpanded: boolean
+  onToggle: () => void
   onMarkRead: (id: string) => void
   onMarkUnread: (id: string) => void
   onMarkGroupRead: (topic: string) => void
@@ -31,11 +33,12 @@ export default function TopicGroup({
   icon,
   items,
   groupSummary,
+  isExpanded,
+  onToggle,
   onMarkRead,
   onMarkUnread,
   onMarkGroupRead,
 }: TopicGroupProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
   const unreadCount = items.filter(i => !i.isRead).length
 
   return (
@@ -43,7 +46,7 @@ export default function TopicGroup({
       {/* Group Header - Editorial Style */}
       <div
         className="flex items-center gap-4 p-5 cursor-pointer select-none"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={onToggle}
       >
         {/* Icon */}
         <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center text-2xl bg-stone-50 rounded-lg">
@@ -113,13 +116,14 @@ export default function TopicGroup({
         </div>
       </div>
 
-      {/* Collapsed Preview - 竖向排列，全部显示 */}
+      {/* Collapsed Preview - 竖向排列，全部显示，点击展开 */}
       {!isExpanded && items.length > 0 && (
         <div className="px-5 pb-4 space-y-2">
           {items.map(item => (
             <div
               key={item.id}
-              className={`p-2.5 rounded-lg border text-sm transition-colors ${
+              onClick={onToggle}
+              className={`p-2.5 rounded-lg border text-sm transition-colors cursor-pointer hover:border-stone-400 ${
                 item.isRead
                   ? 'bg-stone-50 border-stone-200 text-stone-400'
                   : 'bg-white border-stone-300 text-stone-700'

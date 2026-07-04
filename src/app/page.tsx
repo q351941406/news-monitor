@@ -30,6 +30,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [showRead, setShowRead] = useState(false)
   const [activeSource, setActiveSource] = useState('all')
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null)
 
   const fetchData = async () => {
     setLoading(true)
@@ -213,6 +214,8 @@ export default function Home() {
                 icon={getTopicIcon(group.topic)}
                 groupSummary={group.summary}
                 items={group.items}
+                isExpanded={expandedGroupId === group.id}
+                onToggle={() => setExpandedGroupId(expandedGroupId === group.id ? null : group.id)}
                 onMarkRead={handleMarkRead}
                 onMarkUnread={handleMarkUnread}
                 onMarkGroupRead={handleMarkGroupRead}
