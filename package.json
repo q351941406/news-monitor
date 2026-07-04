@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "scrape": "npx tsx scripts/scrape.ts",
+    "ai-process": "npx tsx scripts/ai-process.ts",
+    "topic-aggregate": "npx tsx scripts/topic-aggregate.ts",
     "db:init": "npx tsx scripts/init-db.ts"
   },
   "dependencies": {

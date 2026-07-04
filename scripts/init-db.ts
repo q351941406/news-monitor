@@ -48,6 +48,28 @@ async function main() {
   `
   console.log('  ✓ ai_analysis table')
 
+  // 主题聚合表
+  await sql`
+    CREATE TABLE IF NOT EXISTS topic_groups (
+      id TEXT PRIMARY KEY,
+      source TEXT NOT NULL,
+      topic TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+  console.log('  ✓ topic_groups table')
+
+  // 主题-新闻关联表
+  await sql`
+    CREATE TABLE IF NOT EXISTS topic_items (
+      topic_id TEXT REFERENCES topic_groups(id) ON DELETE CASCADE,
+      item_id TEXT REFERENCES raw_items(id) ON DELETE CASCADE,
+      PRIMARY KEY (topic_id, item_id)
+    )
+  `
+  console.log('  ✓ topic_items table')
+
   console.log('\n✅ Database initialized successfully')
 }
 

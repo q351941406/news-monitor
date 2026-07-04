@@ -17,56 +17,42 @@ interface NewsItem {
   isRead: boolean
 }
 
-// 临时主题分组（后续用 AI 自动生成）
-const topicConfig: Record<string, { icon: string; label: string }> = {
-  'ai': { icon: '🤖', label: 'AI / 人工智能' },
-  'web': { icon: '🌐', label: 'Web 开发' },
-  'tools': { icon: '🛠️', label: '开发工具' },
-  'finance': { icon: '💰', label: '金融量化' },
-  'other': { icon: '📦', label: '其他' },
-}
-
-// 简单的主题分类逻辑（后续用 AI 替代）
-function categorizeItem(item: NewsItem): string {
-  const text = JSON.stringify(item.rawData).toLowerCase()
-  const title = (item.title || '').toLowerCase()
-
-  if (text.includes('ai') || text.includes('llm') || text.includes('agent') || text.includes('机器学习') || title.includes('ai')) {
-    return 'ai'
-  }
-  if (text.includes('react') || text.includes('vue') || text.includes('next') || text.includes('frontend') || text.includes('web')) {
-    return 'web'
-  }
-  if (text.includes('cli') || text.includes('terminal') || text.includes('editor') || text.includes('tool') || text.includes('devtool')) {
-    return 'tools'
-  }
-  if (text.includes('trading') || text.includes('quant') || text.includes('finance') || text.includes('crypto') || text.includes('量化')) {
-    return 'finance'
-  }
-  return 'other'
+interface TopicGroupData {
+  id: string
+  topic: string
+  summary: string
+  items: NewsItem[]
 }
 
 export default function Home() {
   const [news, setNews] = useState<Record<string, NewsItem[]>>({})
+  const [topics, setTopics] = useState<Record<string, TopicGroupData[]>>({})
   const [loading, setLoading] = useState(true)
   const [showRead, setShowRead] = useState(false)
   const [activeSource, setActiveSource] = useState('all')
 
-  const fetchNews = async () => {
+  const fetchData = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/news?showAll=${showRead}`)
-      const data = await res.json()
-      setNews(data.data || {})
+      const [newsRes, topicsRes] = await Promise.all([
+        fetch(`/api/news?showAll=${showRead}`),
+        fetch(`/api/topics?showAll=${showRead}`),
+      ])
+
+      const newsData = await newsRes.json()
+      const topicsData = await topicsRes.json()
+
+      setNews(newsData.data || {})
+      setTopics(topicsData.data || {})
     } catch (error) {
-      console.error('Failed to fetch news:', error)
+      console.error('Failed to fetch data:', error)
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchNews()
+    fetchData()
   }, [showRead])
 
   const handleMarkRead = async (itemId: string) => {
@@ -113,14 +99,18 @@ export default function Home() {
     }
   }
 
-  const handleMarkGroupRead = async (topic: string) => {
-    const itemsToMark = allItems.filter(item => {
-      const itemTopic = categorizeItem(item)
-      return itemTopic === topic && !item.isRead
-    })
-
-    for (const item of itemsToMark) {
-      await handleMarkRead(item.id)
+  const handleMarkGroupRead = async (topicId: string) => {
+    // 找到该主题下的所有未读 items
+    for (const source of Object.keys(topics)) {
+      const group = topics[source]?.find(g => g.id === topicId)
+      if (group) {
+        for (const item of group.items) {
+          if (!item.isRead) {
+            await handleMarkRead(item.id)
+          }
+        }
+        break
+      }
     }
   }
 
@@ -166,26 +156,8 @@ export default function Home() {
 
   // 合并所有新闻
   const allItems = Object.values(news).flat()
-
-  // 按来源筛选
-  const filteredItems = activeSource === 'all'
-    ? allItems
-    : allItems.filter(item => item.source === activeSource)
-
-  // 按主题分组
-  const groupedItems: Record<string, NewsItem[]> = {}
-  for (const item of filteredItems) {
-    const topic = categorizeItem(item)
-    if (!groupedItems[topic]) {
-      groupedItems[topic] = []
-    }
-    groupedItems[topic].push(item)
-  }
-
-  // 按未读数量排序主题
-  const sortedTopics = Object.entries(groupedItems).sort(
-    ([, a], [, b]) => b.filter(i => !i.isRead).length - a.filter(i => !i.isRead).length
-  )
+  const totalUnread = allItems.filter(i => !i.isRead).length
+  const totalCount = allItems.length
 
   // 来源统计
   const sources = [
@@ -194,8 +166,10 @@ export default function Home() {
     { id: 'twitter', label: 'X / Twitter', icon: '𝕏', count: news.twitter?.length || 0, unread: news.twitter?.filter(i => !i.isRead).length || 0 },
   ]
 
-  const totalUnread = allItems.filter(i => !i.isRead).length
-  const totalCount = allItems.length
+  // 获取当前数据源的主题聚合
+  const currentTopics = activeSource === 'all'
+    ? Object.values(topics).flat()
+    : topics[activeSource] || []
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -224,7 +198,7 @@ export default function Home() {
             <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin mb-4" />
             <p className="text-stone-500">加载中...</p>
           </div>
-        ) : sortedTopics.length === 0 ? (
+        ) : currentTopics.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <p className="text-stone-400 text-lg">
               {showRead ? '暂无数据' : '没有未读内容 🎉'}
@@ -232,28 +206,38 @@ export default function Home() {
           </div>
         ) : (
           <div className="space-y-4">
-            {sortedTopics.map(([topic, items]) => {
-              const config = topicConfig[topic] || topicConfig['other']
-              return (
-                <TopicGroup
-                  key={topic}
-                  topic={config.label}
-                  icon={config.icon}
-                  items={items}
-                  onMarkRead={handleMarkRead}
-                  onMarkUnread={handleMarkUnread}
-                  onMarkGroupRead={handleMarkGroupRead}
-                />
-              )
-            })}
+            {currentTopics.map(group => (
+              <TopicGroup
+                key={group.id}
+                topic={group.topic}
+                icon={getTopicIcon(group.topic)}
+                groupSummary={group.summary}
+                items={group.items}
+                onMarkRead={handleMarkRead}
+                onMarkUnread={handleMarkUnread}
+                onMarkGroupRead={handleMarkGroupRead}
+              />
+            ))}
           </div>
         )}
       </main>
 
       {/* Footer */}
       <footer className="max-w-6xl mx-auto px-4 py-8 text-center text-sm text-stone-400">
-        <p>数据由 GitHub Actions 每 4 小时自动抓取</p>
+        <p>数据由 GitHub Actions 每小时自动抓取</p>
       </footer>
     </div>
   )
+}
+
+// 根据主题名称返回图标
+function getTopicIcon(topic: string): string {
+  const lower = topic.toLowerCase()
+  if (lower.includes('ai') || lower.includes('agent') || lower.includes('llm')) return '🤖'
+  if (lower.includes('web') || lower.includes('frontend') || lower.includes('react')) return '🌐'
+  if (lower.includes('tool') || lower.includes('cli') || lower.includes('dev')) return '🛠️'
+  if (lower.includes('finance') || lower.includes('trading') || lower.includes('crypto')) return '💰'
+  if (lower.includes('security') || lower.includes('hack')) return '🔒'
+  if (lower.includes('data') || lower.includes('database')) return '📊'
+  return '📰'
 }

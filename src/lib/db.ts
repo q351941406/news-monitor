@@ -1,7 +1,7 @@
 import { neon } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-http'
 import { eq, and, isNull, desc, lt, ne } from 'drizzle-orm'
-import { rawItems, aiAnalysis, type RawItem, type NewRawItem } from './schema'
+import { rawItems, aiAnalysis, topicGroups, topicItems, type RawItem, type NewRawItem } from './schema'
 
 // Re-export types
 export type { RawItem, NewRawItem }
@@ -235,4 +235,86 @@ export async function cleanupOldData(days: number = 30): Promise<void> {
 
   await db.delete(rawItems)
     .where(lt(rawItems.fetchedAt, cutoff))
+}
+
+// 存储主题聚合
+export async function storeTopicGroups(source: string, groups: Array<{
+  topic: string
+  summary: string
+  itemIds: string[]
+}>): Promise<void> {
+  const db = getDb()
+
+  // 删除该数据源的旧主题
+  const oldTopics = await db.select({ id: topicGroups.id })
+    .from(topicGroups)
+    .where(eq(topicGroups.source, source))
+
+  for (const old of oldTopics) {
+    await db.delete(topicItems).where(eq(topicItems.topicId, old.id))
+    await db.delete(topicGroups).where(eq(topicGroups.id, old.id))
+  }
+
+  // 插入新主题
+  for (const group of groups) {
+    const topicId = `${source}:topic:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+
+    await db.insert(topicGroups).values({
+      id: topicId,
+      source,
+      topic: group.topic,
+      summary: group.summary,
+    })
+
+    for (const itemId of group.itemIds) {
+      await db.insert(topicItems).values({
+        topicId,
+        itemId,
+      })
+    }
+  }
+}
+
+// 获取主题聚合
+export async function getTopicGroups(source: string): Promise<Array<{
+  id: string
+  topic: string
+  summary: string
+  items: NewsItem[]
+}>> {
+  const db = getDb()
+
+  const groups = await db.select()
+    .from(topicGroups)
+    .where(eq(topicGroups.source, source))
+    .orderBy(desc(topicGroups.createdAt))
+
+  const result = []
+
+  for (const group of groups) {
+    const items = await db.select({
+      id: rawItems.id,
+      source: rawItems.source,
+      title: rawItems.title,
+      url: rawItems.url,
+      rawData: rawItems.rawData,
+      summary: aiAnalysis.summary,
+      details: aiAnalysis.details,
+      fetchedAt: rawItems.fetchedAt,
+      isRead: rawItems.isRead,
+    })
+      .from(topicItems)
+      .innerJoin(rawItems, eq(topicItems.itemId, rawItems.id))
+      .leftJoin(aiAnalysis, eq(rawItems.id, aiAnalysis.itemId))
+      .where(eq(topicItems.topicId, group.id))
+
+    result.push({
+      id: group.id,
+      topic: group.topic,
+      summary: group.summary,
+      items: items as NewsItem[],
+    })
+  }
+
+  return result
 }

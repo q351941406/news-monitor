@@ -20,6 +20,21 @@ export const aiAnalysis = pgTable('ai_analysis', {
   processedAt: timestamp('processed_at').defaultNow(),
 })
 
+// 主题聚合表
+export const topicGroups = pgTable('topic_groups', {
+  id: text('id').primaryKey(),
+  source: text('source').notNull(),      // 数据源
+  topic: text('topic').notNull(),        // 主题名称
+  summary: text('summary').notNull(),    // 主题概括
+  createdAt: timestamp('created_at').defaultNow(),
+})
+
+// 主题-新闻关联表
+export const topicItems = pgTable('topic_items', {
+  topicId: text('topic_id').references(() => topicGroups.id, { onDelete: 'cascade' }),
+  itemId: text('item_id').references(() => rawItems.id, { onDelete: 'cascade' }),
+})
+
 // 类型导出
 export type RawItem = typeof rawItems.$inferSelect
 export type NewRawItem = typeof rawItems.$inferInsert
