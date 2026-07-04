@@ -109,7 +109,7 @@ async function processBatch(source: string) {
     model,
     schema: batchSchema,
     prompt,
-    maxOutputTokens: 4096,
+    maxOutputTokens: 100000,
   })
 
   console.log(`  AI returned ${object.results.length} results`)
