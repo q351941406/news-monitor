@@ -116,7 +116,7 @@ export default function TopicGroup({
               const getDescription = () => {
                 switch (item.source) {
                   case 'github':
-                    return rawData.description as string
+                    return rawData.readme as string || rawData.description as string
                   case 'producthunt':
                     return rawData.description as string || rawData.tagline as string
                   case 'twitter':
