@@ -120,13 +120,13 @@ export default function TopicGroup({
             {items.slice(0, 4).map(item => (
               <div
                 key={item.id}
-                className={`flex-shrink-0 w-40 p-2.5 rounded-lg border text-xs transition-colors ${
+                className={`flex-shrink-0 w-48 p-2.5 rounded-lg border text-xs transition-colors ${
                   item.isRead
                     ? 'bg-stone-50 border-stone-200 text-stone-400'
                     : 'bg-white border-stone-300 text-stone-700 hover:border-stone-400'
                 }`}
               >
-                <p className="font-medium truncate leading-snug">{item.title}</p>
+                <p className="line-clamp-2 leading-snug">{item.summary || item.title}</p>
                 {!item.isRead && (
                   <div className="w-1.5 h-1.5 bg-red-500 rounded-full mt-1.5" />
                 )}
