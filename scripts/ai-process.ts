@@ -87,60 +87,96 @@ ${content}
 - 按顺序返回，不要遗漏任何一条`
 }
 
+// 估算 token 数量（中文约 2 字符/token，英文约 4 字符/token）
+function estimateTokens(text: string): number {
+  const chineseChars = (text.match(/[一-鿿]/g) || []).length
+  const otherChars = text.length - chineseChars
+  return Math.ceil(chineseChars / 2 + otherChars / 4)
+}
+
 // 批处理函数
 async function processBatch(source: string) {
   console.log(`\n[${new Date().toISOString()}] Processing ${source}...`)
 
-  // 1. 查询未处理数据，限制每批 10 条
-  const items = await getUnprocessedItems(source, 10)
-  console.log(`  Found ${items.length} unprocessed items`)
+  // 1. 查询未处理数据
+  const allItems = await getUnprocessedItems(source, 50)
+  console.log(`  Found ${allItems.length} unprocessed items`)
 
-  if (items.length === 0) {
+  if (allItems.length === 0) {
     console.log('  No items to process')
     return
   }
 
-  // 2. 构建 prompt
-  const prompt = buildPrompt(items)
+  // 2. 动态分批：确保每批不超过 500K token
+  const MAX_CONTEXT_TOKENS = 500000
+  const batches: typeof allItems[] = []
+  let currentBatch: typeof allItems = []
+  let currentTokens = 0
 
-  // 3. 调用 AI
-  console.log(`  Calling AI for batch processing...`)
-  const { object } = await generateObject({
-    model,
-    schema: batchSchema,
-    prompt,
-    maxOutputTokens: 16000,
-  })
+  for (const item of allItems) {
+    const itemTokens = estimateTokens(JSON.stringify(item.rawData))
 
-  console.log(`  AI returned ${object.results.length} results`)
-
-  // 4. 批量存储
-  const db = getDb()
-  let successCount = 0
-
-  for (const result of object.results) {
-    try {
-      await db.insert(aiAnalysis)
-        .values({
-          itemId: result.id,
-          summary: result.summary,
-          details: result.details,
-        })
-        .onConflictDoUpdate({
-          target: aiAnalysis.itemId,
-          set: {
-            summary: result.summary,
-            details: result.details,
-            processedAt: new Date(),
-          },
-        })
-      successCount++
-    } catch (error) {
-      console.error(`  ❌ Failed to store result for ${result.id}:`, error)
+    if (currentTokens + itemTokens > MAX_CONTEXT_TOKENS && currentBatch.length > 0) {
+      batches.push(currentBatch)
+      currentBatch = []
+      currentTokens = 0
     }
+
+    currentBatch.push(item)
+    currentTokens += itemTokens
   }
 
-  console.log(`  ✅ Stored ${successCount}/${object.results.length} results`)
+  if (currentBatch.length > 0) {
+    batches.push(currentBatch)
+  }
+
+  console.log(`  Split into ${batches.length} batches`)
+
+  // 3. 逐批处理
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i]
+    console.log(`\n  Batch ${i + 1}/${batches.length} (${batch.length} items)`)
+
+    const prompt = buildPrompt(batch)
+
+    console.log(`  Calling AI...`)
+    const { object } = await generateObject({
+      model,
+      schema: batchSchema,
+      prompt,
+      maxOutputTokens: 100000,
+    })
+
+    console.log(`  AI returned ${object.results.length} results`)
+
+    // 批量存储
+    const db = getDb()
+    let successCount = 0
+
+    for (const result of object.results) {
+      try {
+        await db.insert(aiAnalysis)
+          .values({
+            itemId: result.id,
+            summary: result.summary,
+            details: result.details,
+          })
+          .onConflictDoUpdate({
+            target: aiAnalysis.itemId,
+            set: {
+              summary: result.summary,
+              details: result.details,
+              processedAt: new Date(),
+            },
+          })
+        successCount++
+      } catch (error) {
+        console.error(`  ❌ Failed to store result for ${result.id}:`, error)
+      }
+    }
+
+    console.log(`  ✅ Stored ${successCount}/${object.results.length} results`)
+  }
 }
 
 // 主函数
