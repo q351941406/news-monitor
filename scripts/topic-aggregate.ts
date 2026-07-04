@@ -76,9 +76,8 @@ function buildPrompt(items: Array<{ id: string; title: string | null; summary: s
 
 ${content}
 
-要求：
-- 每个主题提供一句话概括
-- itemIds 使用每条开头的 ID 字段值`
+每个主题包含：topic（主题名称）、summary（一句话概括）、itemIds（包含的新闻 ID）。
+itemIds 使用每条开头的 ID 字段值。`
 }
 
 // 主题聚合函数
