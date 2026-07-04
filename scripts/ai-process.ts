@@ -39,7 +39,7 @@ function getDb() {
 }
 
 // 获取未处理的数据
-async function getUnprocessedItems(source: string) {
+async function getUnprocessedItems(source: string, limit: number = 50) {
   const db = getDb()
 
   const results = await db.select({
@@ -52,7 +52,7 @@ async function getUnprocessedItems(source: string) {
     .where(
       and(eq(rawItems.source, source), isNull(aiAnalysis.itemId))
     )
-    .limit(50)
+    .limit(limit)
 
   return results
 }
@@ -91,8 +91,8 @@ ${content}
 async function processBatch(source: string) {
   console.log(`\n[${new Date().toISOString()}] Processing ${source}...`)
 
-  // 1. 查询未处理数据
-  const items = await getUnprocessedItems(source)
+  // 1. 查询未处理数据，限制每批 10 条
+  const items = await getUnprocessedItems(source, 10)
   console.log(`  Found ${items.length} unprocessed items`)
 
   if (items.length === 0) {
@@ -109,7 +109,7 @@ async function processBatch(source: string) {
     model,
     schema: batchSchema,
     prompt,
-    maxOutputTokens: 100000,
+    maxOutputTokens: 16000,
   })
 
   console.log(`  AI returned ${object.results.length} results`)
