@@ -61,21 +61,22 @@ export async function initDatabase() {
   `
 }
 
-// 存储原始数据
-export async function storeRawItems(items: NewRawItem[]): Promise<void> {
+// 存储原始数据（存在则跳过）
+export async function storeRawItems(items: NewRawItem[]): Promise<number> {
   const db = getDb()
+  let newCount = 0
 
   for (const item of items) {
-    await db.insert(rawItems)
+    const result = await db.insert(rawItems)
       .values(item)
-      .onConflictDoUpdate({
-        target: rawItems.id,
-        set: {
-          rawData: item.rawData,
-          fetchedAt: item.fetchedAt,
-        },
-      })
+      .onConflictDoNothing()
+
+    if (result.rowCount && result.rowCount > 0) {
+      newCount++
+    }
   }
+
+  return newCount
 }
 
 // 存储 AI 分析结果
