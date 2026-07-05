@@ -8,7 +8,7 @@ import path from 'path'
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
 
 import { createAnthropic } from '@ai-sdk/anthropic'
-import { generateObject } from 'ai'
+import { generateText, Output, NoObjectGeneratedError } from 'ai'
 import { z } from 'zod'
 import { neon } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-http'
@@ -140,12 +140,28 @@ async function processBatch(source: string) {
     const prompt = buildPrompt(batch)
 
     console.log(`  Calling AI...`)
-    const { object } = await generateObject({
-      model,
-      schema: batchSchema,
-      prompt,
-      maxOutputTokens: 100000,
-    })
+    let object
+    try {
+      const result = await generateText({
+        model,
+        output: Output.object({ schema: batchSchema }),
+        prompt,
+        maxOutputTokens: 100000,
+      })
+      object = result.output
+    } catch (error) {
+      if (NoObjectGeneratedError.isInstance(error)) {
+        console.log(`  ❌ AI failed: ${error.cause}`)
+      } else {
+        console.log(`  ❌ AI error: ${error}`)
+      }
+      continue
+    }
+
+    if (!object || !object.results || object.results.length === 0) {
+      console.log('  ❌ No results generated')
+      continue
+    }
 
     console.log(`  AI returned ${object.results.length} results`)
 

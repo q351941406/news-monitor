@@ -8,7 +8,7 @@ import path from 'path'
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
 
 import { createAnthropic } from '@ai-sdk/anthropic'
-import { generateObject } from 'ai'
+import { generateText, Output, NoObjectGeneratedError } from 'ai'
 import { z } from 'zod'
 import { neon } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-http'
@@ -107,16 +107,20 @@ async function aggregateTopics(source: string) {
   let object
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const result = await generateObject({
+      const result = await generateText({
         model,
-        schema: topicSchema,
+        output: Output.object({ schema: topicSchema }),
         prompt,
         maxOutputTokens: 16000,
       })
-      object = result.object
+      object = result.output
       break
     } catch (error) {
-      console.log(`  ⚠️ Attempt ${attempt}/3 failed: ${error}`)
+      if (NoObjectGeneratedError.isInstance(error)) {
+        console.log(`  ⚠️ Attempt ${attempt}/3 failed: ${error.cause}`)
+      } else {
+        console.log(`  ⚠️ Attempt ${attempt}/3 failed: ${error}`)
+      }
       if (attempt === 3) {
         console.log('  ❌ All attempts failed, skipping topic aggregation')
         return
