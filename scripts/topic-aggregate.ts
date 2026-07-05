@@ -93,17 +93,42 @@ async function aggregateTopics(source: string) {
     return
   }
 
+  // 如果数据太少，跳过聚合
+  if (items.length < 3) {
+    console.log('  Too few items for aggregation, skipping')
+    return
+  }
+
   // 2. 构建 prompt
   const prompt = buildPrompt(items)
 
-  // 3. 调用 AI
+  // 3. 调用 AI（带重试）
   console.log(`  Calling AI for topic aggregation...`)
-  const { object } = await generateObject({
-    model,
-    schema: topicSchema,
-    prompt,
-    maxOutputTokens: 16000,
-  })
+  let object
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const result = await generateObject({
+        model,
+        schema: topicSchema,
+        prompt,
+        maxOutputTokens: 16000,
+      })
+      object = result.object
+      break
+    } catch (error) {
+      console.log(`  ⚠️ Attempt ${attempt}/3 failed: ${error}`)
+      if (attempt === 3) {
+        console.log('  ❌ All attempts failed, skipping topic aggregation')
+        return
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000))
+    }
+  }
+
+  if (!object || !object.groups || object.groups.length === 0) {
+    console.log('  ❌ No topics generated')
+    return
+  }
 
   console.log(`  AI returned ${object.groups.length} topics`)
 
