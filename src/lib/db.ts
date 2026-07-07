@@ -268,10 +268,20 @@ export async function storeTopicGroups(source: string, groups: Array<{
     })
 
     for (const itemId of group.itemIds) {
-      await db.insert(topicItems).values({
-        topicId,
-        itemId,
-      })
+      // 验证 itemId 是否存在于 raw_items 表
+      const exists = await db.select({ id: rawItems.id })
+        .from(rawItems)
+        .where(eq(rawItems.id, itemId))
+        .limit(1)
+
+      if (exists.length > 0) {
+        await db.insert(topicItems).values({
+          topicId,
+          itemId,
+        })
+      } else {
+        console.log(`  ⚠️ Skipping invalid itemId: ${itemId}`)
+      }
     }
   }
 }
