@@ -10,12 +10,17 @@
     "scrape": "npx tsx scripts/scrape.ts",
     "ai-process": "npx tsx scripts/ai-process.ts",
     "topic-aggregate": "npx tsx scripts/topic-aggregate.ts",
-    "db:init": "npx tsx scripts/init-db.ts"
+    "db:init": "npx tsx scripts/init-db.ts",
+    "test": "vitest run --config vitest.config.mjs",
+    "test:watch": "vitest --config vitest.config.mjs",
+    "test:coverage": "vitest run --config vitest.config.mjs --coverage",
+    "prepare": "husky"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.7",
     "@ai-sdk/openai": "^4.0.6",
     "@neondatabase/serverless": "^1.1.0",
+    "@rolldown/binding-linux-x64-gnu": "^1.2.0",
     "@upstash/redis": "^1.34.0",
     "ai": "^7.0.13",
     "dotenv": "^16.4.0",
@@ -31,13 +36,18 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vitest/coverage-v8": "^4.1.10",
     "autoprefixer": "^10.4.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.1.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.1.1",
     "postcss": "^8.4.0",
+    "prettier": "^3.9.6",
     "tailwindcss": "^3.4.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.10"
   }
 }
