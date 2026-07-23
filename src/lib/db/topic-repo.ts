@@ -2,14 +2,13 @@
  * 主题聚合仓库 — AI 主题分组管理
  */
 import { eq, desc } from 'drizzle-orm'
-import { neon } from '@neondatabase/serverless'
 import { rawItems, aiAnalysis, topicGroups, topicItems } from '../schema'
-import { getDb, type NewsItem } from './connection'
+import { getDb, getPgPool, type NewsItem } from './connection'
 
 /** 初始化数据库表 */
 export async function initDatabase() {
-  const sql = neon(process.env.DATABASE_URL!)
-  await sql`
+  const pool = getPgPool()
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS raw_items (
       id TEXT PRIMARY KEY,
       source TEXT NOT NULL,
@@ -20,20 +19,18 @@ export async function initDatabase() {
       fetched_at BIGINT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
-  `
-  await sql`
-    CREATE INDEX IF NOT EXISTS idx_raw_items_source ON raw_items(source)
-  `
-  await sql`
-    CREATE INDEX IF NOT EXISTS idx_raw_items_fetched_at ON raw_items(fetched_at DESC)
-  `
-  await sql`
+  `)
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_raw_items_source ON raw_items(source)')
+  await pool.query(
+    'CREATE INDEX IF NOT EXISTS idx_raw_items_fetched_at ON raw_items(fetched_at DESC)',
+  )
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS ai_analysis (
       item_id TEXT PRIMARY KEY REFERENCES raw_items(id) ON DELETE CASCADE,
       summary TEXT NOT NULL,
       processed_at TIMESTAMPTZ DEFAULT NOW()
     )
-  `
+  `)
 }
 
 /** 存储主题聚合 */
