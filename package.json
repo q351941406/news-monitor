@@ -14,7 +14,10 @@
     "test": "vitest run --config vitest.config.mjs",
     "test:watch": "vitest --config vitest.config.mjs",
     "test:coverage": "vitest run --config vitest.config.mjs --coverage",
-    "prepare": "husky"
+    "prepare": "husky",
+    "typecheck": "tsc --noEmit",
+    "test:integration": "vitest run --config vitest.config.integration.mjs",
+    "test:all": "npm test && npm run test:integration"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.7",

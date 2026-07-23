@@ -13,12 +13,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    exclude: ['src/**/db/__tests__/*.test.ts', 'node_modules'],
-    coverage: {
-      provider: 'v8',
-      include: ['src/**', 'scripts/**'],
-      exclude: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/db/__tests__/**'],
-    },
+    include: ['src/**/db/__tests__/*.test.ts'],
+    testTimeout: 30000,
   },
 })
