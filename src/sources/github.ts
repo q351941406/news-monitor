@@ -1,5 +1,4 @@
 import { NewsSource, RawItem } from './types'
-import { storeRawItems } from '@/lib/db'
 
 interface TrendingRepo {
   author: string
@@ -21,7 +20,7 @@ async function fetchReadme(owner: string, repo: string): Promise<string> {
         const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${name}`
         const res = await fetch(url, {
           headers: { 'User-Agent': 'Mozilla/5.0' },
-          signal: AbortSignal.timeout(10000)
+          signal: AbortSignal.timeout(10000),
         })
         if (res.ok) {
           const text = await res.text()
@@ -48,11 +47,11 @@ export const githubSource: NewsSource = {
       `https://api.github.com/search/repositories?q=created:>${dateStr}&sort=stars&order=desc&per_page=10`,
       {
         headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'news-monitor'
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'news-monitor',
         },
-        signal: AbortSignal.timeout(15000)
-      }
+        signal: AbortSignal.timeout(15000),
+      },
     )
 
     if (!res.ok) throw new Error(`GitHub API error: ${res.status}`)
@@ -91,13 +90,9 @@ export const githubSource: NewsSource = {
           },
           fetchedAt: Date.now(),
         }
-      })
+      }),
     )
 
-    // 存储原始数据
-    await storeRawItems(items)
-    console.log(`  📦 Stored ${items.length} raw items`)
-
     return items
-  }
+  },
 }

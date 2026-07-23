@@ -1,5 +1,4 @@
 import { NewsSource, RawItem } from './types'
-import { storeRawItems } from '@/lib/db'
 
 interface PHProduct {
   id: string
@@ -42,11 +41,11 @@ export const productHuntSource: NewsSource = {
     const res = await fetch('https://api.producthunt.com/v2/api/graphql', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({ query }),
-      signal: AbortSignal.timeout(15000)
+      signal: AbortSignal.timeout(15000),
     })
 
     if (!res.ok) throw new Error(`PH API error: ${res.status}`)
@@ -56,17 +55,16 @@ export const productHuntSource: NewsSource = {
     const products: PHProduct[] = data.data.posts.edges.map((e: any) => e.node)
 
     // 构建原始数据
-    const items: RawItem[] = products.map(p => {
+    const items: RawItem[] = products.map((p) => {
       // 获取预览图
-      const previewImage = p.thumbnail?.url ||
-        p.media?.[0]?.url ||
-        null
+      const previewImage = p.thumbnail?.url || p.media?.[0]?.url || null
 
       // 获取媒体
-      const mediaItems = p.media?.map(m => ({
-        type: m.type,
-        url: m.url,
-      })) || []
+      const mediaItems =
+        p.media?.map((m) => ({
+          type: m.type,
+          url: m.url,
+        })) || []
 
       return {
         id: `ph:${p.id}`,
@@ -88,10 +86,6 @@ export const productHuntSource: NewsSource = {
       }
     })
 
-    // 存储原始数据
-    await storeRawItems(items)
-    console.log(`  📦 Stored ${items.length} raw items`)
-
     return items
-  }
+  },
 }

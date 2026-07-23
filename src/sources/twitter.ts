@@ -1,5 +1,4 @@
 import { NewsSource, RawItem } from './types'
-import { storeRawItems } from '@/lib/db'
 import { execSync } from 'child_process'
 
 interface Tweet {
@@ -14,16 +13,39 @@ interface Tweet {
 }
 
 const TECH_KEYWORDS = [
-  'ai', 'llm', 'gpt', 'claude', 'openai', 'anthropic', '机器学习', '人工智能',
-  'programming', 'developer', 'coding', '开源', 'github', '编程',
-  'startup', 'fintech', 'crypto', '量化', 'trading',
-  'react', 'typescript', 'python', 'rust', 'golang',
-  'cloud', 'kubernetes', 'docker', 'devops'
+  'ai',
+  'llm',
+  'gpt',
+  'claude',
+  'openai',
+  'anthropic',
+  '机器学习',
+  '人工智能',
+  'programming',
+  'developer',
+  'coding',
+  '开源',
+  'github',
+  '编程',
+  'startup',
+  'fintech',
+  'crypto',
+  '量化',
+  'trading',
+  'react',
+  'typescript',
+  'python',
+  'rust',
+  'golang',
+  'cloud',
+  'kubernetes',
+  'docker',
+  'devops',
 ]
 
 function isTechRelated(text: string): boolean {
   const lower = text.toLowerCase()
-  return TECH_KEYWORDS.some(kw => lower.includes(kw))
+  return TECH_KEYWORDS.some((kw) => lower.includes(kw))
 }
 
 function parseYamlTweets(yaml: string): Tweet[] {
@@ -43,7 +65,10 @@ function parseYamlTweets(yaml: string): Tweet[] {
       // 检查是否遇到新的顶级字段（缩进减少）
       if (line.match(/^[a-z]/) || line.match(/^  [a-z].*:/)) {
         // 文本结束
-        current.text = textBuffer.trim().replace(/^['"]|['"]$/g, '').replace(/''/g, "'")
+        current.text = textBuffer
+          .trim()
+          .replace(/^['"]|['"]$/g, '')
+          .replace(/''/g, "'")
         inText = false
         textBuffer = ''
         // 继续处理当前行
@@ -63,17 +88,25 @@ function parseYamlTweets(yaml: string): Tweet[] {
     } else if (trimmed.startsWith('text:') && current.id && !inMedia) {
       const textContent = trimmed.slice(5)?.trim()
       // 检查是否是多行文本（以引号开头但没有闭合）
-      if ((textContent.startsWith("'") && !textContent.endsWith("'")) ||
-          (textContent.startsWith('"') && !textContent.endsWith('"'))) {
+      if (
+        (textContent.startsWith("'") && !textContent.endsWith("'")) ||
+        (textContent.startsWith('"') && !textContent.endsWith('"'))
+      ) {
         inText = true
         textBuffer = textContent
       } else {
         current.text = textContent.replace(/^['"]|['"]$/g, '').replace(/''/g, "'")
       }
     } else if (trimmed.startsWith('name:') && !current.author && !inMedia) {
-      current.author = trimmed.slice(5)?.trim().replace(/^['"]|['"]$/g, '')
+      current.author = trimmed
+        .slice(5)
+        ?.trim()
+        .replace(/^['"]|['"]$/g, '')
     } else if (trimmed.startsWith('screenName:') && !current.username && !inMedia) {
-      current.username = trimmed.slice(11)?.trim().replace(/^['"]|['"]$/g, '')
+      current.username = trimmed
+        .slice(11)
+        ?.trim()
+        .replace(/^['"]|['"]$/g, '')
     } else if (trimmed.startsWith('likes:') && current.id && !inMedia) {
       current.likes = parseInt(trimmed.slice(6)?.trim()) || 0
     } else if (trimmed.startsWith('retweets:') && current.id && !inMedia) {
@@ -89,7 +122,7 @@ function parseYamlTweets(yaml: string): Tweet[] {
         if (currentMedia.url && current.media) {
           current.media.push({
             type: currentMedia.type as 'photo' | 'video',
-            url: currentMedia.url
+            url: currentMedia.url,
           })
         }
         currentMedia = {}
@@ -101,15 +134,18 @@ function parseYamlTweets(yaml: string): Tweet[] {
 
   // 处理最后一条推文
   if (inText && textBuffer) {
-    current.text = textBuffer.trim().replace(/^['"]|['"]$/g, '').replace(/''/g, "'")
+    current.text = textBuffer
+      .trim()
+      .replace(/^['"]|['"]$/g, '')
+      .replace(/''/g, "'")
   }
   if (current.id && current.text) {
     tweets.push(current as Tweet)
   }
 
-  return tweets.map(t => ({
+  return tweets.map((t) => ({
     ...t,
-    url: `https://x.com/${t.username || 'unknown'}/status/${t.id}`
+    url: `https://x.com/${t.username || 'unknown'}/status/${t.id}`,
   }))
 }
 
@@ -152,7 +188,7 @@ export const twitterSource: NewsSource = {
     console.log(`  📋 Parsed ${allTweets.length} tweets from twitter-cli`)
 
     // 关键词过滤
-    const techTweets = allTweets.filter(t => isTechRelated(t.text)).slice(0, 20)
+    const techTweets = allTweets.filter((t) => isTechRelated(t.text)).slice(0, 20)
 
     if (techTweets.length === 0) {
       console.log('  ⚠️ No tech-related tweets found')
@@ -162,13 +198,14 @@ export const twitterSource: NewsSource = {
     console.log(`  🔍 Found ${techTweets.length} tech-related tweets`)
 
     // 构建原始数据
-    const items: RawItem[] = techTweets.map(t => {
+    const items: RawItem[] = techTweets.map((t) => {
       const media = t.media || []
-      const photos = media.filter(m => m.type === 'photo')
-      const videos = media.filter(m => m.type === 'video')
+      const photos = media.filter((m) => m.type === 'photo')
+      const videos = media.filter((m) => m.type === 'video')
 
       // 预览图：优先用图片，否则用 Twitter 的媒体预览 API
-      const previewImage = photos[0]?.url || (videos[0] ? `https://jf.x.com/images/media-preview/${t.id}` : null)
+      const previewImage =
+        photos[0]?.url || (videos[0] ? `https://jf.x.com/images/media-preview/${t.id}` : null)
 
       return {
         id: `x:${t.id}`,
@@ -181,8 +218,8 @@ export const twitterSource: NewsSource = {
           text: t.text,
           likes: t.likes,
           retweets: t.retweets,
-          photos: photos.map(m => m.url),
-          videos: videos.map(m => m.url),
+          photos: photos.map((m) => m.url),
+          videos: videos.map((m) => m.url),
           previewImage,
           mediaType: videos.length > 0 ? 'video' : photos.length > 0 ? 'photo' : null,
           mediaUrl: videos[0]?.url || photos[0]?.url || null,
@@ -191,10 +228,6 @@ export const twitterSource: NewsSource = {
       }
     })
 
-    // 存储原始数据
-    await storeRawItems(items)
-    console.log(`  📦 Stored ${items.length} raw items`)
-
     return items
-  }
+  },
 }
