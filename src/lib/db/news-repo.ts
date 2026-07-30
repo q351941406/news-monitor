@@ -1,10 +1,9 @@
 /**
  * 新闻仓库 — 原始数据 CRUD
  */
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, sql } from 'drizzle-orm'
 import { rawItems, aiAnalysis, type NewRawItem } from '../schema'
 import { getDb, type NewsItem } from './connection'
-
 /** 存储原始数据（存在则跳过） */
 export async function storeRawItems(items: NewRawItem[]): Promise<number> {
   const db = getDb()
@@ -17,7 +16,6 @@ export async function storeRawItems(items: NewRawItem[]): Promise<number> {
   }
   return newCount
 }
-
 /** 检查是否已存在 */
 export async function existsItem(itemId: string): Promise<boolean> {
   const db = getDb()
@@ -28,7 +26,6 @@ export async function existsItem(itemId: string): Promise<boolean> {
     .limit(1)
   return result.length > 0
 }
-
 /** 获取新闻列表（默认只显示未读） */
 export async function getNews(
   source: string,
@@ -58,7 +55,6 @@ export async function getNews(
     .limit(limit)
   return results as NewsItem[]
 }
-
 /** 获取所有数据源的新闻 */
 export async function getAllNews(
   limit: number = 50,
@@ -72,4 +68,25 @@ export async function getAllNews(
     }),
   )
   return results
+}
+/** 获取每个数据源的真实总数和未读数（不受 limit 影响） */
+export async function getNewsCounts(): Promise<Record<string, { total: number; unread: number }>> {
+  const db = getDb()
+  const sources = ['github', 'producthunt', 'twitter']
+  const result: Record<string, { total: number; unread: number }> = {}
+  for (const source of sources) {
+    const [totals] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(rawItems)
+      .where(eq(rawItems.source, source))
+    const [unreads] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(rawItems)
+      .where(and(eq(rawItems.source, source), eq(rawItems.isRead, false)))
+    result[source] = {
+      total: totals?.count ?? 0,
+      unread: unreads?.count ?? 0,
+    }
+  }
+  return result
 }

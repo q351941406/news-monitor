@@ -10,7 +10,7 @@
  * - stats-repo: 统计 + 清理
  */
 export { getDb, type NewsItem } from './connection'
-export { storeRawItems, existsItem, getNews, getAllNews } from './news-repo'
+export { storeRawItems, existsItem, getNews, getAllNews, getNewsCounts } from './news-repo'
 export { storeAIAnalysis, getUnprocessedItems } from './ai-repo'
 export { markAsRead, markAsUnread, markAllAsRead, resetAllRead } from './read-repo'
 export { initDatabase, storeTopicGroups, getTopicGroups } from './topic-repo'
