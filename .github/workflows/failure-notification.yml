@@ -6,6 +6,7 @@ on:
       - 'Scrape Twitter'
       - 'Scrape Producthunt'
       - 'Run Tests'
+      - 'Test Notification'
     types:
       - completed
 
