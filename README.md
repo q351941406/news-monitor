@@ -174,6 +174,54 @@ npm run topic-aggregate -- --source=github
 | Twitter         | 每小时                | 高频更新 |
 | Product Hunt    | 每小时                | 高频更新 |
 
+## 📦 数据库迁移
+
+项目使用 [Drizzle ORM](https://orm.drizzle.team/) 管理 schema 演进：
+
+```bash
+# 修改 src/lib/schema.ts 后生成 migration 文件
+npm run db:generate
+# 检查 schema 与 migration 文件是否一致（CI 必跑）
+npm run db:check
+# 应用 migration 到目标 DB
+npm run db:migrate
+# 开发期快速同步（跳过 migration 文件）
+npm run db:push
+# 可视化浏览数据库
+npm run db:studio
+```
+
+CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
+
+## 🔁 网络重试与 Sentry 错误追踪
+
+所有外部数据源都通过 `src/lib/retry.ts` 中的 `fetchWithRetry` / `execSyncWithRetry` 包装，
+带指数退避 + 30% 抖动，防止网络抖动造成数据缺失。
+
+可选接入 Sentry（留空 DSN = 自动 noop）：
+
+```bash
+# .env.local
+SENTRY_DSN=https://xxx@sentry.io/xxx
+NEXT_PUBLIC_SENTRY_DSN=https://xxx@sentry.io/xxx
+```
+
+## 📊 测试覆盖率
+
+| 维度       | 阈值 | 说明                    |
+| ---------- | ---- | ----------------------- |
+| Lines      | 45%  | 起步门槛，每 sprint +5% |
+| Branches   | 50%  |                         |
+| Functions  | 44%  |                         |
+| Statements | 44%  |                         |
+
+跑覆盖率 + 门槛检查：
+
+```bash
+npm run test:coverage        # 生成 HTML 报告到 coverage/
+npm run test:coverage:check  # 低于门槛则退出码非 0
+```
+
 ## 运维
 
 ### 测试
