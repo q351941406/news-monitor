@@ -9,6 +9,7 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,6 +43,14 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
         run: npx tsx scripts/topic-aggregate.ts --source=github
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          curl -sf -X POST "${{ secrets.DISCORD_GITHUB_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{"content": ":rotating_light: *Github Scrape* failed\\n${{ github.workflow }} @ ${{ github.ref }}\\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"}' \
+            || echo "Discord webhook failed (non-fatal)"
       - name: Report
         if: always()
         run: echo "GitHub Trending scrape completed"
