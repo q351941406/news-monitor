@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger'
 /**
  * 独立抓取脚本 - 由 GitHub Actions 调用
  * 用法: npx tsx scripts/scrape.ts --source=github
@@ -8,19 +9,21 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
 import { sources, getSource } from '../src/sources'
 import { storeRawItems } from '@/lib/db'
 
+const log = logger.child({ script: 'scrape' })
+
 async function main() {
   const args = process.argv.slice(2)
   const sourceArg = args.find((a) => a.startsWith('--source='))
   const sourceSlug = sourceArg?.split('=')[1]
   if (!sourceSlug) {
-    console.error('Usage: npx tsx scripts/scrape.ts --source=<slug>')
-    console.error('Available sources:', sources.map((s) => s.slug).join(', '))
+    log.error('Usage: npx tsx scripts/scrape.ts --source=<slug>')
+    log.error(`Available sources: ${sources.map((s) => s.slug).join(', ')}`)
     process.exit(1)
   }
   const source = getSource(sourceSlug)
   if (!source) {
-    console.error(`Unknown source: ${sourceSlug}`)
-    console.error('Available sources:', sources.map((s) => s.slug).join(', '))
+    log.error(`Unknown source: ${sourceSlug}`)
+    log.error(`Available sources: ${sources.map((s) => s.slug).join(', ')}`)
     process.exit(1)
   }
   console.log(`[${new Date().toISOString()}] Scraping ${source.name}...`)
@@ -40,7 +43,7 @@ async function main() {
       }),
     )
   } catch (error) {
-    console.error(`  ❌ Error: ${error}`)
+    log.error(`  ❌ Error: ${error}`)
     process.exit(1)
   }
 }

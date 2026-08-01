@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger'
 /**
  * 主题聚合脚本 - 基于 AI 摘要动态生成主题分组
  * 用法: npx tsx scripts/topic-aggregate.ts --source=github
@@ -11,6 +12,8 @@ import { eq, and, isNull, desc } from 'drizzle-orm'
 import { rawItems, aiAnalysis } from '../src/lib/schema'
 import { storeTopicGroups } from '../src/lib/db'
 import { createAIService } from '../src/lib/ai-service'
+
+const log = logger.child({ script: 'topic-aggregate' })
 
 // 数据库连接
 function getDb() {
@@ -69,18 +72,18 @@ async function main() {
   const sourceArg = args.find((a) => a.startsWith('--source='))
   const source = sourceArg?.split('=')[1]
   if (!source) {
-    console.error('Usage: npx tsx scripts/topic-aggregate.ts --source=<slug>')
-    console.error('Available sources: github, producthunt, twitter')
+    log.error('Usage: npx tsx scripts/topic-aggregate.ts --source=<slug>')
+    log.error('Available sources: github, producthunt, twitter')
     process.exit(1)
   }
   if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('❌ ANTHROPIC_API_KEY not configured')
+    log.error('❌ ANTHROPIC_API_KEY not configured')
     process.exit(1)
   }
   await aggregateTopics(source)
 }
 
 main().catch((error) => {
-  console.error('❌ Fatal error:', error)
+  log.error({ err: error }, '❌ Fatal error')
   process.exit(1)
 })
