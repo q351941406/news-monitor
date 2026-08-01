@@ -1,0 +1,82 @@
+# ============================================================
+# Dependabot 配置
+# 每周一自动检查 npm 依赖和 GitHub Actions 版本
+# 自动创建分组 PR，减少噪音
+# ============================================================
+version: 2
+
+updates:
+  # ---------- npm 依赖 ----------
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "q351941406"
+    labels:
+      - "dependencies"
+      - "npm"
+    # 分组：把同类更新合并到一个 PR
+    groups:
+      production-dependencies:
+        dependency-type: "production"
+        labels:
+          - "dependencies"
+          - "npm:production"
+      development-dependencies:
+        dependency-type: "development"
+        labels:
+          - "dependencies"
+          - "npm:development"
+      # 大版本更新单独成组（更谨慎）
+      major-version-updates:
+        update-types:
+          - "major"
+        labels:
+          - "dependencies"
+          - "npm:major"
+    # 提交前缀
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(dev-deps)"
+      include: "scope"
+    # 忽略某些大版本更新（手动评估）
+    ignore:
+      - dependency-name: "next"
+        versions: ["14.x"]
+      - dependency-name: "react"
+        versions: ["19.x"]
+
+  # ---------- GitHub Actions ----------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "q351941406"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci(actions)"
+
+  # ---------- Docker base image (可选) ----------
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(docker)"
