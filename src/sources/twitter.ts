@@ -1,5 +1,6 @@
 import { NewsSource, RawItem } from './types'
 import { execSync } from 'child_process'
+import { execSyncWithRetry } from '@/lib/retry'
 
 interface Tweet {
   id: string
@@ -165,15 +166,29 @@ export const twitterSource: NewsSource = {
     // 使用 twitter-cli 获取推荐时间线
     let yamlOutput = ''
     try {
-      yamlOutput = execSync('twitter feed --max 50 --yaml', {
-        env: {
-          ...process.env,
-          TWITTER_AUTH_TOKEN: authToken,
-          TWITTER_CT0: ct0,
+      yamlOutput = execSyncWithRetry(
+        () =>
+          execSync('twitter feed --max 50 --yaml', {
+            env: {
+              ...process.env,
+              TWITTER_AUTH_TOKEN: authToken,
+              TWITTER_CT0: ct0,
+            },
+            timeout: 30000,
+            encoding: 'utf-8',
+          }),
+        {
+          retries: 3,
+          baseDelayMs: 1000,
+          maxBackoffMs: 10000,
+          onRetry: (attempt, err) => {
+            console.warn(
+              `  ⚠️ twitter-cli 第 ${attempt} 次重试:`,
+              err instanceof Error ? err.message : err,
+            )
+          },
         },
-        timeout: 30000,
-        encoding: 'utf-8',
-      })
+      )
     } catch (error) {
       console.error('  ❌ twitter-cli failed:', error)
       return []

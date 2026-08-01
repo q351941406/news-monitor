@@ -1,4 +1,5 @@
 import { NewsSource, RawItem } from './types'
+import { fetchWithRetry } from '@/lib/retry'
 
 interface TrendingRepo {
   author: string
@@ -18,10 +19,12 @@ async function fetchReadme(owner: string, repo: string): Promise<string> {
     for (const branch of branches) {
       try {
         const url = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${name}`
-        const res = await fetch(url, {
-          headers: { 'User-Agent': 'Mozilla/5.0' },
-          signal: AbortSignal.timeout(10000),
-        })
+        const res = await fetchWithRetry(() =>
+          fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            signal: AbortSignal.timeout(10000),
+          }),
+        )
         if (res.ok) {
           const text = await res.text()
           return text.slice(0, 5000)
@@ -43,15 +46,17 @@ export const githubSource: NewsSource = {
     today.setDate(today.getDate() - 1)
     const dateStr = today.toISOString().split('T')[0]
 
-    const res = await fetch(
-      `https://api.github.com/search/repositories?q=created:>${dateStr}&sort=stars&order=desc&per_page=10`,
-      {
-        headers: {
-          Accept: 'application/vnd.github.v3+json',
-          'User-Agent': 'news-monitor',
+    const res = await fetchWithRetry(() =>
+      fetch(
+        `https://api.github.com/search/repositories?q=created:>${dateStr}&sort=stars&order=desc&per_page=10`,
+        {
+          headers: {
+            Accept: 'application/vnd.github.v3+json',
+            'User-Agent': 'news-monitor',
+          },
+          signal: AbortSignal.timeout(15000),
         },
-        signal: AbortSignal.timeout(15000),
-      },
+      ),
     )
 
     if (!res.ok) throw new Error(`GitHub API error: ${res.status}`)

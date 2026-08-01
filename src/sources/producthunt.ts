@@ -1,4 +1,5 @@
 import { NewsSource, RawItem } from './types'
+import { fetchWithRetry } from '@/lib/retry'
 
 interface PHProduct {
   id: string
@@ -38,15 +39,17 @@ export const productHuntSource: NewsSource = {
       }
     }`
 
-    const res = await fetch('https://api.producthunt.com/v2/api/graphql', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query }),
-      signal: AbortSignal.timeout(15000),
-    })
+    const res = await fetchWithRetry(() =>
+      fetch('https://api.producthunt.com/v2/api/graphql', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query }),
+        signal: AbortSignal.timeout(15000),
+      }),
+    )
 
     if (!res.ok) throw new Error(`PH API error: ${res.status}`)
 
