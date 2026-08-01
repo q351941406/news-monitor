@@ -250,6 +250,27 @@ GitHub Dependabot 每**周一**自动检查 `npm` / `GitHub Actions` / `Docker b
 | 仅必要 node_modules     | ~80MB      |
 | **最终镜像**            | **~150MB** |
 
+### 定时任务可靠性
+
+所有 scrape-* 工作流都带 **15 分钟超时** + **Discord 失败通知**，避免静默失败。
+
+| 数据源       | Cron (UTC)     | 错峰原因                                |
+| ------------ | -------------- | --------------------------------------- |
+| GitHub       | `0 13 * * *`   | 每日一次，无冲突                        |
+| Twitter      | `5 */6 * * *`  | 每 6h 的 :05 分                         |
+| Product Hunt | `30 */6 * * *` | 每 6h 的 :30 分（避开 PH 自身整点压力） |
+
+Discord webhook 命名约定：`DISCORD_<SOURCE>_WEBHOOK`，每个工作流失败时发对应频道告警。
+
+### 端到端验证
+
+```bash
+curl http://localhost:3000/api/health
+# → {"status":"ok","db":"up","uptime":12,"timestamp":"..."}
+```
+
+返回 200 = 健康，503 = 数据库连接异常（用于容器编排 / Vercel 探活）。
+
 ## License
 
 MIT
