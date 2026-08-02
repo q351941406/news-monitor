@@ -4,6 +4,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 vi.mock('child_process', () => ({
   execSync: vi.fn(),
 }))
+// mock execSyncWithRetry: 直接调用 fn() 不重试，避免 busy-wait 阻塞测试
+vi.mock('@/lib/retry', () => ({
+  execSyncWithRetry: (fn: () => unknown) => fn(),
+}))
 
 import { execSync } from 'child_process'
 import { twitterSource } from '../twitter'

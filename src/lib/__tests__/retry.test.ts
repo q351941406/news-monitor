@@ -106,7 +106,15 @@ describe('fetchWithRetry', () => {
   })
 
   it('caps backoff at maxBackoffMs', async () => {
-    const fn = vi.fn().mockRejectedValue(Object.assign(new Error('net'), { code: 'ETIMEDOUT' }))
+    const netErr = Object.assign(new Error('net'), { code: 'ETIMEDOUT' })
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(netErr)
+      .mockRejectedValueOnce(netErr)
+      .mockRejectedValueOnce(netErr)
+      .mockRejectedValueOnce(netErr)
+      .mockRejectedValueOnce(netErr)
+      .mockRejectedValueOnce(netErr)
     const onRetry = vi.fn()
     const p = fetchWithRetry(fn, {
       retries: 5,
@@ -115,8 +123,9 @@ describe('fetchWithRetry', () => {
       maxBackoffMs: 5000,
       onRetry,
     })
+    const settled = p.catch(() => {})
     await vi.runAllTimersAsync()
-    await p.catch(() => {})
+    await settled
 
     // base 1000*10^5=1000000 → cap 到 5000；30% jitter ⇒ 最大 ~6500
     // 只要不无限增长（即最大 delay 不超过 cap+30%）即可
