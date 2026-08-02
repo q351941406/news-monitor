@@ -1,6 +1,3 @@
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 name: Scrape GitHub Trending
 on:
   schedule:
@@ -8,52 +5,8 @@ on:
   workflow_dispatch:
 jobs:
   scrape:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-      - name: Install dependencies
-        run: npm ci
-      - name: Run tests
-        run: npm test
-      - name: Run database migrations
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: npm run db:migrate
-      - name: Run scraper
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
-        run: npx tsx scripts/scrape.ts --source=github
-      - name: Run AI processing
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
-        run: npx tsx scripts/ai-process.ts --source=github
-      - name: Aggregate topics
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
-        run: npx tsx scripts/topic-aggregate.ts --source=github
-      - name: Notify on failure
-        if: failure()
-        run: |
-          curl -sf -X POST "${{ secrets.DISCORD_GITHUB_WEBHOOK }}" \
-            -H "Content-Type: application/json" \
-            -d '{"content": ":rotating_light: *GitHub Trending Scrape* failed\n${{ github.workflow }} @ ${{ github.ref }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"}' \
-            || echo "Discord webhook failed (non-fatal)"
-      - name: Report
-        if: always()
-        run: echo "GitHub Trending scrape completed"
+    uses: ./.github/workflows/scrape.yml
+    with:
+      source: github
+      source-display-name: GitHub Trending
+    secrets: inherit

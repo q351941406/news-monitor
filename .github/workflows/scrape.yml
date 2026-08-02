@@ -1,0 +1,96 @@
+# ============================================================
+# Scrape Reusable Workflow
+# 被 scrape-github / scrape-producthunt / scrape-twitter 调用
+# 消除 3 个 workflow 中 90% 的重复代码
+# ============================================================
+name: Scrape Source
+on:
+  workflow_call:
+    inputs:
+      source:
+        description: '数据源 slug (github / producthunt / twitter)'
+        required: true
+        type: string
+      source-display-name:
+        description: '显示名称（用于 Discord 通知）'
+        required: true
+        type: string
+    secrets:
+      DATABASE_URL:
+        required: true
+      ANTHROPIC_API_KEY:
+        required: true
+      ANTHROPIC_BASE_URL:
+        required: true
+      ANTHROPIC_MODEL:
+        required: true
+      DISCORD_GITHUB_WEBHOOK:
+        required: false
+      DISCORD_PH_WEBHOOK:
+        required: false
+      DISCORD_X_WEBHOOK:
+        required: false
+concurrency:
+  group: scrape-${{ inputs.source }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run db:migrate
+      - name: Run scraper
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+        run: npx tsx scripts/scrape.ts --source=${{ inputs.source }}
+      - name: Run AI processing
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+        run: npx tsx scripts/ai-process.ts --source=${{ inputs.source }}
+      - name: Aggregate topics
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+        run: npx tsx scripts/topic-aggregate.ts --source=${{ inputs.source }}
+      - name: Notify on failure
+        if: failure()
+        run: |
+          WEBHOOK=""
+          case "${{ inputs.source }}" in
+            github)      WEBHOOK="${{ secrets.DISCORD_GITHUB_WEBHOOK }}" ;;
+            producthunt) WEBHOOK="${{ secrets.DISCORD_PH_WEBHOOK }}" ;;
+            twitter)     WEBHOOK="${{ secrets.DISCORD_X_WEBHOOK }}" ;;
+          esac
+          if [ -z "$WEBHOOK" ]; then
+            echo "No Discord webhook configured for ${{ inputs.source }}, skipping notification"
+            exit 0
+          fi
+          curl -sf -X POST "$WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d '{"content": ":rotating_light: *${{ inputs.source-display-name }} Scrape* failed\n${{ github.workflow }} @ ${{ github.ref }}\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"}' \
+            || echo "Discord webhook failed (non-fatal)"
+      - name: Report
+        if: always()
+        run: echo "${{ inputs.source-display-name }} scrape completed"
