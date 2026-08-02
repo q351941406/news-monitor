@@ -1,0 +1,84 @@
+name: 'Scrape Pipeline'
+description: 'Run scrape + AI process + topic aggregate for a news source'
+
+inputs:
+  source:
+    description: 'Source slug (github / producthunt / twitter)'
+    required: true
+  source-display-name:
+    description: 'Display name for notifications'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: '.nvmrc'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+      shell: bash
+
+    - name: Run tests
+      run: npm test
+      shell: bash
+
+    - name: Run database migrations
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}
+      run: npm run db:migrate
+      shell: bash
+
+    - name: Run scraper
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}
+        ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
+        ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
+        ANTHROPIC_MODEL: ${{ env.ANTHROPIC_MODEL }}
+      run: npx tsx scripts/scrape.ts --source=${{ inputs.source }}
+      shell: bash
+
+    - name: Run AI processing
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}
+        ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
+        ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
+        ANTHROPIC_MODEL: ${{ env.ANTHROPIC_MODEL }}
+      run: npx tsx scripts/ai-process.ts --source=${{ inputs.source }}
+      shell: bash
+
+    - name: Aggregate topics
+      env:
+        DATABASE_URL: ${{ env.DATABASE_URL }}
+        ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
+        ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
+        ANTHROPIC_MODEL: ${{ env.ANTHROPIC_MODEL }}
+      run: npx tsx scripts/topic-aggregate.ts --source=${{ inputs.source }}
+      shell: bash
+
+    - name: Notify on failure
+      if: failure()
+      env:
+        DISCORD_WEBHOOK: ${{ env.DISCORD_WEBHOOK }}
+        WORKFLOW_NAME: ${{ inputs.source-display-name }}
+        REPO: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
+        SERVER_URL: ${{ github.server_url }}
+        REF: ${{ github.ref }}
+      run: |
+        curl -sf -X POST "$DISCORD_WEBHOOK" \
+          -H "Content-Type: application/json" \
+          -d "{\"content\": \":rotating_light: *${WORKFLOW_NAME}* scrape failed\\n${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}\"}" \
+          || echo "Discord webhook failed (non-fatal)"
+      shell: bash
+
+    - name: Report
+      if: always()
+      run: echo "${{ inputs.source-display-name }} scrape completed"
+      shell: bash
