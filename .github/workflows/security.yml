@@ -71,5 +71,4 @@ jobs:
         # 报告模式：输出漏洞报告但不阻断 CI
         # 已知遗留：sharp<0.35.0 需等 next 官方更新（tracked in overrides）
         # postcss 已通过 overrides 修复
-        continue-on-error: true
-        run: npm audit --omit=dev --audit-level=high
+        run: npm audit --omit=dev --audit-level=high || true
