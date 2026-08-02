@@ -1,6 +1,6 @@
 # ============================================================
 # Security Scanning
-# - CodeQL: 静态代码安全分析 (SAST)
+# - Semgrep: 静态代码安全分析 (SAST) - 替代 CodeQL，私有仓库免费
 # - Dependency Review: PR 中检查依赖漏洞
 # - npm audit: 依赖安全审计
 # ============================================================
@@ -18,33 +18,22 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  codeql:
-    name: CodeQL Analysis
+  semgrep:
+    name: Semgrep SAST Scan
     runs-on: ubuntu-latest
-    # 私有仓库需启用 GitHub Advanced Security (Code Scanning) 才能上传结果
-    # 未启用时此 job 会失败但不阻断 CI；启用 GHAS 后自动生效
-    continue-on-error: true
     permissions:
-      security-events: write
-      actions: read
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [javascript-typescript]
     steps:
       - uses: actions/checkout@v4
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+      - name: Semgrep Scan
+        uses: returntocorp/semgrep-action@v1
         with:
-          languages: ${{ matrix.language }}
-          # 默认 query suite；如仓库启用了 GHAS 可改为 security-extended
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: '/language:${{ matrix.language }}'
+          # 使用自动配置：包含安全规则集 + 最佳实践规则
+          # 检测 XSS、SQL 注入、密钥泄露、不安全模式等
+          config: auto
+          # 有 high 级别发现时阻断 CI
+          # generate Sarif report for GitHub Security tab (if GHAS enabled later)
+          generateSarif: '1'
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
