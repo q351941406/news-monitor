@@ -29,10 +29,10 @@ runs:
       run: npm test
       shell: bash
 
-    - name: Sync database schema
+    - name: Run database migrations
       env:
         DATABASE_URL: ${{ env.DATABASE_URL }}
-      run: npm run db:push
+      run: npm run db:migrate:ci
       shell: bash
 
     - name: Run scraper
