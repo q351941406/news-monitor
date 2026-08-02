@@ -1,0 +1,32 @@
+# ============================================================
+# Gitleaks - 密钥/凭证泄露扫描
+# 在 push/PR 时扫描代码，防止密钥泄露到仓库
+# ============================================================
+name: Gitleaks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gitleaks:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 需要完整历史才能扫描所有提交
+          fetch-depth: 0
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 不在 scheduled/PR 模式下 fail build — 仅报告
+          # push 到 main 时仍然 fail（拦截密钥入库）

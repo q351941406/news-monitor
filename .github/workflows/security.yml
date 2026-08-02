@@ -1,0 +1,76 @@
+# ============================================================
+# Security Scanning
+# - CodeQL: 静态代码安全分析 (SAST)
+# - Dependency Review: PR 中检查依赖漏洞
+# - npm audit: 依赖安全审计
+# ============================================================
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 每周一 02:00 UTC 全量扫描
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # 使用 security-extended 增强检测
+          queries: security-extended
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    # 仅在 PR 时运行
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          # 拒绝 high/critical 漏洞
+          fail-on-severity: high
+          # 拒绝不兼容的许可证
+          deny-licenses: AGPL-1.0-or-later, AGPL-3.0-or-later, SSPL-1.0
+
+  npm-audit:
+    name: npm Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - name: Run npm audit (production deps only)
+        run: npm audit --omit=dev --audit-level=high

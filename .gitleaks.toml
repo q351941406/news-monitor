@@ -1,0 +1,22 @@
+# Gitleaks 自定义配置
+# 继承默认规则 + 项目专属白名单
+title = "news-monitor gitleaks config"
+
+[extend]
+# 继承 gitleaks 内置默认规则
+useDefault = true
+
+# ====== 白名单 ======
+# .env.example 中的占位符不是真实密钥
+[[allowlists]]
+description = "Ignore .env.example placeholder values"
+paths = [
+  '''\.env\.example$''',
+]
+
+# .compact_backups 是压缩备份，不含源码密钥
+[[allowlists]]
+description = "Ignore compact backups"
+paths = [
+  '''\.compact_backups/''',
+]

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Clock, GitBranch, MessageCircle, Zap } from 'lucide-react'
 
 const schedules = [
@@ -39,10 +40,7 @@ export default function SettingsPage() {
           {schedules.map((schedule) => {
             const Icon = schedule.icon
             return (
-              <div
-                key={schedule.name}
-                className="bg-white rounded-xl border border-stone-200 p-6"
-              >
+              <div key={schedule.name} className="bg-white rounded-xl border border-stone-200 p-6">
                 <div className="flex items-start gap-4">
                   <div className="flex-shrink-0 w-10 h-10 bg-stone-100 rounded-lg flex items-center justify-center">
                     <Icon className="w-5 h-5 text-stone-600" />
@@ -57,9 +55,7 @@ export default function SettingsPage() {
                           {schedule.cron}
                         </code>
                       </div>
-                      <span className="text-xs text-stone-400">
-                        {schedule.workflow}
-                      </span>
+                      <span className="text-xs text-stone-400">{schedule.workflow}</span>
                     </div>
                   </div>
                 </div>
@@ -71,20 +67,25 @@ export default function SettingsPage() {
         <div className="mt-8 bg-white rounded-xl border border-stone-200 p-6">
           <h2 className="text-lg font-semibold text-stone-900 mb-4">Cron 表达式说明</h2>
           <div className="font-mono text-sm text-stone-600 space-y-2">
-            <p><code>* * * * *</code> = 分 时 日 月 周</p>
-            <p><code>0 * * * *</code> = 每小时整点</p>
-            <p><code>0 13 * * *</code> = 每天 13:00 UTC</p>
-            <p><code>0 */4 * * *</code> = 每 4 小时</p>
+            <p>
+              <code>* * * * *</code> = 分 时 日 月 周
+            </p>
+            <p>
+              <code>0 * * * *</code> = 每小时整点
+            </p>
+            <p>
+              <code>0 13 * * *</code> = 每天 13:00 UTC
+            </p>
+            <p>
+              <code>0 */4 * * *</code> = 每 4 小时
+            </p>
           </div>
         </div>
 
         <div className="mt-8 text-center">
-          <a
-            href="/"
-            className="text-sm text-stone-500 hover:text-stone-700 transition-colors"
-          >
+          <Link href="/" className="text-sm text-stone-500 hover:text-stone-700 transition-colors">
             ← 返回首页
-          </a>
+          </Link>
         </div>
       </main>
     </div>
