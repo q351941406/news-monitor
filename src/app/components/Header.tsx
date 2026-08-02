@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Menu, X, CheckCheck, RotateCcw, Settings } from 'lucide-react'
+import { Menu, X, CheckCheck, RotateCcw, Settings, Activity } from 'lucide-react'
 
 interface HeaderProps {
   unreadCount: number
@@ -39,6 +39,13 @@ export default function Header({
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-4">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm text-stone-600 hover:text-stone-900 transition-colors"
+              title="运维仪表盘"
+            >
+              <Activity className="w-4 h-4" />
+            </Link>
             <Link
               href="/settings"
               className="inline-flex items-center gap-2 px-3 py-2 text-sm text-stone-600 hover:text-stone-900 transition-colors"
@@ -83,6 +90,14 @@ export default function Header({
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-stone-100">
             <div className="flex flex-col gap-4">
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-600 bg-stone-100 rounded-lg hover:bg-stone-200 transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Activity className="w-4 h-4" />
+                运维仪表盘
+              </Link>
               <label className="flex items-center gap-2 text-sm text-stone-600 cursor-pointer">
                 <input
                   type="checkbox"

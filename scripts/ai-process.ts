@@ -11,15 +11,13 @@ import { drizzle } from 'drizzle-orm/neon-http'
 import { eq, isNull, and } from 'drizzle-orm'
 import { rawItems, aiAnalysis } from '../src/lib/schema'
 import { createAIService } from '../src/lib/ai-service'
-
+import { withRunLog } from '@/lib/run-logger'
 const log = logger.child({ script: 'ai-process' })
-
 // 数据库连接
 function getDb() {
   const sqlClient = neon(process.env.DATABASE_URL!)
   return drizzle(sqlClient)
 }
-
 // 获取未处理的数据
 async function getUnprocessedItems(source: string, limit: number = 50) {
   const db = getDb()
@@ -35,29 +33,27 @@ async function getUnprocessedItems(source: string, limit: number = 50) {
     .limit(limit)
   return results
 }
-
 // 批处理函数
 async function processBatch(source: string) {
   console.log(`\n[${new Date().toISOString()}] Processing ${source}...`)
-
   // 1. 查询未处理数据
   const allItems = await getUnprocessedItems(source, 50)
   console.log(`  Found ${allItems.length} unprocessed items`)
   if (allItems.length === 0) {
     console.log('  No items to process')
+    // 仍然记录日志（0 条也是正常执行）
+    await withRunLog({ source, stage: 'ai-process' }, async () => ({ itemsCount: 0 }))
     return
   }
-
   // 2. 调用 AIService（内部处理分批、重试）
   const aiService = createAIService()
   const results = await aiService.generateBatchSummary(allItems)
-
   if (!results || results.length === 0) {
     console.log('  ❌ No results generated')
+    await withRunLog({ source, stage: 'ai-process' }, async () => ({ itemsCount: 0 }))
     return
   }
   console.log(`  AI returned ${results.length} results`)
-
   // 3. 批量存储
   const db = getDb()
   let successCount = 0
@@ -84,8 +80,9 @@ async function processBatch(source: string) {
     }
   }
   console.log(`  ✅ Stored ${successCount}/${results.length} results`)
+  // 记录运行日志
+  await withRunLog({ source, stage: 'ai-process' }, async () => ({ itemsCount: successCount }))
 }
-
 // 主函数
 async function main() {
   const args = process.argv.slice(2)
@@ -102,7 +99,6 @@ async function main() {
   }
   await processBatch(source)
 }
-
 main().catch((error) => {
   log.error({ err: error }, '❌ Fatal error')
   process.exit(1)
