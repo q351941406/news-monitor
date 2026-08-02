@@ -21,6 +21,9 @@ jobs:
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
+    # 私有仓库需启用 GitHub Advanced Security (Code Scanning) 才能上传结果
+    # 未启用时此 job 会失败但不阻断 CI；启用 GHAS 后自动生效
+    continue-on-error: true
     permissions:
       security-events: write
       actions: read
@@ -35,8 +38,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          # 使用 security-extended 增强检测
-          queries: security-extended
+          # 默认 query suite；如仓库启用了 GHAS 可改为 security-extended
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
       - name: Perform CodeQL Analysis
