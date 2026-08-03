@@ -23,17 +23,22 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      security-events: write  # 上传 SARIF 到 GitHub Security tab
+    container:
+      image: semgrep/semgrep
     steps:
       - uses: actions/checkout@v4
-      - name: Semgrep Scan
-        uses: returntocorp/semgrep-action@v1
+      - name: Run Semgrep (native CE)
+        # 原生 Semgrep CLI（semgrep-action 已弃用）：
+        # --config auto: 安全规则集 + 最佳实践规则
+        # --error: 有 blocking 级别发现时退出码非 0，阻断 CI
+        run: semgrep scan --config auto --error --sarif-file semgrep.sarif
+      - name: Upload SARIF to GitHub Security tab
+        if: always()
+        continue-on-error: true  # GHAS 未启用时静默跳过
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          # 使用自动配置：包含安全规则集 + 最佳实践规则
-          # 检测 XSS、SQL 注入、密钥泄露、不安全模式等
-          config: auto
-          # 有 high 级别发现时阻断 CI
-          # generate Sarif report for GitHub Security tab (if GHAS enabled later)
-          generateSarif: '1'
+          sarif_file: semgrep.sarif
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest

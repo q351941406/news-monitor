@@ -21,3 +21,16 @@ jobs:
         with:
           source: github
           source-display-name: GitHub Trending
+      - name: Auto retry on failure (max 2 attempts)
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          attempts=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }} --jq '.run_attempt')
+          if [ "$attempts" -lt 2 ]; then
+            echo "Attempt $attempts failed, retrying once in 120s..."
+            sleep 120
+            gh run rerun ${{ github.run_id }} --failed
+          else
+            echo "Attempt $attempts failed, giving up (max retries reached)"
+          fi
