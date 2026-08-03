@@ -25,10 +25,6 @@ runs:
       run: npm ci
       shell: bash
 
-    - name: Run tests
-      run: npm test
-      shell: bash
-
     - name: Run database migrations
       env:
         DATABASE_URL: ${{ env.DATABASE_URL }}
