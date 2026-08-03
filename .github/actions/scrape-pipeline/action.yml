@@ -62,22 +62,6 @@ runs:
       run: npx tsx scripts/topic-aggregate.ts --source=${{ inputs.source }}
       shell: bash
 
-    - name: Notify on failure
-      if: failure()
-      env:
-        DISCORD_WEBHOOK: ${{ env.DISCORD_WEBHOOK }}
-        WORKFLOW_NAME: ${{ inputs.source-display-name }}
-        REPO: ${{ github.repository }}
-        RUN_ID: ${{ github.run_id }}
-        SERVER_URL: ${{ github.server_url }}
-        REF: ${{ github.ref }}
-      run: |
-        curl -sf -X POST "$DISCORD_WEBHOOK" \
-          -H "Content-Type: application/json" \
-          -d "{\"content\": \":rotating_light: *${WORKFLOW_NAME}* scrape failed\\n${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}\"}" \
-          || echo "Discord webhook failed (non-fatal)"
-      shell: bash
-
     - name: Report
       if: always()
       run: echo "${{ inputs.source-display-name }} scrape completed"

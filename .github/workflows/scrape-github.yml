@@ -11,7 +11,6 @@ env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
   ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
-  DISCORD_WEBHOOK: ${{ secrets.DISCORD_GITHUB_WEBHOOK }}
 jobs:
   scrape:
     runs-on: ubuntu-latest
