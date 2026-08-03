@@ -106,6 +106,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval)
   }, [fetchMetrics])
 
+  const alerts = metrics?.alerts ?? []
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-stone-50">
@@ -140,9 +141,9 @@ export default function DashboardPage() {
 
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         {/* Alerts */}
-        {metrics && metrics.alerts.length > 0 && (
+        {alerts.length > 0 && (
           <div className="space-y-2">
-            {metrics.alerts.map((alert, i) => (
+            {alerts.map((alert, i) => (
               <div
                 key={i}
                 className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl"

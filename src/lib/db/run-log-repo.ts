@@ -73,6 +73,32 @@ export async function getSourceStats() {
   return result.rows
 }
 
+/** 仪表盘日统计（camelCase，按日期+来源聚合） */
+export interface DailyStat {
+  date: string
+  source: string
+  totalRuns: number
+  successes: number
+  failures: number
+  totalItems: number
+}
+
+/** 仪表盘来源汇总（camelCase，按来源聚合） */
+export interface SourceStat {
+  source: string
+  lastRun: string | null
+  lastStatus: string | null
+  successRate: number
+  totalItems: number
+}
+
+/** 仪表盘告警 */
+export interface Alert {
+  type: string
+  source: string
+  message: string
+}
+
 /** 获取仪表盘所需的全部数据 */
 export async function getMetrics() {
   const [recentRuns, dailyStats, sourceStats] = await Promise.all([
@@ -80,15 +106,83 @@ export async function getMetrics() {
     getDailyStats(7),
     getSourceStats(),
   ])
-
   // 检测静默失败：最近 3 次同源同阶段连续 0 数据
   const silentFailures = detectSilentFailures(recentRuns)
 
+  // --- 转换 SQL 聚合行为前端期望的 camelCase 结构 ---
+
+  // dailyStats: 按 date+source 聚合（合并 stage 维度）
+  const dailyMap = new Map<string, DailyStat>()
+  for (const row of dailyStats as any[]) {
+    const key = String(row.date) + '|' + row.source
+    if (!dailyMap.has(key)) {
+      dailyMap.set(key, {
+        date: row.date,
+        source: row.source,
+        totalRuns: 0,
+        successes: 0,
+        failures: 0,
+        totalItems: 0,
+      })
+    }
+    const stat = dailyMap.get(key)!
+    const runs = Number(row.total_runs)
+    const successes = Number(row.success_count)
+    stat.totalRuns += runs
+    stat.successes += successes
+    stat.failures += runs - successes
+    stat.totalItems += Number(row.total_items)
+  }
+  const normalizedDaily = [...dailyMap.values()]
+
+  // sourceStats: 按 source 聚合 + 从 recentRuns 取最近状态
+  const sourceMap = new Map<
+    string,
+    { source: string; lastRun: string | null; totalItems: number }
+  >()
+  for (const row of sourceStats as any[]) {
+    const { source } = row
+    if (!sourceMap.has(source)) {
+      sourceMap.set(source, { source, lastRun: null, totalItems: 0 })
+    }
+    const stat = sourceMap.get(source)!
+    stat.totalItems += Number(row.total_items)
+    if (row.last_run_at && (!stat.lastRun || row.last_run_at > stat.lastRun)) {
+      stat.lastRun = row.last_run_at
+    }
+  }
+  // 从 recentRuns 计算 successRate 与 lastStatus
+  const runCountBySource = new Map<string, { total: number; success: number }>()
+  for (const run of recentRuns) {
+    const acc = runCountBySource.get(run.source) || { total: 0, success: 0 }
+    acc.total++
+    if (run.status === 'success') acc.success++
+    runCountBySource.set(run.source, acc)
+  }
+  const normalizedSource: SourceStat[] = [...sourceMap.values()].map((stat) => {
+    const lastRunRow = recentRuns.find((r) => r.source === stat.source)
+    const counts = runCountBySource.get(stat.source)
+    return {
+      source: stat.source,
+      lastRun: stat.lastRun ?? (lastRunRow ? String(lastRunRow.startedAt) : null),
+      lastStatus: lastRunRow?.status ?? null,
+      successRate: counts ? Math.round((counts.success / counts.total) * 100) : 100,
+      totalItems: stat.totalItems,
+    }
+  })
+
+  // alerts: 将 silentFailures 转换为前端格式
+  const alerts: Alert[] = silentFailures.map((f) => ({
+    type: 'silent_failure',
+    source: f.source,
+    message: '连续 ' + f.consecutiveZeros + ' 次抓取 0 条数据',
+  }))
+
   return {
     recentRuns,
-    dailyStats,
-    sourceStats,
-    silentFailures,
+    dailyStats: normalizedDaily,
+    sourceStats: normalizedSource,
+    alerts,
   }
 }
 
