@@ -100,20 +100,10 @@ export interface Alert {
 }
 
 /** 获取仪表盘所需的全部数据 */
-export async function getMetrics() {
-  const [recentRuns, dailyStats, sourceStats] = await Promise.all([
-    getRecentRuns(30),
-    getDailyStats(7),
-    getSourceStats(),
-  ])
-  // 检测静默失败：最近 3 次同源同阶段连续 0 数据
-  const silentFailures = detectSilentFailures(recentRuns)
-
-  // --- 转换 SQL 聚合行为前端期望的 camelCase 结构 ---
-
-  // dailyStats: 按 date+source 聚合（合并 stage 维度）
+/** 聚合日统计（SQL 行 → camelCase，按 date+source 合并 stage） */
+export function aggregateDailyStats(rows: any[]): DailyStat[] {
   const dailyMap = new Map<string, DailyStat>()
-  for (const row of dailyStats as any[]) {
+  for (const row of rows) {
     const key = String(row.date) + '|' + row.source
     if (!dailyMap.has(key)) {
       dailyMap.set(key, {
@@ -133,15 +123,17 @@ export async function getMetrics() {
     stat.failures += runs - successes
     stat.totalItems += Number(row.total_items)
   }
-  const normalizedDaily = [...dailyMap.values()]
+  return [...dailyMap.values()]
+}
 
-  // sourceStats: 按 source 聚合 + 从 recentRuns 取最近状态
+/** 聚合来源汇总（SQL 行 + 最近运行 → camelCase） */
+export function aggregateSourceStats(rows: any[], recentRuns: any[]): SourceStat[] {
   const sourceMap = new Map<
     string,
     { source: string; lastRun: string | null; totalItems: number }
   >()
-  for (const row of sourceStats as any[]) {
-    const { source } = row
+  for (const row of rows) {
+    const source = row.source
     if (!sourceMap.has(source)) {
       sourceMap.set(source, { source, lastRun: null, totalItems: 0 })
     }
@@ -151,7 +143,6 @@ export async function getMetrics() {
       stat.lastRun = row.last_run_at
     }
   }
-  // 从 recentRuns 计算 successRate 与 lastStatus
   const runCountBySource = new Map<string, { total: number; success: number }>()
   for (const run of recentRuns) {
     const acc = runCountBySource.get(run.source) || { total: 0, success: 0 }
@@ -159,7 +150,7 @@ export async function getMetrics() {
     if (run.status === 'success') acc.success++
     runCountBySource.set(run.source, acc)
   }
-  const normalizedSource: SourceStat[] = [...sourceMap.values()].map((stat) => {
+  return [...sourceMap.values()].map((stat) => {
     const lastRunRow = recentRuns.find((r) => r.source === stat.source)
     const counts = runCountBySource.get(stat.source)
     return {
@@ -170,6 +161,20 @@ export async function getMetrics() {
       totalItems: stat.totalItems,
     }
   })
+}
+
+export async function getMetrics() {
+  const [recentRuns, dailyStats, sourceStats] = await Promise.all([
+    getRecentRuns(30),
+    getDailyStats(7),
+    getSourceStats(),
+  ])
+  // 检测静默失败：最近 3 次同源同阶段连续 0 数据
+  const silentFailures = detectSilentFailures(recentRuns)
+
+  // --- 转换 SQL 聚合行为前端期望的 camelCase 结构 ---
+  const normalizedDaily = aggregateDailyStats(dailyStats)
+  const normalizedSource = aggregateSourceStats(sourceStats, recentRuns)
 
   // alerts: 将 silentFailures 转换为前端格式
   const alerts: Alert[] = silentFailures.map((f) => ({

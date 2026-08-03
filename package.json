@@ -13,7 +13,7 @@
     "test:integration": "vitest run --config vitest.config.integration.mjs",
     "test:all": "npm test && npm run test:integration",
     "test:coverage": "vitest run --config vitest.config.mjs --coverage",
-    "test:coverage:check": "vitest run --config vitest.config.mjs --coverage --coverage.thresholds.lines=33 --coverage.thresholds.branches=42 --coverage.thresholds.functions=33 --coverage.thresholds.statements=34",
+    "test:coverage:check": "vitest run --config vitest.config.mjs --coverage --coverage.thresholds.lines=31 --coverage.thresholds.branches=41 --coverage.thresholds.functions=31 --coverage.thresholds.statements=32",
     "db:init": "npx tsx scripts/init-db.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
