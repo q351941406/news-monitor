@@ -8,7 +8,7 @@
 
   "github": {
     "silent": false,
-    "autoAlias": false
+    "autoAlias": true
   },
 
   "git": {
