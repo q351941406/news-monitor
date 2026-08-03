@@ -11,7 +11,7 @@ export async function GET() {
   try {
     const metrics = await getMetrics()
     return NextResponse.json(metrics)
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch metrics' }, { status: 500 })
   }
 }

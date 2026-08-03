@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { getTestDb, createTestTables, insertTestItem } from './db-test-helper'
-import { storeRawItems, existsItem, getNews } from '../news-repo'
+import { storeRawItems, existsItem } from '../news-repo'
 import { rawItems } from '../../schema'
 import type { NewRawItem } from '../../schema'
 

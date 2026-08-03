@@ -40,7 +40,7 @@ export default function TopicGroup({
   onMarkGroupRead,
 }: TopicGroupProps) {
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
-  const unreadCount = items.filter(i => !i.isRead).length
+  const unreadCount = items.filter((i) => !i.isRead).length
 
   const handleItemClick = (itemId: string) => {
     setExpandedItemId(expandedItemId === itemId ? null : itemId)
@@ -49,10 +49,7 @@ export default function TopicGroup({
   return (
     <section className="bg-white rounded-xl border border-stone-200 overflow-hidden transition-shadow hover:shadow-sm">
       {/* Group Header */}
-      <div
-        className="flex items-center gap-4 p-5 cursor-pointer select-none"
-        onClick={onToggle}
-      >
+      <div className="flex items-center gap-4 p-5 cursor-pointer select-none" onClick={onToggle}>
         <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center text-2xl bg-stone-50 rounded-lg">
           {icon}
         </div>
@@ -84,9 +81,11 @@ export default function TopicGroup({
               全部已读
             </button>
           )}
-          <div className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${
-            isExpanded ? 'bg-stone-100' : 'bg-stone-50'
-          }`}>
+          <div
+            className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors ${
+              isExpanded ? 'bg-stone-100' : 'bg-stone-50'
+            }`}
+          >
             {isExpanded ? (
               <ChevronDown className="w-4 h-4 text-stone-600" />
             ) : (
@@ -109,33 +108,20 @@ export default function TopicGroup({
       {isExpanded && (
         <div className="border-t border-stone-100">
           <div className="p-4 space-y-2">
-            {items.map(item => {
+            {items.map((item) => {
               const isItemExpanded = expandedItemId === item.id
               const rawData = item.rawData
 
               const getDescription = () => {
                 switch (item.source) {
                   case 'github':
-                    return rawData.readme as string || rawData.description as string
+                    return (rawData.readme as string) || (rawData.description as string)
                   case 'producthunt':
-                    return rawData.description as string || rawData.tagline as string
+                    return (rawData.description as string) || (rawData.tagline as string)
                   case 'twitter':
                     return rawData.text as string
                   default:
                     return ''
-                }
-              }
-
-              const getMetrics = () => {
-                switch (item.source) {
-                  case 'github':
-                    return rawData.stars ? `${(rawData.stars as number).toLocaleString()} stars` : null
-                  case 'producthunt':
-                    return rawData.votes ? `${rawData.votes} votes` : null
-                  case 'twitter':
-                    return rawData.likes ? `${rawData.likes} likes` : null
-                  default:
-                    return null
                 }
               }
 
@@ -159,9 +145,11 @@ export default function TopicGroup({
                     onClick={() => handleItemClick(item.id)}
                   >
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm leading-relaxed ${
-                        item.isRead ? 'text-stone-400' : 'text-stone-700'
-                      }`}>
+                      <p
+                        className={`text-sm leading-relaxed ${
+                          item.isRead ? 'text-stone-400' : 'text-stone-700'
+                        }`}
+                      >
                         {item.summary || item.title}
                       </p>
                     </div>
@@ -205,11 +193,19 @@ export default function TopicGroup({
                         <div className="mb-3 overflow-y-auto max-h-[200px] prose prose-sm prose-stone max-w-none">
                           <ReactMarkdown
                             components={{
-                              a: ({ node, ...props }) => (
-                                <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" />
+                              a: (props) => (
+                                <a
+                                  {...props}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline"
+                                />
                               ),
-                              p: ({ node, ...props }) => (
-                                <p {...props} className="text-sm text-stone-600 leading-relaxed mb-2" />
+                              p: (props) => (
+                                <p
+                                  {...props}
+                                  className="text-sm text-stone-600 leading-relaxed mb-2"
+                                />
                               ),
                             }}
                           >
@@ -221,13 +217,14 @@ export default function TopicGroup({
                       {/* Image */}
                       {previewImage && (
                         <div className="mb-3 rounded-lg overflow-hidden bg-stone-100">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={previewImage}
                             alt=""
                             className="w-full h-auto max-h-[300px] object-contain"
                             loading="lazy"
                             onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none'
+                              ;(e.target as HTMLImageElement).style.display = 'none'
                             }}
                           />
                         </div>

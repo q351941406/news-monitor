@@ -1,7 +1,7 @@
 /**
  * 阅读状态仓库 — 已读/未读管理
  */
-import { eq, and } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { rawItems } from '../schema'
 import { getDb } from './connection'
 

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Header from './components/Header'
 import SourceTabs from './components/SourceTabs'
 import TopicGroup from './components/TopicGroup'
@@ -32,7 +32,7 @@ export default function Home() {
   const [showRead, setShowRead] = useState(false)
   const [activeSource, setActiveSource] = useState('all')
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null)
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       const [newsRes, topicsRes] = await Promise.all([
@@ -49,10 +49,10 @@ export default function Home() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [showRead])
   useEffect(() => {
     fetchData()
-  }, [showRead])
+  }, [fetchData])
   const handleMarkRead = async (itemId: string) => {
     try {
       await fetch('/api/news', {
@@ -183,7 +183,6 @@ export default function Home() {
   }
   // 使用真实计数
   const totalUnread = Object.values(counts).reduce((sum, c) => sum + c.unread, 0)
-  const totalCount = Object.values(counts).reduce((sum, c) => sum + c.total, 0)
   // 来源统计（使用真实数据库计数，不受 limit 影响）
   const sources = [
     {
@@ -215,7 +214,6 @@ export default function Home() {
     <div className="min-h-screen bg-stone-50">
       <Header
         unreadCount={totalUnread}
-        totalCount={totalCount}
         showRead={showRead}
         onShowReadChange={setShowRead}
         onMarkAllRead={handleMarkAllRead}

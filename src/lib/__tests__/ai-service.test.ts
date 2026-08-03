@@ -24,7 +24,7 @@ function mockGenTextResult(output: unknown) {
   return {
     output,
     text: '',
-    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } as any,
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     experimental_providerMetadata: {},
     warnings: [],
     response: {
@@ -32,7 +32,7 @@ function mockGenTextResult(output: unknown) {
       modelId: 'mock',
       timestamp: new Date(),
       messages: [],
-    } as any,
+    },
   }
 }
 

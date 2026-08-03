@@ -8,7 +8,6 @@
  */
 import { Pool } from 'pg'
 import { drizzle } from 'drizzle-orm/node-postgres'
-import { rawItems, aiAnalysis, topicGroups, topicItems } from '../../schema'
 
 let testPool: Pool | null = null
 

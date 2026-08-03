@@ -1,8 +1,8 @@
 /**
  * 运行日志仓库 - 记录和查询 scrape/ai-process/topic-aggregate 的执行结果
  */
-import { desc, gte, and, eq, sql } from 'drizzle-orm'
-import { runLogs } from '../schema'
+import { desc } from 'drizzle-orm'
+import { runLogs, type RunLog } from '../schema'
 import { getDb, getPgPool } from './connection'
 import { randomUUID } from 'crypto'
 
@@ -73,6 +73,22 @@ export async function getSourceStats() {
   return result.rows
 }
 
+/** SQL 日统计原始行（pg 聚合结果） */
+interface DailyStatRow {
+  date: string | Date
+  source: string
+  total_runs: string | number
+  success_count: string | number
+  total_items: string | number
+}
+
+/** SQL 来源统计原始行（pg 聚合结果） */
+interface SourceStatRow {
+  source: string
+  total_items: string | number
+  last_run_at: string | null
+}
+
 /** 仪表盘日统计（camelCase，按日期+来源聚合） */
 export interface DailyStat {
   date: string
@@ -101,13 +117,13 @@ export interface Alert {
 
 /** 获取仪表盘所需的全部数据 */
 /** 聚合日统计（SQL 行 → camelCase，按 date+source 合并 stage） */
-export function aggregateDailyStats(rows: any[]): DailyStat[] {
+export function aggregateDailyStats(rows: DailyStatRow[]): DailyStat[] {
   const dailyMap = new Map<string, DailyStat>()
   for (const row of rows) {
     const key = String(row.date) + '|' + row.source
     if (!dailyMap.has(key)) {
       dailyMap.set(key, {
-        date: row.date,
+        date: String(row.date),
         source: row.source,
         totalRuns: 0,
         successes: 0,
@@ -127,7 +143,7 @@ export function aggregateDailyStats(rows: any[]): DailyStat[] {
 }
 
 /** 聚合来源汇总（SQL 行 + 最近运行 → camelCase） */
-export function aggregateSourceStats(rows: any[], recentRuns: any[]): SourceStat[] {
+export function aggregateSourceStats(rows: SourceStatRow[], recentRuns: RunLog[]): SourceStat[] {
   const sourceMap = new Map<
     string,
     { source: string; lastRun: string | null; totalItems: number }
@@ -192,9 +208,9 @@ export async function getMetrics() {
 }
 
 /** 检测静默失败：某源连续 3 次抓取 0 条数据 */
-function detectSilentFailures(runs: any[]) {
+function detectSilentFailures(runs: RunLog[]) {
   const warnings: { source: string; stage: string; consecutiveZeros: number }[] = []
-  const bySourceStage = new Map<string, any[]>()
+  const bySourceStage = new Map<string, RunLog[]>()
 
   for (const run of runs) {
     const key = `${run.source}:${run.stage}`

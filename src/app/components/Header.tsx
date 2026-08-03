@@ -6,7 +6,6 @@ import { Menu, X, CheckCheck, RotateCcw, Settings, Activity } from 'lucide-react
 
 interface HeaderProps {
   unreadCount: number
-  totalCount: number
   showRead: boolean
   onShowReadChange: (show: boolean) => void
   onMarkAllRead: () => void
@@ -15,7 +14,6 @@ interface HeaderProps {
 
 export default function Header({
   unreadCount,
-  totalCount,
   showRead,
   onShowReadChange,
   onMarkAllRead,

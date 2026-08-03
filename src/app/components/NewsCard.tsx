@@ -31,7 +31,10 @@ const sourceConfig: Record<string, { label: string; color: string }> = {
 export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardProps) {
   const [showImage, setShowImage] = useState(false)
   const rawData = item.rawData
-  const source = sourceConfig[item.source] || { label: item.source, color: 'bg-stone-500 text-white' }
+  const source = sourceConfig[item.source] || {
+    label: item.source,
+    color: 'bg-stone-500 text-white',
+  }
 
   const getDescription = () => {
     switch (item.source) {
@@ -70,22 +73,24 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
       .replace(/\\n/g, '\n')
       .replace(/\\\\/g, '\\')
       .replace(/\\ /g, ' ')
-      .replace(/(https?:\/\/[^\s;]+);?/g, '[$1]($1)')  // URL 转 Markdown 链接
+      .replace(/(https?:\/\/[^\s;]+);?/g, '[$1]($1)') // URL 转 Markdown 链接
   }
 
   return (
-    <div className={`group relative rounded-lg transition-all duration-200 cursor-pointer ${
-      item.isRead ? 'card-read' : 'card-unread hover:shadow-md'
-    }`}>
+    <div
+      className={`group relative rounded-lg transition-all duration-200 cursor-pointer ${
+        item.isRead ? 'card-read' : 'card-unread hover:shadow-md'
+      }`}
+    >
       <div className="p-4">
         {/* 标签和指标 */}
         <div className="flex items-center gap-2 mb-2">
-          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${source.color}`}>
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${source.color}`}
+          >
             {source.label}
           </span>
-          {getMetrics() && (
-            <span className="text-xs text-stone-500">{getMetrics()}</span>
-          )}
+          {getMetrics() && <span className="text-xs text-stone-500">{getMetrics()}</span>}
           <span className="text-xs text-stone-400 ml-auto">
             {new Date(item.fetchedAt).toLocaleString('zh-CN')}
           </span>
@@ -132,10 +137,15 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
           <div className="mb-3 overflow-y-auto max-h-[300px] prose prose-sm prose-stone max-w-none">
             <ReactMarkdown
               components={{
-                a: ({ node, ...props }) => (
-                  <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" />
+                a: (props) => (
+                  <a
+                    {...props}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline"
+                  />
                 ),
-                p: ({ node, ...props }) => (
+                p: (props) => (
                   <p {...props} className="text-sm text-stone-600 leading-relaxed mb-2" />
                 ),
               }}
@@ -154,13 +164,14 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
               setShowImage(true)
             }}
           >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={previewImage}
               alt=""
               className="w-full h-auto max-h-[400px] object-contain"
               loading="lazy"
               onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none'
+                ;(e.target as HTMLImageElement).style.display = 'none'
               }}
             />
           </div>
@@ -216,6 +227,7 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
             >
               <X className="w-8 h-8" />
             </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={previewImage}
               alt=""
