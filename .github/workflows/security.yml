@@ -32,11 +32,11 @@ jobs:
         # 原生 Semgrep CLI（semgrep-action 已弃用）：
         # --config auto: 安全规则集 + 最佳实践规则
         # --error: 有 blocking 级别发现时退出码非 0，阻断 CI
-        run: semgrep scan --config auto --error --sarif-file semgrep.sarif
+        run: semgrep scan --config auto --error --sarif-output=semgrep.sarif
       - name: Upload SARIF to GitHub Security tab
         if: always()
         continue-on-error: true  # GHAS 未启用时静默跳过
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: semgrep.sarif
   dependency-review:
