@@ -38,11 +38,16 @@ jobs:
         #   - push:    对比上一次提交 (github.event.before)
         #   - PR:      对比目标分支 base
         #   - schedule: 全量扫描，报告模式（存量问题走 Security tab 跟踪，不阻断）
+        # github context 通过 env 中转，避免 run 内插值触发 shell-injection 规则
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            semgrep scan --config auto --error --sarif-output=semgrep.sarif --baseline-commit=${{ github.event.before }}
-          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            semgrep scan --config auto --error --sarif-output=semgrep.sarif --baseline-commit=${{ github.event.pull_request.base.sha }}
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            semgrep scan --config auto --error --sarif-output=semgrep.sarif --baseline-commit="$BEFORE_SHA"
+          elif [[ "$EVENT_NAME" == "pull_request" ]]; then
+            semgrep scan --config auto --error --sarif-output=semgrep.sarif --baseline-commit="$PR_BASE_SHA"
           else
             semgrep scan --config auto --sarif-output=semgrep.sarif
           fi
