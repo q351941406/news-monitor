@@ -33,32 +33,37 @@ runs:
 
     - name: Run scraper
       env:
+        INPUT_SOURCE: ${{ inputs.source }}
         DATABASE_URL: ${{ env.DATABASE_URL }}
         ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
         ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
         ANTHROPIC_MODEL: ${{ env.ANTHROPIC_MODEL }}
-      run: npx tsx scripts/scrape.ts --source=${{ inputs.source }}
+      run: npx tsx scripts/scrape.ts --source="$INPUT_SOURCE"
       shell: bash
 
     - name: Run AI processing
       env:
+        INPUT_SOURCE: ${{ inputs.source }}
         DATABASE_URL: ${{ env.DATABASE_URL }}
         ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
         ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
         ANTHROPIC_MODEL: ${{ env.ANTHROPIC_MODEL }}
-      run: npx tsx scripts/ai-process.ts --source=${{ inputs.source }}
+      run: npx tsx scripts/ai-process.ts --source="$INPUT_SOURCE"
       shell: bash
 
     - name: Aggregate topics
       env:
+        INPUT_SOURCE: ${{ inputs.source }}
         DATABASE_URL: ${{ env.DATABASE_URL }}
         ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
         ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
         ANTHROPIC_MODEL: ${{ env.ANTHROPIC_MODEL }}
-      run: npx tsx scripts/topic-aggregate.ts --source=${{ inputs.source }}
+      run: npx tsx scripts/topic-aggregate.ts --source="$INPUT_SOURCE"
       shell: bash
 
     - name: Report
       if: always()
-      run: echo "${{ inputs.source-display-name }} scrape completed"
+      env:
+        INPUT_SOURCE_DISPLAY_NAME: ${{ inputs.source-display-name }}
+      run: echo "$INPUT_SOURCE_DISPLAY_NAME scrape completed"
       shell: bash

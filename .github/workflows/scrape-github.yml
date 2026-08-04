@@ -6,11 +6,6 @@ on:
   schedule:
     - cron: '0 13 * * *'
   workflow_dispatch:
-env:
-  DATABASE_URL: ${{ secrets.DATABASE_URL }}
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-  ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-  ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
 jobs:
   scrape:
     runs-on: ubuntu-latest
@@ -21,6 +16,11 @@ jobs:
         with:
           source: github
           source-display-name: GitHub Trending
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
       - name: Auto retry on failure (max 2 attempts)
         if: failure() && github.event_name == 'schedule'
         env:

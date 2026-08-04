@@ -28,11 +28,24 @@ jobs:
       image: semgrep/semgrep
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # baseline 对比需要完整 git 历史
       - name: Run Semgrep (native CE)
         # 原生 Semgrep CLI（semgrep-action 已弃用）：
         # --config auto: 安全规则集 + 最佳实践规则
         # --error: 有 blocking 级别发现时退出码非 0，阻断 CI
-        run: semgrep scan --config auto --error --sarif-output=semgrep.sarif
+        # --baseline-commit: 只检查本次变更引入的新问题
+        #   - push:    对比上一次提交 (github.event.before)
+        #   - PR:      对比目标分支 base
+        #   - schedule: 全量扫描，报告模式（存量问题走 Security tab 跟踪，不阻断）
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            semgrep scan --config auto --error --sarif-output=semgrep.sarif --baseline-commit=${{ github.event.before }}
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            semgrep scan --config auto --error --sarif-output=semgrep.sarif --baseline-commit=${{ github.event.pull_request.base.sha }}
+          else
+            semgrep scan --config auto --sarif-output=semgrep.sarif
+          fi
       - name: Upload SARIF to GitHub Security tab
         if: always()
         continue-on-error: true  # GHAS 未启用时静默跳过
