@@ -5,18 +5,19 @@
 🔗 **在线访问**: https://news.myaicode.qzz.io
 
 ## 📚 文档导航
-| 文档 | 内容 |
-| ---- | ---- |
-| [`docs/ops/sentry.md`](docs/ops/sentry.md) | Sentry 监控配置、告警规则、邮箱通知、API 运维 |
-| [`docs/ops/disaster-recovery.md`](docs/ops/disaster-recovery.md) | 备份与灾难恢复（Neon PITR、恢复演练） |
-| [`docs/ops/uptime-monitoring.md`](docs/ops/uptime-monitoring.md) | Uptime 宕机监控（UptimeRobot、告警邮箱） |
-| [`docs/ops/neon-environments.md`](docs/ops/neon-environments.md) | Neon 环境隔离（Preview 分支库） |
-| [`docs/adr/`](docs/adr/) | 架构决策记录（ADR） |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | 系统架构详解 |
-| [`CONTEXT.md`](CONTEXT.md) | 项目上下文 / 领域知识 |
-| [`CODING_STANDARDS.md`](CODING_STANDARDS.md) | 编码规范 |
-| [`TESTING_STANDARDS.md`](TESTING_STANDARDS.md) | 测试规范 |
-| [`UBIQUITOUS_LANGUAGE.md`](UBIQUITOUS_LANGUAGE.md) | 领域术语表 |
+
+| 文档                                                             | 内容                                          |
+| ---------------------------------------------------------------- | --------------------------------------------- |
+| [`docs/ops/sentry.md`](docs/ops/sentry.md)                       | Sentry 监控配置、告警规则、邮箱通知、API 运维 |
+| [`docs/ops/disaster-recovery.md`](docs/ops/disaster-recovery.md) | 备份与灾难恢复（Neon PITR、恢复演练）         |
+| [`docs/ops/uptime-monitoring.md`](docs/ops/uptime-monitoring.md) | Uptime 宕机监控（UptimeRobot、告警邮箱）      |
+| [`docs/ops/neon-environments.md`](docs/ops/neon-environments.md) | Neon 环境隔离（Preview 分支库）               |
+| [`docs/adr/`](docs/adr/)                                         | 架构决策记录（ADR）                           |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md)                             | 系统架构详解                                  |
+| [`CONTEXT.md`](CONTEXT.md)                                       | 项目上下文 / 领域知识                         |
+| [`CODING_STANDARDS.md`](CODING_STANDARDS.md)                     | 编码规范                                      |
+| [`TESTING_STANDARDS.md`](TESTING_STANDARDS.md)                   | 测试规范                                      |
+| [`UBIQUITOUS_LANGUAGE.md`](UBIQUITOUS_LANGUAGE.md)               | 领域术语表                                    |
 
 ## 功能
 
@@ -45,21 +46,23 @@
 
 **设计**：网站内容对所有人公开可读（展示用），但**写操作仅管理员**可执行。
 
-| 接口 | 权限 |
-| ---- | ---- |
-| `GET /api/news`、`GET /api/topics` | 公开（任何人都能看） |
+| 接口                                       | 权限                                  |
+| ------------------------------------------ | ------------------------------------- |
+| `GET /api/news`、`GET /api/topics`         | 公开（任何人都能看）                  |
 | `POST /api/news`（标记已读/全部已读/重置） | 仅管理员（需 `x-admin-token` header） |
-| `GET /api/admin/metrics`（运维仪表盘） | 仅管理员 |
+| `GET /api/admin/metrics`（运维仪表盘）     | 仅管理员                              |
 
 **访客看到的**：完整新闻内容 + 无任何操作按钮（已读/全部已读/撤销全部隐藏）。
 **管理员**：点页面右上角「🔒 管理员登录」→ 输入 token → 解锁操作按钮，token 存浏览器 localStorage，同一浏览器免重复登录。
 
 **Token 存储位置**（三处，值一致）：
+
 - Vercel 环境变量：`ADMIN_TOKEN`（production + preview）
 - GitHub Actions secrets：`ADMIN_TOKEN`（供 CI 测试）
 - 本地开发：`.env.local` 中 `ADMIN_TOKEN=xxx`
 
 **Token 找回/重置**：
+
 ```bash
 # 重新生成一个（替换下面 Vercel + GitHub 两处即可）
 openssl rand -hex 24
@@ -243,28 +246,31 @@ npm run db:studio
 CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
 
 ## 🔁 网络重试与 Sentry 错误追踪
+
 所有外部数据源都通过 `src/lib/retry.ts` 中的 `fetchWithRetry` / `execSyncWithRetry` 包装，
 带指数退避 + 30% 抖动，防止网络抖动造成数据缺失。
 
 ### Sentry 监控（已启用）
+
 错误上报到 Sentry，新 issue 出现会自动发邮件告警到主邮箱 `<email>`。
 
 - **组织信息 / 环境变量 / 告警规则 / API 操作** → 详见 [`docs/ops/sentry.md`](docs/ops/sentry.md)
 - **备份与灾难恢复**（Neon PITR / 恢复演练）→ 详见 [`docs/ops/disaster-recovery.md`](docs/ops/disaster-recovery.md)
 
 **快速信息**：
+
 - Org: `<org-slug>` ｜ Project: `news-monitor` ｜ 控制台: https://<org-slug>.sentry.io/projects/news-monitor/
 - 告警规则：新 issue 出现 → 邮件；高优先级 issue → 邮件
 - 健康检查 / AbortError / ECONNRESET 已在 SDK 中过滤，不上报
 
 ## 📊 测试覆盖率
 
-| 维度       | 阈值 | 说明 |
-| ---------- | ---- | ---- |
+| 维度       | 阈值 | 说明                                       |
+| ---------- | ---- | ------------------------------------------ |
 | Lines      | 30%  | 门槛设在 `vitest.config.mjs`（唯一事实源） |
-| Branches   | 38%  | 当前实测 ~32/40/31/33%，门槛留 -2% 缓冲 |
-| Functions  | 30%  | 后续每个 sprint 上调 5% |
-| Statements | 31%  | |
+| Branches   | 38%  | 当前实测 ~32/40/31/33%，门槛留 -2% 缓冲    |
+| Functions  | 30%  | 后续每个 sprint 上调 5%                    |
+| Statements | 31%  |                                            |
 
 跑覆盖率 + 门槛检查：
 
@@ -323,3 +329,13 @@ curl http://localhost:3000/api/health
 ## License
 
 MIT
+
+## ⚠️ 已知风险与暂缓项
+
+| 项                          | 风险                                                         | 状态 | 处置计划                                                                                                 |
+| --------------------------- | ------------------------------------------------------------ | ---- | -------------------------------------------------------------------------------------------------------- |
+| postcss (next 传递依赖)     | XSS / 任意文件读取（仅构建期）                               | 暂缓 | 修复需 next@16 大升级；postcss 处理本地 CSS 非用户输入，实际可利用性极低。next 16 稳定后随大版本升级解决 |
+| rolldown PARSE_ERROR        | vitest 4 覆盖率收集对 `import type` 报错（warning 非 error） | 已知 | 影响：被解析失败的文件不纳入覆盖率统计；CI 不受影响，阈值按实际覆盖率设定                                |
+| GitHub Actions Node 20 弃用 | checkout/setup-node 触发弃用提示                             | 已知 | 官方已自动用 Node 24 运行，等待 action 作者更新版本声明                                                  |
+
+> 这些是**主动评估后接受的权衡**，不是遗漏。处置窗口按上方计划跟进。
