@@ -10,6 +10,7 @@
 | [`docs/ops/sentry.md`](docs/ops/sentry.md) | Sentry 监控配置、告警规则、邮箱通知、API 运维 |
 | [`docs/ops/disaster-recovery.md`](docs/ops/disaster-recovery.md) | 备份与灾难恢复（Neon PITR、恢复演练） |
 | [`docs/ops/uptime-monitoring.md`](docs/ops/uptime-monitoring.md) | Uptime 宕机监控（UptimeRobot、告警邮箱） |
+| [`docs/ops/neon-environments.md`](docs/ops/neon-environments.md) | Neon 环境隔离（Preview 分支库） |
 | [`docs/adr/`](docs/adr/) | 架构决策记录（ADR） |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | 系统架构详解 |
 | [`CONTEXT.md`](CONTEXT.md) | 项目上下文 / 领域知识 |
