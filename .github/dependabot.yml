@@ -46,10 +46,11 @@ updates:
       include: "scope"
     # 忽略某些大版本更新（手动评估）
     ignore:
+      # 大版本升级手动评估（当前在 next 15 / react 19，升级需谨慎）
       - dependency-name: "next"
-        versions: ["14.x"]
+        versions: ["16.x", "17.x"]
       - dependency-name: "react"
-        versions: ["19.x"]
+        versions: ["20.x"]
 
   # ---------- GitHub Actions ----------
   - package-ecosystem: "github-actions"

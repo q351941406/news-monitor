@@ -6,6 +6,10 @@ on:
   schedule:
     - cron: '30 3 * * *'
   workflow_dispatch:
+contents: read
+permissions:
+  contents: read
+  actions: read
 jobs:
   scrape:
     runs-on: ubuntu-latest
