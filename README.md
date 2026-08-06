@@ -4,6 +4,18 @@
 
 🔗 **在线访问**: https://news.myaicode.qzz.io
 
+## 📚 文档导航
+| 文档 | 内容 |
+| ---- | ---- |
+| [`docs/ops/sentry.md`](docs/ops/sentry.md) | Sentry 监控配置、告警规则、邮箱通知、API 运维 |
+| [`docs/ops/disaster-recovery.md`](docs/ops/disaster-recovery.md) | 备份与灾难恢复（Neon PITR、恢复演练） |
+| [`docs/adr/`](docs/adr/) | 架构决策记录（ADR） |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | 系统架构详解 |
+| [`CONTEXT.md`](CONTEXT.md) | 项目上下文 / 领域知识 |
+| [`CODING_STANDARDS.md`](CODING_STANDARDS.md) | 编码规范 |
+| [`TESTING_STANDARDS.md`](TESTING_STANDARDS.md) | 测试规范 |
+| [`UBIQUITOUS_LANGUAGE.md`](UBIQUITOUS_LANGUAGE.md) | 领域术语表 |
+
 ## 功能
 
 - **GitHub Trending** - 每天自动抓取热门仓库
@@ -198,32 +210,15 @@ CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
 带指数退避 + 30% 抖动，防止网络抖动造成数据缺失。
 
 ### Sentry 监控（已启用）
-错误上报到 Sentry，新 issue 出现会自动发邮件告警。
+错误上报到 Sentry，新 issue 出现会自动发邮件告警到主邮箱 `<email>`。
 
-**Sentry 组织信息**（供日后 AI/维护者查阅）：
-| 项目 | 值 |
-| ---- | --- |
-| Org slug | `<org-slug>` |
-| Project | `news-monitor` |
-| 控制台 | https://<org-slug>.sentry.io/projects/news-monitor/ |
-| DSN | `https://<sentry-key>@<org>.ingest.us.sentry.io/<sentry-project-id>` |
+- **组织信息 / 环境变量 / 告警规则 / API 操作** → 详见 [`docs/ops/sentry.md`](docs/ops/sentry.md)
+- **备份与灾难恢复**（Neon PITR / 恢复演练）→ 详见 [`docs/ops/disaster-recovery.md`](docs/ops/disaster-recovery.md)
 
-**环境变量**（生产由 Vercel + GitHub Actions secrets 提供）：
-```bash
-SENTRY_DSN=https://<sentry-key>@<org>.ingest.us.sentry.io/<sentry-project-id>
-NEXT_PUBLIC_SENTRY_DSN=https://<sentry-key>@<org>.ingest.us.sentry.io/<sentry-project-id>
-SENTRY_ORG=<org-slug>
-SENTRY_PROJECT=news-monitor
-SENTRY_AUTH_TOKEN=<GitHub Actions secret, 用于 source maps 上传>
-```
-留空 DSN = SDK 自动 noop，不影响本地开发。
-
-### 告警
-- 规则「Notify on all new issues (email)」：任何**新 issue** 首次出现 → 发邮件通知所有活跃成员
-- 规则「Send a notification for high priority issues」：Sentry 判定为高优先级 issue → 发邮件
-- 收件人：组织成员已验证邮箱（默认 <email>；如需转发到 iCloud 邮箱，需登录 Sentry → 账号设置 → 添加并验证新邮箱）
-- 健康检查相关错误（`/api/health` 探活、AbortError、ECONNRESET）已在 SDK 中过滤，不上报不告警
-
+**快速信息**：
+- Org: `<org-slug>` ｜ Project: `news-monitor` ｜ 控制台: https://<org-slug>.sentry.io/projects/news-monitor/
+- 告警规则：新 issue 出现 → 邮件；高优先级 issue → 邮件
+- 健康检查 / AbortError / ECONNRESET 已在 SDK 中过滤，不上报
 
 ## 📊 测试覆盖率
 
