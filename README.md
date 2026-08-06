@@ -41,6 +41,41 @@
 | 依赖更新 | Dependabot (npm + actions + docker)        |
 | CDN      | Cloudflare                                 |
 
+## 🔐 管理员鉴权（读公开 / 写受控）
+
+**设计**：网站内容对所有人公开可读（展示用），但**写操作仅管理员**可执行。
+
+| 接口 | 权限 |
+| ---- | ---- |
+| `GET /api/news`、`GET /api/topics` | 公开（任何人都能看） |
+| `POST /api/news`（标记已读/全部已读/重置） | 仅管理员（需 `x-admin-token` header） |
+| `GET /api/admin/metrics`（运维仪表盘） | 仅管理员 |
+
+**访客看到的**：完整新闻内容 + 无任何操作按钮（已读/全部已读/撤销全部隐藏）。
+**管理员**：点页面右上角「🔒 管理员登录」→ 输入 token → 解锁操作按钮，token 存浏览器 localStorage，同一浏览器免重复登录。
+
+**Token 存储位置**（三处，值一致）：
+- Vercel 环境变量：`ADMIN_TOKEN`（production + preview）
+- GitHub Actions secrets：`ADMIN_TOKEN`（供 CI 测试）
+- 本地开发：`.env.local` 中 `ADMIN_TOKEN=xxx`
+
+**Token 找回/重置**：
+```bash
+# 重新生成一个（替换下面 Vercel + GitHub 两处即可）
+openssl rand -hex 24
+
+# Vercel（替换 projectId）
+curl -X POST -H "Authorization: Bearer $VERCEL_TOKEN" \
+  "https://api.vercel.com/v10/projects/<projectId>/env?upsert=true" \
+  -d '{"key":"ADMIN_TOKEN","value":"<新token>","type":"sensitive","target":["production","preview"]}'
+
+# GitHub
+gh secret set ADMIN_TOKEN -b "<新token>"
+```
+
+> ⚠️ **安全说明**：真实 token 不写入本仓库（gitleaks 会在 CI 拦截），通过上述平台环境变量管理。
+> 实现代码：`src/lib/admin-auth.ts`（后端校验）、`src/lib/admin-token.ts`（前端管理）。
+
 ## 架构
 
 ```
