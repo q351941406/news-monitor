@@ -34,3 +34,13 @@ jobs:
           else
             echo "Attempt $attempts failed, giving up (max retries reached)"
           fi
+
+      - name: Report failure to Sentry
+        if: failure() && (github.event_name != 'schedule' || github.run_attempt >= 2)
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          npx --yes @sentry/cli send-event \
+            -m "🚨 ${{ github.workflow }} scrape failed (run #${{ github.run_id }}, attempt ${{ github.run_attempt }}, branch ${{ github.ref_name }})" \
+            --log-level error \
+            --fingerprint "news-monitor-scrape-producthunt-$(date +%F)"
