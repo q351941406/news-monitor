@@ -194,17 +194,36 @@ npm run db:studio
 CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
 
 ## 🔁 网络重试与 Sentry 错误追踪
-
 所有外部数据源都通过 `src/lib/retry.ts` 中的 `fetchWithRetry` / `execSyncWithRetry` 包装，
 带指数退避 + 30% 抖动，防止网络抖动造成数据缺失。
 
-可选接入 Sentry（留空 DSN = 自动 noop）：
+### Sentry 监控（已启用）
+错误上报到 Sentry，新 issue 出现会自动发邮件告警。
 
+**Sentry 组织信息**（供日后 AI/维护者查阅）：
+| 项目 | 值 |
+| ---- | --- |
+| Org slug | `<org-slug>` |
+| Project | `news-monitor` |
+| 控制台 | https://<org-slug>.sentry.io/projects/news-monitor/ |
+| DSN | `https://<sentry-key>@<org>.ingest.us.sentry.io/<sentry-project-id>` |
+
+**环境变量**（生产由 Vercel + GitHub Actions secrets 提供）：
 ```bash
-# .env.local
-SENTRY_DSN=https://xxx@sentry.io/xxx
-NEXT_PUBLIC_SENTRY_DSN=https://xxx@sentry.io/xxx
+SENTRY_DSN=https://<sentry-key>@<org>.ingest.us.sentry.io/<sentry-project-id>
+NEXT_PUBLIC_SENTRY_DSN=https://<sentry-key>@<org>.ingest.us.sentry.io/<sentry-project-id>
+SENTRY_ORG=<org-slug>
+SENTRY_PROJECT=news-monitor
+SENTRY_AUTH_TOKEN=<GitHub Actions secret, 用于 source maps 上传>
 ```
+留空 DSN = SDK 自动 noop，不影响本地开发。
+
+### 告警
+- 规则「Notify on all new issues (email)」：任何**新 issue** 首次出现 → 发邮件通知所有活跃成员
+- 规则「Send a notification for high priority issues」：Sentry 判定为高优先级 issue → 发邮件
+- 收件人：组织成员已验证邮箱（默认 <email>；如需转发到 iCloud 邮箱，需登录 Sentry → 账号设置 → 添加并验证新邮箱）
+- 健康检查相关错误（`/api/health` 探活、AbortError、ECONNRESET）已在 SDK 中过滤，不上报不告警
+
 
 ## 📊 测试覆盖率
 
