@@ -20,6 +20,7 @@ interface NewsCardProps {
   item: NewsItem
   onMarkRead: (id: string) => void
   onMarkUnread: (id: string) => void
+  canOperate?: boolean
 }
 
 const sourceConfig: Record<string, { label: string; color: string }> = {
@@ -28,7 +29,7 @@ const sourceConfig: Record<string, { label: string; color: string }> = {
   twitter: { label: 'X / Twitter', color: 'bg-blue-500 text-white' },
 }
 
-export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardProps) {
+export default function NewsCard({ item, onMarkRead, onMarkUnread, canOperate = true }: NewsCardProps) {
   const [showImage, setShowImage] = useState(false)
   const rawData = item.rawData
   const source = sourceConfig[item.source] || {
@@ -188,7 +189,7 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
             <ExternalLink className="w-4 h-4" />
             <span>原文</span>
           </a>
-          {!item.isRead ? (
+          {canOperate && (!item.isRead ? (
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -210,7 +211,7 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread }: NewsCardPro
               <ExternalLink className="w-4 h-4" />
               <span>未读</span>
             </button>
-          )}
+          ))}
         </div>
       </div>
 

@@ -8,6 +8,9 @@ import {
   markAllAsRead,
   resetAllRead,
 } from '@/lib/db'
+import { isAdminAuthorized, unauthorized } from '@/lib/admin-auth'
+
+// GET — 公开读操作，任何人可看
 export async function GET(request: NextRequest) {
   const source = request.nextUrl.searchParams.get('source')
   const limit = parseInt(request.nextUrl.searchParams.get('limit') || '50')
@@ -19,7 +22,12 @@ export async function GET(request: NextRequest) {
   const [allNews, counts] = await Promise.all([getAllNews(limit, showAll), getNewsCounts()])
   return NextResponse.json({ data: allNews, counts })
 }
+
+// POST — 写操作（标记已读等），仅管理员可操作
 export async function POST(request: NextRequest) {
+  if (!isAdminAuthorized(request)) {
+    return unauthorized()
+  }
   const body = await request.json()
   const { action, itemId, source } = body
   if (action === 'read' && itemId) {

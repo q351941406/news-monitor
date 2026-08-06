@@ -1,7 +1,9 @@
 'use client'
+import { getAdminToken, adminFetch } from '../../lib/admin-token'
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
+  Lock,
   ArrowLeft,
   RefreshCw,
   AlertTriangle,
@@ -84,14 +86,21 @@ function formatDate(date: string): string {
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [loading, setLoading] = useState(true)
+  const [authed, setAuthed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
   const fetchMetrics = useCallback(async () => {
     setRefreshing(true)
     try {
-      const res = await fetch('/api/admin/metrics')
+      const res = await adminFetch('/api/admin/metrics')
+      if (res.status === 403) {
+        setAuthed(false)
+        setLoading(false)
+        return
+      }
       const data = await res.json()
       setMetrics(data)
+      setAuthed(true)
     } catch {
       // ignore
     } finally {
@@ -101,12 +110,37 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => {
+    const token = getAdminToken()
+    if (!token) {
+      setLoading(false)
+      setAuthed(false)
+      return
+    }
+    setAuthed(true)
     fetchMetrics()
     const interval = setInterval(fetchMetrics, 30000)
     return () => clearInterval(interval)
   }, [fetchMetrics])
 
   const alerts = metrics?.alerts ?? []
+  if (!authed && !loading) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+        <div className="text-center p-8">
+          <Lock className="w-10 h-10 text-stone-300 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-stone-800 mb-2">需要管理员权限</h2>
+          <p className="text-stone-500 mb-6">请先在首页登录管理员模式后再访问此页面</p>
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-stone-900 rounded-lg hover:bg-stone-700 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            返回首页
+          </Link>
+        </div>
+      </div>
+    )
+  }
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-stone-50">

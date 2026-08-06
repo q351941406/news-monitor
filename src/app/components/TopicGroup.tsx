@@ -26,6 +26,7 @@ interface TopicGroupProps {
   onMarkRead: (id: string) => void
   onMarkUnread: (id: string) => void
   onMarkGroupRead: (topic: string) => void
+  canOperate?: boolean
 }
 
 export default function TopicGroup({
@@ -38,6 +39,7 @@ export default function TopicGroup({
   onMarkRead,
   onMarkUnread,
   onMarkGroupRead,
+  canOperate = true,
 }: TopicGroupProps) {
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
   const unreadCount = items.filter((i) => !i.isRead).length
@@ -70,7 +72,7 @@ export default function TopicGroup({
         </div>
 
         <div className="flex items-center gap-3">
-          {unreadCount > 0 && (
+          {canOperate && unreadCount > 0 && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -241,7 +243,7 @@ export default function TopicGroup({
                           <ExternalLink className="w-3.5 h-3.5" />
                           <span>原文</span>
                         </a>
-                        {!item.isRead ? (
+                        {canOperate && (!item.isRead ? (
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
@@ -263,7 +265,7 @@ export default function TopicGroup({
                             <ExternalLink className="w-3.5 h-3.5" />
                             <span>未读</span>
                           </button>
-                        )}
+                        ))}
                       </div>
                     </div>
                   )}

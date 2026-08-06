@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { getAdminToken, setAdminToken, clearAdminToken, adminFetch } from '../lib/admin-token'
 import Header from './components/Header'
 import SourceTabs from './components/SourceTabs'
 import TopicGroup from './components/TopicGroup'
@@ -30,8 +31,25 @@ export default function Home() {
   const [topics, setTopics] = useState<Record<string, TopicGroupData[]>>({})
   const [loading, setLoading] = useState(true)
   const [showRead, setShowRead] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [activeSource, setActiveSource] = useState('all')
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null)
+  useEffect(() => {
+    setIsAdmin(!!getAdminToken())
+  }, [])
+
+  const handleLogin = (token: string) => {
+    setAdminToken(token)
+    setIsAdmin(true)
+    // 触发一次受保护请求验证 token；无效时由后端返回 403，页面保持访客态
+    adminFetch('/api/admin/metrics').catch(() => {})
+  }
+  const handleLogout = () => {
+    clearAdminToken()
+    setIsAdmin(false)
+    window.location.reload()
+  }
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
@@ -55,9 +73,8 @@ export default function Home() {
   }, [fetchData])
   const handleMarkRead = async (itemId: string) => {
     try {
-      await fetch('/api/news', {
+      await adminFetch('/api/news', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'read', itemId }),
       })
       setNews((prev) => {
@@ -88,9 +105,8 @@ export default function Home() {
   }
   const handleMarkUnread = async (itemId: string) => {
     try {
-      await fetch('/api/news', {
+      await adminFetch('/api/news', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'unread', itemId }),
       })
       setNews((prev) => {
@@ -131,9 +147,8 @@ export default function Home() {
   }
   const handleMarkAllRead = async () => {
     try {
-      await fetch('/api/news', {
+      await adminFetch('/api/news', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'readAll' }),
       })
       setNews((prev) => {
@@ -157,9 +172,8 @@ export default function Home() {
   }
   const handleResetAllRead = async () => {
     try {
-      await fetch('/api/news', {
+      await adminFetch('/api/news', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'resetAll' }),
       })
       setNews((prev) => {
@@ -215,9 +229,12 @@ export default function Home() {
       <Header
         unreadCount={totalUnread}
         showRead={showRead}
+        isAdmin={isAdmin}
         onShowReadChange={setShowRead}
         onMarkAllRead={handleMarkAllRead}
         onResetAllRead={handleResetAllRead}
+        onLogin={handleLogin}
+        onLogout={handleLogout}
       />
       <main className="max-w-6xl mx-auto px-4 py-6">
         {/* Source Tabs */}
@@ -252,6 +269,7 @@ export default function Home() {
                 onMarkRead={handleMarkRead}
                 onMarkUnread={handleMarkUnread}
                 onMarkGroupRead={handleMarkGroupRead}
+                canOperate={isAdmin}
               />
             ))}
           </div>
