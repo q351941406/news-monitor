@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { aggregateDailyStats, aggregateSourceStats } from '../run-log-repo'
+import { aggregateDailyStats, aggregateSourceStats } from '../db/run-log-repo'
 
 describe('aggregateDailyStats', () => {
   it('按日期+来源聚合，合并 stage 维度', () => {
