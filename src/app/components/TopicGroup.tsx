@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, ExternalLink, Check } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface NewsItem {
   id: string
@@ -114,6 +115,18 @@ export default function TopicGroup({
               const isItemExpanded = expandedItemId === item.id
               const rawData = item.rawData
 
+              const cleanText = (text: string) => {
+                return text
+                  .replace(/\\U([0-9a-fA-F]{8})/g, (_, hex) =>
+                    String.fromCodePoint(parseInt(hex, 16)),
+                  )
+                  .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
+                    String.fromCodePoint(parseInt(hex, 16)),
+                  )
+                  .replace(/\\n/g, '\n')
+                  .replace(/\\\\/g, '\\')
+                  .replace(/\\ /g, ' ')
+              }
               const getDescription = () => {
                 switch (item.source) {
                   case 'github':
@@ -194,6 +207,7 @@ export default function TopicGroup({
                       {description && (
                         <div className="mb-3 overflow-y-auto max-h-[200px] prose prose-sm prose-stone max-w-none">
                           <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
                             components={{
                               a: (props) => (
                                 <a
@@ -209,9 +223,23 @@ export default function TopicGroup({
                                   className="text-sm text-stone-600 leading-relaxed mb-2"
                                 />
                               ),
+                              table: (props) => (
+                                <div className="overflow-x-auto mb-2">
+                                  <table {...props} className="w-full text-xs border-collapse" />
+                                </div>
+                              ),
+                              th: (props) => (
+                                <th
+                                  {...props}
+                                  className="border border-stone-300 px-2 py-1 bg-stone-100 text-left font-semibold"
+                                />
+                              ),
+                              td: (props) => (
+                                <td {...props} className="border border-stone-300 px-2 py-1" />
+                              ),
                             }}
                           >
-                            {description}
+                            {cleanText(description)}
                           </ReactMarkdown>
                         </div>
                       )}
@@ -243,29 +271,30 @@ export default function TopicGroup({
                           <ExternalLink className="w-3.5 h-3.5" />
                           <span>原文</span>
                         </a>
-                        {canOperate && (!item.isRead ? (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onMarkRead(item.id)
-                            }}
-                            className="flex items-center gap-1 text-xs text-stone-500 hover:text-green-600 transition-colors ml-auto"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>已读</span>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              onMarkUnread(item.id)
-                            }}
-                            className="flex items-center gap-1 text-xs text-stone-500 hover:text-amber-600 transition-colors ml-auto"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            <span>未读</span>
-                          </button>
-                        ))}
+                        {canOperate &&
+                          (!item.isRead ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onMarkRead(item.id)
+                              }}
+                              className="flex items-center gap-1 text-xs text-stone-500 hover:text-green-600 transition-colors ml-auto"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>已读</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onMarkUnread(item.id)
+                              }}
+                              className="flex items-center gap-1 text-xs text-stone-500 hover:text-amber-600 transition-colors ml-auto"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>未读</span>
+                            </button>
+                          ))}
                       </div>
                     </div>
                   )}

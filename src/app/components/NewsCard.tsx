@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ExternalLink, Check, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface NewsItem {
   id: string
@@ -29,7 +30,12 @@ const sourceConfig: Record<string, { label: string; color: string }> = {
   twitter: { label: 'X / Twitter', color: 'bg-blue-500 text-white' },
 }
 
-export default function NewsCard({ item, onMarkRead, onMarkUnread, canOperate = true }: NewsCardProps) {
+export default function NewsCard({
+  item,
+  onMarkRead,
+  onMarkUnread,
+  canOperate = true,
+}: NewsCardProps) {
   const [showImage, setShowImage] = useState(false)
   const rawData = item.rawData
   const source = sourceConfig[item.source] || {
@@ -137,6 +143,7 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread, canOperate = 
         {description && (
           <div className="mb-3 overflow-y-auto max-h-[300px] prose prose-sm prose-stone max-w-none">
             <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
               components={{
                 a: (props) => (
                   <a
@@ -149,6 +156,18 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread, canOperate = 
                 p: (props) => (
                   <p {...props} className="text-sm text-stone-600 leading-relaxed mb-2" />
                 ),
+                table: (props) => (
+                  <div className="overflow-x-auto mb-2">
+                    <table {...props} className="w-full text-xs border-collapse" />
+                  </div>
+                ),
+                th: (props) => (
+                  <th
+                    {...props}
+                    className="border border-stone-300 px-2 py-1 bg-stone-100 text-left font-semibold"
+                  />
+                ),
+                td: (props) => <td {...props} className="border border-stone-300 px-2 py-1" />,
               }}
             >
               {cleanText(description)}
@@ -189,29 +208,30 @@ export default function NewsCard({ item, onMarkRead, onMarkUnread, canOperate = 
             <ExternalLink className="w-4 h-4" />
             <span>原文</span>
           </a>
-          {canOperate && (!item.isRead ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onMarkRead(item.id)
-              }}
-              className="flex items-center gap-1 text-sm text-stone-500 hover:text-green-600 transition-colors ml-auto"
-            >
-              <Check className="w-4 h-4" />
-              <span>已读</span>
-            </button>
-          ) : (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onMarkUnread(item.id)
-              }}
-              className="flex items-center gap-1 text-sm text-stone-500 hover:text-amber-600 transition-colors ml-auto"
-            >
-              <ExternalLink className="w-4 h-4" />
-              <span>未读</span>
-            </button>
-          ))}
+          {canOperate &&
+            (!item.isRead ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onMarkRead(item.id)
+                }}
+                className="flex items-center gap-1 text-sm text-stone-500 hover:text-green-600 transition-colors ml-auto"
+              >
+                <Check className="w-4 h-4" />
+                <span>已读</span>
+              </button>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onMarkUnread(item.id)
+                }}
+                className="flex items-center gap-1 text-sm text-stone-500 hover:text-amber-600 transition-colors ml-auto"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>未读</span>
+              </button>
+            ))}
         </div>
       </div>
 

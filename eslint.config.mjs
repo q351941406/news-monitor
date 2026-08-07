@@ -13,8 +13,8 @@ const eslintConfig = [
     },
   },
   {
-    // next-env.d.ts 由 Next.js 自动生成，含 triple-slash reference
-    ignores: ['next-env.d.ts'],
+    // next-env.d.ts 由 Next.js 自动生成；coverage 为 vitest 报告产物
+    ignores: ['next-env.d.ts', 'coverage/**'],
   },
 ]
 
