@@ -1,7 +1,7 @@
 /**
  * 主题聚合仓库 — AI 主题分组管理
  */
-import { eq, desc } from 'drizzle-orm'
+import { eq, and, desc } from 'drizzle-orm'
 import { rawItems, aiAnalysis, topicGroups, topicItems } from '../schema'
 import { getDb, getPgPool, type NewsItem } from './connection'
 
@@ -75,6 +75,7 @@ export async function storeTopicGroups(
 /** 获取主题聚合 */
 export async function getTopicGroups(
   source: string,
+  showAll: boolean = false,
 ): Promise<Array<{ id: string; topic: string; summary: string; items: NewsItem[] }>> {
   const db = getDb()
   const groups = await db
@@ -99,7 +100,13 @@ export async function getTopicGroups(
       .from(topicItems)
       .innerJoin(rawItems, eq(topicItems.itemId, rawItems.id))
       .leftJoin(aiAnalysis, eq(rawItems.id, aiAnalysis.itemId))
-      .where(eq(topicItems.topicId, group.id))
+      .where(
+        showAll
+          ? eq(topicItems.topicId, group.id)
+          : and(eq(topicItems.topicId, group.id), eq(rawItems.isRead, false)),
+      )
+    // 未勾选"显示已读"时，过滤后为空的主题组不展示
+    if (items.length === 0 && !showAll) continue
     result.push({
       id: group.id,
       topic: group.topic,
