@@ -12,9 +12,22 @@ let pool: Pool | null = null
 
 function getPool(): Pool {
   if (!pool) {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL })
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      // 集成测试通过该变量将连接定向到独立测试 schema，实现并行隔离
+      options: process.env.PG_SEARCH_PATH
+        ? `-c search_path=${process.env.PG_SEARCH_PATH}`
+        : undefined,
+    })
   }
   return pool
+}
+/** 测试用：重置连接池（例如切换到独立测试 schema 后强制重建连接） */
+export function resetDbPool(): void {
+  if (pool) {
+    void pool.end()
+    pool = null
+  }
 }
 
 export function getDb() {

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { getTestDb, createTestTables, insertTestItem } from './db-test-helper'
+import { createTestTables, insertTestItem, dropTestSchema } from './db-test-helper'
 import { storeRawItems, existsItem } from '../news-repo'
-import { rawItems } from '../../schema'
 import type { NewRawItem } from '../../schema'
 
 describe('NewsRepo', () => {
@@ -10,8 +9,7 @@ describe('NewsRepo', () => {
   })
 
   afterAll(async () => {
-    const db = getTestDb()
-    await db.delete(rawItems)
+    await dropTestSchema()
   })
 
   it('存储新新闻', async () => {

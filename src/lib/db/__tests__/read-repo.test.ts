@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { getTestDb, createTestTables, insertTestItem } from './db-test-helper'
+import { createTestTables, insertTestItem, dropTestSchema } from './db-test-helper'
 import { storeRawItems } from '../news-repo'
 import { markAsRead, markAsUnread, markAllAsRead, resetAllRead } from '../read-repo'
 import { getUnreadCount } from '../stats-repo'
-import { rawItems } from '../../schema'
 import type { NewRawItem } from '../../schema'
 
 describe('ReadRepo', () => {
@@ -12,8 +11,7 @@ describe('ReadRepo', () => {
   })
 
   afterAll(async () => {
-    const db = getTestDb()
-    await db.delete(rawItems)
+    await dropTestSchema()
   })
 
   it('标记已读后未读计数减少', async () => {

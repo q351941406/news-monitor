@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { getTestDb, createTestTables, insertTestItem } from './db-test-helper'
+import { createTestTables, insertTestItem, dropTestSchema } from './db-test-helper'
 import { storeRawItems } from '../news-repo'
 import { storeTopicGroups, getTopicGroups } from '../topic-repo'
 import { markAsRead } from '../read-repo'
-import { rawItems, topicGroups, topicItems, aiAnalysis } from '../../schema'
 import type { NewRawItem } from '../../schema'
 
 const SUFFIX = `tp:${Date.now()}`
@@ -26,11 +25,7 @@ describe('TopicRepo — showAll 已读过滤', () => {
     ])
   })
   afterAll(async () => {
-    const db = getTestDb()
-    await db.delete(topicItems)
-    await db.delete(topicGroups)
-    await db.delete(aiAnalysis)
-    await db.delete(rawItems)
+    await dropTestSchema()
   })
 
   it('showAll=false 时过滤已读，且全已读的组被剔除', async () => {

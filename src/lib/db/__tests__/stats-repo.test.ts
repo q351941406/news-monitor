@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { getTestDb, createTestTables, insertTestItem } from './db-test-helper'
+import { getTestDb, createTestTables, insertTestItem, dropTestSchema } from './db-test-helper'
 import { storeRawItems } from '../news-repo'
 import { getUnreadCount, cleanupOldData } from '../stats-repo'
 import { rawItems } from '../../schema'
@@ -11,8 +11,7 @@ describe('StatsRepo', () => {
   })
 
   afterAll(async () => {
-    const db = getTestDb()
-    await db.delete(rawItems)
+    await dropTestSchema()
   })
 
   it('按来源统计未读', async () => {
