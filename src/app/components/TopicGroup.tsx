@@ -2,8 +2,7 @@
 
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, ExternalLink, Check } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import MarkdownContent from './MarkdownContent'
 
 interface NewsItem {
   id: string
@@ -190,14 +189,14 @@ export default function TopicGroup({
                               </span>
                             </div>
                             {item.summary && (
-                              <p className="text-sm font-medium text-stone-900 leading-relaxed mb-1.5">
-                                {item.summary}
-                              </p>
+                              <div className="text-sm font-medium text-stone-900 leading-relaxed mb-1.5">
+                                <MarkdownContent content={item.summary} />
+                              </div>
                             )}
                             {item.details && (
-                              <p className="text-sm text-stone-600 leading-relaxed whitespace-pre-line">
-                                {item.details}
-                              </p>
+                              <div className="text-sm text-stone-600 leading-relaxed">
+                                <MarkdownContent content={item.details} />
+                              </div>
                             )}
                           </div>
                         </div>
@@ -206,41 +205,7 @@ export default function TopicGroup({
                       {/* Original Text */}
                       {description && (
                         <div className="mb-3 overflow-y-auto max-h-[200px] prose prose-sm prose-stone max-w-none">
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            components={{
-                              a: (props) => (
-                                <a
-                                  {...props}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 hover:underline"
-                                />
-                              ),
-                              p: (props) => (
-                                <p
-                                  {...props}
-                                  className="text-sm text-stone-600 leading-relaxed mb-2"
-                                />
-                              ),
-                              table: (props) => (
-                                <div className="overflow-x-auto mb-2">
-                                  <table {...props} className="w-full text-xs border-collapse" />
-                                </div>
-                              ),
-                              th: (props) => (
-                                <th
-                                  {...props}
-                                  className="border border-stone-300 px-2 py-1 bg-stone-100 text-left font-semibold"
-                                />
-                              ),
-                              td: (props) => (
-                                <td {...props} className="border border-stone-300 px-2 py-1" />
-                              ),
-                            }}
-                          >
-                            {cleanText(description)}
-                          </ReactMarkdown>
+                          <MarkdownContent content={cleanText(description)} />
                         </div>
                       )}
 
