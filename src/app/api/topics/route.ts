@@ -1,42 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTopicGroups } from '@/lib/db'
-
+import { getTopicGroupMeta } from '@/lib/db'
+/**
+ * 主题组列表（轻量元信息，不含 items）
+ *
+ * 懒加载设计：列表只返回 { id, topic, summary, unreadCount, totalCount }，
+ * 展开某个组时再请求 /api/topics/[id]/items。
+ */
 export async function GET(request: NextRequest) {
   const source = request.nextUrl.searchParams.get('source')
   const showAll = request.nextUrl.searchParams.get('showAll') === 'true'
-
-  if (source) {
-    const groups = await getTopicGroups(source, showAll)
-    return NextResponse.json({ source, data: groups, count: groups.length })
-  }
-
-  // 获取所有数据源的主题聚合
-  const sources = ['github', 'producthunt', 'twitter']
-  const results: Record<
-    string,
-    Array<{
-      id: string
-      topic: string
-      summary: string
-      items: Array<{
-        id: string
-        source: string
-        title: string | null
-        url: string
-        rawData: Record<string, unknown>
-        summary: string | null
-        details: string | null
-        fetchedAt: number
-        isRead: boolean
-      }>
-    }>
-  > = {}
-
+  const sources = source ? [source] : ['github', 'producthunt', 'twitter']
+  const results: Record<string, Awaited<ReturnType<typeof getTopicGroupMeta>>> = {}
   await Promise.all(
     sources.map(async (s) => {
-      results[s] = await getTopicGroups(s, showAll)
+      results[s] = await getTopicGroupMeta(s, showAll)
     }),
   )
-
+  if (source) {
+    return NextResponse.json({ source, data: results[source], count: results[source].length })
+  }
   return NextResponse.json({ data: results })
 }

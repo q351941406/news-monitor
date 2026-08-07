@@ -1,14 +1,18 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createTestTables, insertTestItem, dropTestSchema } from './db-test-helper'
 import { storeRawItems } from '../news-repo'
-import { storeTopicGroups, getTopicGroups } from '../topic-repo'
+import {
+  storeTopicGroups,
+  getTopicGroupMeta,
+  getTopicGroupItems,
+  markGroupAsRead,
+} from '../topic-repo'
 import { markAsRead } from '../read-repo'
 import type { NewRawItem } from '../../schema'
-
 const SUFFIX = `tp:${Date.now()}`
 const SOURCE = 'github'
-
-describe('TopicRepo — showAll 已读过滤', () => {
+describe('TopicRepo — 懒加载查询', () => {
+  let group1Id = ''
   beforeAll(async () => {
     await createTestTables()
     // 3 条新闻：A 未读、B 未读、C 已读
@@ -23,32 +27,42 @@ describe('TopicRepo — showAll 已读过滤', () => {
       { topic: '组1', summary: '混合组', itemIds: [`${SUFFIX}:a`, `${SUFFIX}:c`] },
       { topic: '组2', summary: '全已读组', itemIds: [`${SUFFIX}:c`] },
     ])
+    const metas = await getTopicGroupMeta(SOURCE, true)
+    group1Id = metas.find((g) => g.topic === '组1')!.id
   })
   afterAll(async () => {
     await dropTestSchema()
   })
-
-  it('showAll=false 时过滤已读，且全已读的组被剔除', async () => {
-    const groups = await getTopicGroups(SOURCE, false)
-    expect(groups).toHaveLength(1)
-    expect(groups[0].topic).toBe('组1')
-    const ids = groups[0].items.map((i) => i.id)
-    expect(ids).toContain(`${SUFFIX}:a`)
-    expect(ids).not.toContain(`${SUFFIX}:c`)
+  it('getTopicGroupMeta：showAll=false 时剔除全已读组，未读计数正确', async () => {
+    const metas = await getTopicGroupMeta(SOURCE, false)
+    expect(metas).toHaveLength(1)
+    expect(metas[0].topic).toBe('组1')
+    expect(metas[0].unreadCount).toBe(1)
+    expect(metas[0].totalCount).toBe(2)
   })
-
-  it('showAll=true 时返回全部，包括已读', async () => {
-    const groups = await getTopicGroups(SOURCE, true)
-    expect(groups).toHaveLength(2)
-    const mixed = groups.find((g) => g.topic === '组1')!
-    expect(mixed.items.map((i) => i.id)).toEqual([`${SUFFIX}:a`, `${SUFFIX}:c`])
-    const allRead = groups.find((g) => g.topic === '组2')!
-    expect(allRead.items.map((i) => i.id)).toEqual([`${SUFFIX}:c`])
+  it('getTopicGroupMeta：showAll=true 时返回全部组', async () => {
+    const metas = await getTopicGroupMeta(SOURCE, true)
+    expect(metas).toHaveLength(2)
+    const g2 = metas.find((g) => g.topic === '组2')!
+    expect(g2.unreadCount).toBe(0)
+    expect(g2.totalCount).toBe(1)
   })
-
-  it('默认参数（不传 showAll）等价于 showAll=false', async () => {
-    const groups = await getTopicGroups(SOURCE)
-    expect(groups).toHaveLength(1)
-    expect(groups[0].topic).toBe('组1')
+  it('getTopicGroupMeta：默认参数等价于 showAll=false', async () => {
+    const metas = await getTopicGroupMeta(SOURCE)
+    expect(metas).toHaveLength(1)
+  })
+  it('getTopicGroupItems：showAll=false 过滤已读，showAll=true 返回全部', async () => {
+    const hidden = await getTopicGroupItems(group1Id, false)
+    expect(hidden.map((i) => i.id)).toEqual([`${SUFFIX}:a`])
+    const all = await getTopicGroupItems(group1Id, true)
+    expect(all.map((i) => i.id)).toEqual([`${SUFFIX}:a`, `${SUFFIX}:c`])
+  })
+  it('markGroupAsRead：组内全部标记已读，未读计数归零', async () => {
+    await markGroupAsRead(group1Id)
+    const metas = await getTopicGroupMeta(SOURCE, false)
+    // 组1 未读清零后成为全已读组，showAll=false 下被剔除
+    expect(metas).toHaveLength(0)
+    const all = await getTopicGroupItems(group1Id, false)
+    expect(all).toHaveLength(0)
   })
 })

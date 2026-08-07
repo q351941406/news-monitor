@@ -1,10 +1,14 @@
 /**
  * 主题聚合仓库 — AI 主题分组管理
+ *
+ * 懒加载友好设计：
+ * - getTopicGroupMeta: 列表只返回组元信息（含未读/总数），一条 SQL
+ * - getTopicGroupItems: 点击展开时才拉单组 items，一条 JOIN
+ * - markGroupAsRead: 整组标记已读，单条 UPDATE
  */
-import { eq, and, desc } from 'drizzle-orm'
-import { rawItems, aiAnalysis, topicGroups, topicItems } from '../schema'
+import { eq } from 'drizzle-orm'
+import { rawItems, topicGroups, topicItems } from '../schema'
 import { getDb, getPgPool, type NewsItem } from './connection'
-
 /** 初始化数据库表 */
 export async function initDatabase() {
   const pool = getPgPool()
@@ -32,7 +36,6 @@ export async function initDatabase() {
     )
   `)
 }
-
 /** 存储主题聚合 */
 export async function storeTopicGroups(
   source: string,
@@ -71,48 +74,78 @@ export async function storeTopicGroups(
     }
   }
 }
-
-/** 获取主题聚合 */
-export async function getTopicGroups(
+/** 主题组元信息（不含 items，列表轻量加载用） */
+export interface TopicGroupMeta {
+  id: string
+  topic: string
+  summary: string
+  unreadCount: number
+  totalCount: number
+}
+/** 获取主题组列表（一条 SQL 聚合出每组的未读数/总数） */
+export async function getTopicGroupMeta(
   source: string,
   showAll: boolean = false,
-): Promise<Array<{ id: string; topic: string; summary: string; items: NewsItem[] }>> {
-  const db = getDb()
-  const groups = await db
-    .select()
-    .from(topicGroups)
-    .where(eq(topicGroups.source, source))
-    .orderBy(desc(topicGroups.createdAt))
-  const result = []
-  for (const group of groups) {
-    const items = await db
-      .select({
-        id: rawItems.id,
-        source: rawItems.source,
-        title: rawItems.title,
-        url: rawItems.url,
-        rawData: rawItems.rawData,
-        summary: aiAnalysis.summary,
-        details: aiAnalysis.details,
-        fetchedAt: rawItems.fetchedAt,
-        isRead: rawItems.isRead,
-      })
-      .from(topicItems)
-      .innerJoin(rawItems, eq(topicItems.itemId, rawItems.id))
-      .leftJoin(aiAnalysis, eq(rawItems.id, aiAnalysis.itemId))
-      .where(
-        showAll
-          ? eq(topicItems.topicId, group.id)
-          : and(eq(topicItems.topicId, group.id), eq(rawItems.isRead, false)),
-      )
-    // 未勾选"显示已读"时，过滤后为空的主题组不展示
-    if (items.length === 0 && !showAll) continue
-    result.push({
-      id: group.id,
-      topic: group.topic,
-      summary: group.summary,
-      items: items as NewsItem[],
-    })
-  }
-  return result
+): Promise<TopicGroupMeta[]> {
+  const pool = getPgPool()
+  const { rows } = await pool.query(
+    `SELECT tg.id, tg.topic, tg.summary,
+       COUNT(ti.item_id)::int AS total_count,
+       COUNT(ti.item_id) FILTER (WHERE ri.is_read = FALSE)::int AS unread_count
+     FROM topic_groups tg
+     LEFT JOIN topic_items ti ON ti.topic_id = tg.id
+     LEFT JOIN raw_items ri ON ri.id = ti.item_id
+     WHERE tg.source = $1
+     GROUP BY tg.id, tg.topic, tg.summary, tg.created_at
+     ORDER BY tg.created_at DESC`,
+    [source],
+  )
+  const groups = rows.map((r) => ({
+    id: r.id as string,
+    topic: r.topic as string,
+    summary: r.summary as string,
+    unreadCount: r.unread_count as number,
+    totalCount: r.total_count as number,
+  }))
+  // 未勾选"显示已读"时，过滤掉全已读的组
+  return showAll ? groups : groups.filter((g) => g.unreadCount > 0)
+}
+/** 获取单个主题组的 items（点击展开时才调用，一条 JOIN） */
+export async function getTopicGroupItems(
+  topicId: string,
+  showAll: boolean = false,
+): Promise<NewsItem[]> {
+  const pool = getPgPool()
+  const { rows } = await pool.query(
+    `SELECT ri.id, ri.source, ri.title, ri.url, ri.raw_data,
+       ri.fetched_at, ri.is_read, aa.summary, aa.details
+     FROM topic_items ti
+     INNER JOIN raw_items ri ON ri.id = ti.item_id
+     LEFT JOIN ai_analysis aa ON aa.item_id = ri.id
+     WHERE ti.topic_id = $1 AND ($2 = TRUE OR ri.is_read = FALSE)
+     ORDER BY ri.fetched_at DESC`,
+    [topicId, showAll],
+  )
+  return rows.map((r) => ({
+    id: r.id as string,
+    source: r.source as string,
+    title: r.title as string | null,
+    url: r.url as string,
+    rawData: r.raw_data as Record<string, unknown>,
+    summary: r.summary as string | null,
+    details: r.details as string | null,
+    fetchedAt: Number(r.fetched_at),
+    isRead: r.is_read as boolean,
+  })) as NewsItem[]
+}
+/** 将一个主题组内的全部未读标记为已读，返回更新条数 */
+export async function markGroupAsRead(topicId: string): Promise<number> {
+  const pool = getPgPool()
+  const result = await pool.query(
+    `UPDATE raw_items ri SET is_read = TRUE
+     FROM topic_items ti
+     WHERE ti.topic_id = $1 AND ti.item_id = ri.id AND ri.is_read = FALSE`,
+    [topicId],
+  )
+  return result.rowCount ?? 0
 }

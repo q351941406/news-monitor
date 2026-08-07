@@ -14,7 +14,13 @@ export { getDb, getPgPool, type NewsItem } from './connection'
 export { storeRawItems, existsItem, getNews, getAllNews, getNewsCounts } from './news-repo'
 export { storeAIAnalysis, getUnprocessedItems } from './ai-repo'
 export { markAsRead, markAsUnread, markAllAsRead, resetAllRead } from './read-repo'
-export { initDatabase, storeTopicGroups, getTopicGroups } from './topic-repo'
+export {
+  initDatabase,
+  storeTopicGroups,
+  getTopicGroupMeta,
+  getTopicGroupItems,
+  markGroupAsRead,
+} from './topic-repo'
 export { getUnreadCount, cleanupOldData } from './stats-repo'
 export { logRun, getRecentRuns, getDailyStats, getSourceStats, getMetrics } from './run-log-repo'
 // 保留类型向后兼容

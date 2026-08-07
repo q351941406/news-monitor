@@ -8,6 +8,7 @@ import {
   markAllAsRead,
   resetAllRead,
 } from '@/lib/db'
+import { markGroupAsRead } from '@/lib/db'
 import { isAdminAuthorized, unauthorized } from '@/lib/admin-auth'
 
 // GET — 公开读操作，任何人可看
@@ -29,13 +30,17 @@ export async function POST(request: NextRequest) {
     return unauthorized()
   }
   const body = await request.json()
-  const { action, itemId, source } = body
+  const { action, itemId, topicId, source } = body
   if (action === 'read' && itemId) {
     await markAsRead(itemId)
     return NextResponse.json({ success: true })
   }
   if (action === 'unread' && itemId) {
     await markAsUnread(itemId)
+    return NextResponse.json({ success: true })
+  }
+  if (action === 'readGroup' && topicId) {
+    await markGroupAsRead(topicId)
     return NextResponse.json({ success: true })
   }
   if (action === 'readAll') {
