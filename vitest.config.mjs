@@ -25,6 +25,12 @@ export default defineConfig({
         'src/**/*.test.tsx',
         'src/**/db/__tests__/**',
         'src/app/components/**',
+        // 定时任务脚本：由 GitHub Actions 调度执行，非 vitest 单测目标
+        'scripts/**',
+        // 无测试的 UI 展示层
+        'src/app/**/page.tsx',
+        'src/app/layout.tsx',
+        'src/app/global-error.tsx',
       ],
       // 覆盖率门槛 — 唯一事实源（CI 通过 test:coverage:check 读取此处）
       // 实测基准 (2026-08): lines 31.9% / branches 39.9% / functions 31.3% / statements 32.9%
