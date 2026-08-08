@@ -17,13 +17,18 @@ src/lib/ai-service.ts → generateBatchSummary()
     ▼ storeAIAnalysis()
 src/lib/db/ai-repo.ts
     │
-    ▼ 主题聚合
-src/lib/ai-service.ts → generateTopicAggregation()
+    ▼ 主题聚合（队列式增量，每次消费一批）
+getAggregationBatch(source, 100)   ← 新数据优先 + 最旧未聚合补足
     │
-    ▼ storeTopicGroups()
+    ▼ generateTopicAggregation(items, existingTopics)
+src/lib/ai-service.ts  ← prompt 注入「已有主题」历史上下文，优先归并
+    │
+    ▼ storeTopicGroups() 增量 upsert（同名主题复用，不重建）
+    + deleteEmptyTopics() 删空主题
+    + markItemsAggregated() 标记已聚合（队列轮转）
 src/lib/db/topic-repo.ts
     │
-    ▼ Web 展示
+    ▼ Web 展示（三级懒加载：组列表 → 组内 items → 单条原文）
 src/app/ → API routes → 前端组件
 ```
 
