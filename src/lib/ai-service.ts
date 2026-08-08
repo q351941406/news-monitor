@@ -185,7 +185,8 @@ async function callAIWithRetry<T>(
       })
       return result.output as T
     } catch (error) {
-      if (NoObjectGeneratedError.isInstance(error)) {
+      const isNoOutput = NoObjectGeneratedError.isInstance(error)
+      if (isNoOutput) {
         console.log(`  ⚠️ Attempt ${attempt}/${maxRetries} failed: ${error.cause}`)
       } else {
         console.log(`  ⚠️ Attempt ${attempt}/${maxRetries} failed: ${error}`)
@@ -194,7 +195,14 @@ async function callAIWithRetry<T>(
         console.log('  ❌ All attempts failed')
         return null
       }
-      await new Promise((resolve) => setTimeout(resolve, 2000 * attempt))
+      // NoOutput/瞬时错误：指数退避 + 30% 抖动（对齐 retry.ts），给 DeepSeek 更多恢复时间
+      // 普通错误：短退避即可
+      const baseMs = isNoOutput ? 5000 : 2000
+      const backoff = baseMs * Math.pow(2, attempt - 1)
+      const jitter = backoff * 0.3 * Math.random()
+      const delay = Math.round(backoff + jitter)
+      console.log(`  ⏳ Retrying in ${(delay / 1000).toFixed(1)}s...`)
+      await new Promise((resolve) => setTimeout(resolve, delay))
     }
   }
   return null
