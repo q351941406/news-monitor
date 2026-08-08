@@ -23,7 +23,7 @@ async function aggregateOneBatch(
   aiService: ReturnType<typeof createAIService>,
 ): Promise<number> {
   // 1. 取该 source 的待聚合批次（新数据优先 + 最旧补足，每批 30 条，减小 prompt 保证 AI 可靠）
-  const items = await getAggregationBatch(source, 30)
+  const items = await getAggregationBatch(source, 50)
   console.log(`  Found ${items.length} pending items`)
   if (items.length < 3) {
     console.log('  Not enough items to aggregate (< 3), skip')
@@ -35,8 +35,10 @@ async function aggregateOneBatch(
   // 3. 调用 AI 进行主题聚合（带历史上下文，增量归并）
   const groups = await aiService.generateTopicAggregation(items, existingTopics)
   if (!groups || groups.length === 0) {
-    console.log('  ❌ No topics generated for this batch')
-    return 0
+    // 有数据但 AI 没产出主题 = 真实失败，必须抛错让 workflow 标记失败（触发自动重试 + Sentry 告警）
+    throw new Error(
+      `AI topic aggregation failed for ${source}: no topics generated (${items.length} items pending)`,
+    )
   }
   console.log(`  AI returned ${groups.length} topics`)
   // 4. 增量 upsert 存储（已有主题追加成员 / 新主题新建）
