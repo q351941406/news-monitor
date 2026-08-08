@@ -14,7 +14,7 @@ const eslintConfig = [
   },
   {
     // next-env.d.ts 由 Next.js 自动生成；coverage 为 vitest 报告产物
-    ignores: ['next-env.d.ts', 'coverage/**'],
+    ignores: ['next-env.d.ts', 'coverage/**', '.next/**'],
   },
 ]
 
