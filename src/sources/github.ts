@@ -26,8 +26,7 @@ async function fetchReadme(owner: string, repo: string): Promise<string> {
           }),
         )
         if (res.ok) {
-          const text = await res.text()
-          return text.slice(0, 5000)
+          return await res.text()
         }
       } catch {
         continue
