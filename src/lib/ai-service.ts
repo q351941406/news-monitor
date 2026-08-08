@@ -186,10 +186,21 @@ async function callAIWithRetry<T>(
       return result.output as T
     } catch (error) {
       const isNoOutput = NoObjectGeneratedError.isInstance(error)
+      const errObj = error as { cause?: unknown; message?: string; constructor?: { name?: string } }
+      // 失败诊断：打印 prompt 规模 + 错误细节，便于定位（如 prompt 过长 / 内容异常）
+      console.log(
+        `  📊 Attempt ${attempt}/${maxRetries} | prompt=${prompt.length} chars | model=${process.env.ANTHROPIC_MODEL || 'default'}`,
+      )
       if (isNoOutput) {
-        console.log(`  ⚠️ Attempt ${attempt}/${maxRetries} failed: ${error.cause}`)
+        console.log(`  ⚠️ NoObjectGeneratedError: ${errObj.cause || errObj.message || error}`)
       } else {
-        console.log(`  ⚠️ Attempt ${attempt}/${maxRetries} failed: ${error}`)
+        console.log(`  ⚠️ ${errObj.constructor?.name || 'Error'}: ${errObj.message || error}`)
+        // 展开 cause（AI SDK 常在 cause 里带原始响应）
+        if (errObj.cause) {
+          const causeStr =
+            typeof errObj.cause === 'string' ? errObj.cause : JSON.stringify(errObj.cause)
+          console.log(`  🔍 cause: ${causeStr.slice(0, 500)}`)
+        }
       }
       if (attempt === maxRetries) {
         console.log('  ❌ All attempts failed')
