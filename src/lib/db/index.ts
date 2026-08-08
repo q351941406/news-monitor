@@ -19,6 +19,7 @@ export {
   storeTopicGroups,
   getTopicGroupMeta,
   getTopicGroupItems,
+  getItemDetail,
   markGroupAsRead,
 } from './topic-repo'
 export { getUnreadCount, cleanupOldData } from './stats-repo'

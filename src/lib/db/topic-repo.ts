@@ -110,15 +110,25 @@ export async function getTopicGroupMeta(
   // 未勾选"显示已读"时，过滤掉全已读的组
   return showAll ? groups : groups.filter((g) => g.unreadCount > 0)
 }
-/** 获取单个主题组的 items（点击展开时才调用，一条 JOIN） */
+/** 列表用轻量条目（不含原文 readme / AI details，最重的字段在 getItemDetail 才取） */
+export interface TopicItem {
+  id: string
+  source: string
+  title: string | null
+  url: string
+  summary: string | null
+  fetchedAt: number
+  isRead: boolean
+}
+/** 获取单个主题组的 items 轻量列表（点击展开时才调用，一条 JOIN） */
 export async function getTopicGroupItems(
   topicId: string,
   showAll: boolean = false,
-): Promise<NewsItem[]> {
+): Promise<TopicItem[]> {
   const pool = getPgPool()
   const { rows } = await pool.query(
-    `SELECT ri.id, ri.source, ri.title, ri.url, ri.raw_data,
-       ri.fetched_at, ri.is_read, aa.summary, aa.details
+    `SELECT ri.id, ri.source, ri.title, ri.url,
+       ri.fetched_at, ri.is_read, aa.summary
      FROM topic_items ti
      INNER JOIN raw_items ri ON ri.id = ti.item_id
      LEFT JOIN ai_analysis aa ON aa.item_id = ri.id
@@ -131,12 +141,35 @@ export async function getTopicGroupItems(
     source: r.source as string,
     title: r.title as string | null,
     url: r.url as string,
+    summary: r.summary as string | null,
+    fetchedAt: Number(r.fetched_at),
+    isRead: r.is_read as boolean,
+  })) as TopicItem[]
+}
+/** 获取单条 item 完整详情（含 rawData 原文 + AI details）—— 点击条目展开时才请求 */
+export async function getItemDetail(itemId: string): Promise<NewsItem | null> {
+  const pool = getPgPool()
+  const { rows } = await pool.query(
+    `SELECT ri.id, ri.source, ri.title, ri.url, ri.raw_data,
+       ri.fetched_at, ri.is_read, aa.summary, aa.details
+     FROM raw_items ri
+     LEFT JOIN ai_analysis aa ON aa.item_id = ri.id
+     WHERE ri.id = $1`,
+    [itemId],
+  )
+  if (rows.length === 0) return null
+  const r = rows[0]
+  return {
+    id: r.id as string,
+    source: r.source as string,
+    title: r.title as string | null,
+    url: r.url as string,
     rawData: r.raw_data as Record<string, unknown>,
     summary: r.summary as string | null,
     details: r.details as string | null,
     fetchedAt: Number(r.fetched_at),
     isRead: r.is_read as boolean,
-  })) as NewsItem[]
+  }
 }
 /** 将一个主题组内的全部未读标记为已读，返回更新条数 */
 export async function markGroupAsRead(topicId: string): Promise<number> {

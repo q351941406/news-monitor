@@ -2,7 +2,18 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, ExternalLink, Check } from 'lucide-react'
 import MarkdownContent from './MarkdownContent'
+/** 列表轻量条目（不含原文/AI 详情） */
 interface NewsItem {
+  id: string
+  source: string
+  title: string | null
+  url: string
+  summary: string | null
+  fetchedAt: number
+  isRead: boolean
+}
+/** 单条完整详情（点击展开时才拉取） */
+interface ItemDetail {
   id: string
   source: string
   title: string | null
@@ -48,8 +59,31 @@ export default function TopicGroup({
   canOperate = true,
 }: TopicGroupProps) {
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
+  // L3 懒加载：单条 item 详情缓存（展开才拉，折叠后保留缓存）
+  const [detailCache, setDetailCache] = useState<Record<string, ItemDetail>>({})
+  const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({})
+  const loadDetail = async (itemId: string) => {
+    if (detailCache[itemId] || detailLoading[itemId]) return
+    setDetailLoading((prev) => ({ ...prev, [itemId]: true }))
+    try {
+      const res = await fetch(`/api/items/${itemId}`)
+      if (!res.ok) return
+      const data = await res.json()
+      setDetailCache((prev) => ({ ...prev, [itemId]: data.data as ItemDetail }))
+    } catch (e) {
+      console.error('Failed to load item detail:', e)
+    } finally {
+      setDetailLoading((prev) => ({ ...prev, [itemId]: false }))
+    }
+  }
   const handleItemClick = (itemId: string) => {
-    setExpandedItemId(expandedItemId === itemId ? null : itemId)
+    if (expandedItemId === itemId) {
+      setExpandedItemId(null)
+      return
+    }
+    setExpandedItemId(itemId)
+    // 点击展开的那一刻才拉详情（L3 懒加载）
+    void loadDetail(itemId)
   }
   return (
     <section className="bg-white rounded-xl border border-stone-200 overflow-hidden transition-shadow hover:shadow-sm">
@@ -114,7 +148,9 @@ export default function TopicGroup({
             ) : items && items.length > 0 ? (
               items.map((item) => {
                 const isItemExpanded = expandedItemId === item.id
-                const rawData = item.rawData
+                const detail = detailCache[item.id]
+                const isLoadingDetail = detailLoading[item.id]
+                const rawData = detail?.rawData || {}
                 const cleanText = (text: string) => {
                   return text
                     .replace(/\\U([0-9a-fA-F]{8})/g, (_, hex) =>
@@ -177,85 +213,91 @@ export default function TopicGroup({
                     {/* Expanded Content */}
                     {isItemExpanded && (
                       <div className="px-3 pb-3 border-t border-stone-100 pt-3">
-                        {/* AI Summary */}
-                        {(item.summary || item.details) && (
-                          <div className="relative mb-3 pl-4 border-l-2 border-amber-400">
-                            <div className="bg-gradient-to-r from-amber-50 to-transparent rounded-r-lg p-3">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">
-                                  AI
-                                </span>
+                        {isLoadingDetail ? (
+                          <ItemDetailSkeleton />
+                        ) : (
+                          <>
+                            {/* AI Summary */}
+                            {(item.summary || detail?.details) && (
+                              <div className="relative mb-3 pl-4 border-l-2 border-amber-400">
+                                <div className="bg-gradient-to-r from-amber-50 to-transparent rounded-r-lg p-3">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">
+                                      AI
+                                    </span>
+                                  </div>
+                                  {item.summary && (
+                                    <div className="text-sm font-medium text-stone-900 leading-relaxed mb-1.5">
+                                      <MarkdownContent content={item.summary} />
+                                    </div>
+                                  )}
+                                  {detail?.details && (
+                                    <div className="text-sm text-stone-600 leading-relaxed">
+                                      <MarkdownContent content={detail!.details} />
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                              {item.summary && (
-                                <div className="text-sm font-medium text-stone-900 leading-relaxed mb-1.5">
-                                  <MarkdownContent content={item.summary} />
-                                </div>
-                              )}
-                              {item.details && (
-                                <div className="text-sm text-stone-600 leading-relaxed">
-                                  <MarkdownContent content={item.details} />
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        {/* Original Text */}
-                        {description && (
-                          <div className="mb-3 overflow-y-auto max-h-[200px] prose prose-sm prose-stone max-w-none">
-                            <MarkdownContent content={cleanText(description)} />
-                          </div>
-                        )}
-                        {/* Image */}
-                        {previewImage && (
-                          <div className="mb-3 rounded-lg overflow-hidden bg-stone-100">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={previewImage}
-                              alt=""
-                              className="w-full h-auto max-h-[300px] object-contain"
-                              loading="lazy"
-                              onError={(e) => {
-                                ;(e.target as HTMLImageElement).style.display = 'none'
-                              }}
-                            />
-                          </div>
-                        )}
-                        {/* Actions */}
-                        <div className="flex items-center gap-2 pt-2 border-t border-stone-100">
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700 transition-colors"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            <span>原文</span>
-                          </a>
-                          {canOperate &&
-                            (!item.isRead ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  onMarkRead(item.id)
-                                }}
-                                className="flex items-center gap-1 text-xs text-stone-500 hover:text-green-600 transition-colors ml-auto"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>已读</span>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  onMarkUnread(item.id)
-                                }}
-                                className="flex items-center gap-1 text-xs text-stone-500 hover:text-amber-600 transition-colors ml-auto"
+                            )}
+                            {/* Original Text */}
+                            {description && (
+                              <div className="mb-3 overflow-y-auto max-h-[200px] prose prose-sm prose-stone max-w-none">
+                                <MarkdownContent content={cleanText(description)} />
+                              </div>
+                            )}
+                            {/* Image */}
+                            {previewImage && (
+                              <div className="mb-3 rounded-lg overflow-hidden bg-stone-100">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={previewImage}
+                                  alt=""
+                                  className="w-full h-auto max-h-[300px] object-contain"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    ;(e.target as HTMLImageElement).style.display = 'none'
+                                  }}
+                                />
+                              </div>
+                            )}
+                            {/* Actions */}
+                            <div className="flex items-center gap-2 pt-2 border-t border-stone-100">
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs text-stone-500 hover:text-stone-700 transition-colors"
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />
-                                <span>未读</span>
-                              </button>
-                            ))}
-                        </div>
+                                <span>原文</span>
+                              </a>
+                              {canOperate &&
+                                (!item.isRead ? (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      onMarkRead(item.id)
+                                    }}
+                                    className="flex items-center gap-1 text-xs text-stone-500 hover:text-green-600 transition-colors ml-auto"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>已读</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      onMarkUnread(item.id)
+                                    }}
+                                    className="flex items-center gap-1 text-xs text-stone-500 hover:text-amber-600 transition-colors ml-auto"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    <span>未读</span>
+                                  </button>
+                                ))}
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -268,6 +310,17 @@ export default function TopicGroup({
         </div>
       )}
     </section>
+  )
+}
+/** 单条 item 详情加载骨架 */
+function ItemDetailSkeleton() {
+  return (
+    <div className="space-y-3 py-1" aria-label="加载中">
+      <div className="h-3 bg-stone-100 rounded w-1/3 animate-pulse" />
+      <div className="h-3 bg-stone-100 rounded w-5/6 animate-pulse" />
+      <div className="h-3 bg-stone-100 rounded w-4/6 animate-pulse" />
+      <div className="h-3 bg-stone-100 rounded w-2/3 animate-pulse" />
+    </div>
   )
 }
 /** 展开加载中的骨架屏占位 */
