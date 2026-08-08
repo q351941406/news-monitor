@@ -20,6 +20,8 @@ export {
   deleteEmptyTopics,
   getExistingTopics,
   getAggregationBatch,
+  getAllSummarizedItems,
+  deleteAllTopics,
   markItemsAggregated,
   getTopicGroupMeta,
   getTopicGroupItems,

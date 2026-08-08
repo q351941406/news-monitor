@@ -163,6 +163,34 @@ export async function markItemsAggregated(itemIds: string[]): Promise<void> {
     itemIds,
   ])
 }
+/** 获取某 source 全部已摘要 items（大扫除用，无分页） */
+export async function getAllSummarizedItems(
+  source: string,
+): Promise<
+  Array<{ id: string; title: string | null; summary: string | null; details: string | null }>
+> {
+  const pool = getPgPool()
+  const { rows } = await pool.query(
+    `SELECT ri.id, ri.title, aa.summary, aa.details
+     FROM raw_items ri
+     LEFT JOIN ai_analysis aa ON aa.item_id = ri.id
+     WHERE ri.source = $1 AND aa.summary IS NOT NULL
+     ORDER BY ri.fetched_at DESC`,
+    [source],
+  )
+  return rows.map((r) => ({
+    id: r.id as string,
+    title: r.title as string | null,
+    summary: r.summary as string | null,
+    details: r.details as string | null,
+  }))
+}
+/** 删除某 source 的全部主题组及关联（大扫除重建前调用） */
+export async function deleteAllTopics(source: string): Promise<number> {
+  const pool = getPgPool()
+  const result = await pool.query('DELETE FROM topic_groups WHERE source = $1', [source])
+  return result.rowCount ?? 0
+}
 /** 主题组元信息（不含 items，列表轻量加载用） */
 export interface TopicGroupMeta {
   id: string

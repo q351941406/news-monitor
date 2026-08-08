@@ -6,7 +6,7 @@ import { logRun } from './db'
 
 export interface RunContext {
   source: string
-  stage: 'scrape' | 'ai-process' | 'topic-aggregate'
+  stage: 'scrape' | 'ai-process' | 'topic-aggregate' | 'topic-reaggregate'
 }
 
 /**
