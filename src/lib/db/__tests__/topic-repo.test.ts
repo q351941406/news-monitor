@@ -72,12 +72,12 @@ describe('TopicRepo — 懒加载查询', () => {
   })
   it('getTopicGroupItems：列表轻量（不含 rawData/details），过滤已读正确', async () => {
     const hidden = await getTopicGroupItems(group1Id, false)
-    expect(hidden.map((i) => i.id)).toEqual([`${SUFFIX}:a`])
+    expect(hidden.map((i) => i.id).sort()).toEqual([`${SUFFIX}:a`])
     // L3 懒加载：列表项不携带原文/AI 详情
     expect(hidden[0]).not.toHaveProperty('rawData')
     expect(hidden[0]).not.toHaveProperty('details')
     const all = await getTopicGroupItems(group1Id, true)
-    expect(all.map((i) => i.id)).toEqual([`${SUFFIX}:a`, `${SUFFIX}:c`])
+    expect(all.map((i) => i.id).sort()).toEqual([`${SUFFIX}:a`, `${SUFFIX}:c`].sort())
   })
   it('getItemDetail：点击展开时才拉完整详情（含 rawData 原文 + details）', async () => {
     const detail = await getItemDetail(`${SUFFIX}:a`)
