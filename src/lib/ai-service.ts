@@ -151,18 +151,19 @@ function buildTopicPrompt(
 重点: ${item.details || '无'}`
     })
     .join('\n---\n')
-  // 限制历史主题数量（最多 10 个），避免 prompt 过长导致 DeepSeek 结构化输出失败
-  const recentTopics = existingTopics.slice(0, 10)
-  const history = recentTopics.map((t) => `- ${t.topic}：${t.summary || '无概括'}`).join('\n')
+  // 注入全部已有主题作为历史上下文（不再截断），让 AI 有全局视角、避免碎片化
+  const history = existingTopics.map((t) => `- ${t.topic}：${t.summary || '无概括'}`).join('\n')
   const historyBlock =
-    recentTopics.length > 0
-      ? `\n以下是你之前已经建立的主题（作为历史参考，请优先归并到这些主题）：\n${history}\n`
+    existingTopics.length > 0
+      ? `\n以下是你之前已经建立的全部主题（历史上下文）：\n${history}\n`
       : ''
   return `请分析以下 ${items.length} 条内容，将相关的内容聚合到一起。${historyBlock}
 规则：
-- 优先把内容归并到「已有主题」中（使用与已有主题完全一致的 topic 名称，保持主题稳定）
-- 只有确实无法归入任何已有主题的新方向，才创建新主题
-- 同类内容合并为一个主题，不要重复建组
+- 已有主题是你的「当前知识」：可以把新内容归并进去；也可以**修改已有主题**——
+  合并相近主题、重命名成更准确的名称、调整概括，让整个主题体系更整洁
+- 只有确实无法归入任何已有主题的新方向，才创建新主题（数量尽量少）
+- 同类内容必须合并为一个主题，禁止为同类内容重复建主题
+- 输出**全部相关主题**（包括你有把握的已有主题 + 新建主题），不要遗漏任何一条内容
 ${content}
 每个主题包含：topic（主题名称）、summary（一句话概括）、itemIds（包含的新闻 ID）。
 itemIds 使用每条开头的 ID 字段值。`

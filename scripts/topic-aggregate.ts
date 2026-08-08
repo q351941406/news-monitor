@@ -67,7 +67,13 @@ async function aggregateOneBatch(
   const existingTopics = await getExistingTopics(source)
   console.log(`  Existing topics: ${existingTopics.map((t) => t.topic).join(', ') || '（无）'}`)
   // 3. 按 prompt 字符数切分子批（关键修复：prompt 过大 → DeepSeek NoOutput）
-  const subBatches = splitByPromptLen(items)
+  //    预算需扣除「已有主题历史块」的长度（每批 prompt = items + 全部已有主题）
+  const historyChars = existingTopics.reduce(
+    (sum, t) => sum + t.topic.length + (t.summary?.length || 0) + 8,
+    0,
+  )
+  const itemBudget = Math.max(1500, 8000 - historyChars)
+  const subBatches = splitByPromptLen(items, itemBudget)
   console.log(`  Split into ${subBatches.length} sub-batch(es) by prompt length`)
   let totalGroups = 0
   for (let si = 0; si < subBatches.length; si++) {
