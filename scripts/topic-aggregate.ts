@@ -6,61 +6,47 @@ import { logger } from '@/lib/logger'
 import dotenv from 'dotenv'
 import path from 'path'
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
-import { neon } from '@neondatabase/serverless'
-import { drizzle } from 'drizzle-orm/neon-http'
-import { eq, and, desc } from 'drizzle-orm'
-import { rawItems, aiAnalysis } from '../src/lib/schema'
-import { storeTopicGroups } from '@/lib/db'
+import {
+  storeTopicGroups,
+  deleteEmptyTopics,
+  getExistingTopics,
+  getAggregationBatch,
+  markItemsAggregated,
+} from '@/lib/db'
 import { createAIService } from '@/lib/ai-service'
 import { withRunLog } from '@/lib/run-logger'
 const log = logger.child({ script: 'topic-aggregate' })
 
-// 数据库连接（独立连接，与 ai-process.ts 保持一致）
-function getDb() {
-  const sqlClient = neon(process.env.DATABASE_URL!)
-  return drizzle(sqlClient)
-}
-
-// 获取未读的 AI 摘要（带 summary + details）
-async function getUnreadSummaries(source: string) {
-  const db = getDb()
-  const results = await db
-    .select({
-      id: rawItems.id,
-      title: rawItems.title,
-      summary: aiAnalysis.summary,
-      details: aiAnalysis.details,
-    })
-    .from(rawItems)
-    .leftJoin(aiAnalysis, eq(rawItems.id, aiAnalysis.itemId))
-    .where(and(eq(rawItems.source, source), eq(rawItems.isRead, false)))
-    .orderBy(desc(rawItems.fetchedAt))
-    .limit(50)
-  return results.filter((r) => r.summary)
-}
-
-// 聚合主题
 async function aggregateTopics(source: string) {
-  console.log(`\n[${new Date().toISOString()}] Aggregating topics for ${source}...`)
+  console.log(`
+[${new Date().toISOString()}] Aggregating topics for ${source}...`)
   const result = await withRunLog({ source, stage: 'topic-aggregate' }, async () => {
-    // 1. 获取未读的 AI 分析结果
-    const items = await getUnreadSummaries(source)
-    console.log(`  Found ${items.length} unread items with summaries`)
-    if (items.length === 0) {
-      console.log('  No items to aggregate')
+    // 1. 取该 source 的待聚合批次（新数据优先 + 最旧补足，共 100 条）
+    const items = await getAggregationBatch(source, 100)
+    console.log(`  Found ${items.length} pending items`)
+    if (items.length < 3) {
+      console.log('  Not enough items to aggregate (< 3), skip')
       return { itemsCount: 0 }
     }
-    // 2. 调用 AI 进行主题聚合
+    // 2. 取该 source 已有主题（作 AI 历史上下文）
+    const existingTopics = await getExistingTopics(source)
+    console.log(`  Existing topics: ${existingTopics.map((t) => t.topic).join(', ') || '（无）'}`)
+    // 3. 调用 AI 进行主题聚合（带历史上下文，增量归并）
     const aiService = createAIService()
-    const groups = await aiService.generateTopicAggregation(items)
+    const groups = await aiService.generateTopicAggregation(items, existingTopics)
     if (!groups || groups.length === 0) {
       console.log('  ❌ No topics generated')
       return { itemsCount: 0 }
     }
     console.log(`  AI returned ${groups.length} topics`)
-    // 3. 存储主题聚合
+    // 4. 增量 upsert 存储（已有主题追加成员 / 新主题新建）
     await storeTopicGroups(source, groups)
-    console.log(`  ✅ Stored ${groups.length} topic groups`)
+    // 5. 删除该 source 下已无任何 items 的空主题
+    const deleted = await deleteEmptyTopics(source)
+    console.log(`  ✅ Stored ${groups.length} topic groups, deleted ${deleted} empty topics`)
+    // 6. 标记本批已聚合（队列消费完成，挪到队尾）
+    await markItemsAggregated(items.map((i) => i.id))
+    console.log(`  ✅ Marked ${items.length} items as aggregated`)
     return { itemsCount: groups.length }
   })
   return result

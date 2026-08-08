@@ -10,6 +10,7 @@ export const rawItems = pgTable('raw_items', {
   isRead: boolean('is_read').default(false).notNull(), // 已读状态
   fetchedAt: bigint('fetched_at', { mode: 'number' }).notNull(), // 抓取时间戳
   createdAt: timestamp('created_at').defaultNow(),
+  aggregatedAt: timestamp('aggregated_at'), // 主题聚合时间（NULL=尚未聚合，队列按此消费）
 })
 
 // AI 分析结果表

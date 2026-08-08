@@ -6,7 +6,7 @@
  * - getTopicGroupItems: 点击展开时才拉单组 items，一条 JOIN
  * - markGroupAsRead: 整组标记已读，单条 UPDATE
  */
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { rawItems, topicGroups, topicItems } from '../schema'
 import { getDb, getPgPool, type NewsItem } from './connection'
 /** 初始化数据库表 */
@@ -36,30 +36,34 @@ export async function initDatabase() {
     )
   `)
 }
-/** 存储主题聚合 */
+/**
+ * 增量 upsert 主题聚合（不再全删重建）
+ * - AI 返回的组按 topic 名归并：已有同名主题 → 追加成员；新主题 → 新建组
+ * - 幂等：item 已存在于该主题下则跳过
+ */
 export async function storeTopicGroups(
   source: string,
   groups: Array<{ topic: string; summary: string; itemIds: string[] }>,
 ): Promise<void> {
   const db = getDb()
-  // 删除该数据源的旧主题
-  const oldTopics = await db
-    .select({ id: topicGroups.id })
+  // 取该 source 已有主题，建立 topic名 → id 映射（复用同名主题，避免主题漂移）
+  const existing = await db
+    .select({ id: topicGroups.id, topic: topicGroups.topic })
     .from(topicGroups)
     .where(eq(topicGroups.source, source))
-  for (const old of oldTopics) {
-    await db.delete(topicItems).where(eq(topicItems.topicId, old.id))
-    await db.delete(topicGroups).where(eq(topicGroups.id, old.id))
-  }
-  // 插入新主题
+  const topicIdByName = new Map(existing.map((t) => [t.topic, t.id]))
   for (const group of groups) {
-    const topicId = `${source}:topic:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
-    await db.insert(topicGroups).values({
-      id: topicId,
-      source,
-      topic: group.topic,
-      summary: group.summary,
-    })
+    let topicId = topicIdByName.get(group.topic)
+    if (!topicId) {
+      topicId = `${source}:topic:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+      await db.insert(topicGroups).values({
+        id: topicId,
+        source,
+        topic: group.topic,
+        summary: group.summary,
+      })
+      topicIdByName.set(group.topic, topicId)
+    }
     for (const itemId of group.itemIds) {
       const exists = await db
         .select({ id: rawItems.id })
@@ -67,12 +71,97 @@ export async function storeTopicGroups(
         .where(eq(rawItems.id, itemId))
         .limit(1)
       if (exists.length > 0) {
-        await db.insert(topicItems).values({ topicId, itemId })
+        // 幂等：已存在关联则跳过
+        const linked = await db
+          .select({ topicId: topicItems.topicId })
+          .from(topicItems)
+          .where(and(eq(topicItems.topicId, topicId), eq(topicItems.itemId, itemId)))
+          .limit(1)
+        if (linked.length === 0) {
+          await db.insert(topicItems).values({ topicId, itemId })
+        }
       } else {
         console.log(`  ⚠️ Skipping invalid itemId: ${itemId}`)
       }
     }
   }
+}
+/** 删除该 source 下已无任何 items 的空主题（主题组不再保留空壳） */
+export async function deleteEmptyTopics(source: string): Promise<number> {
+  const pool = getPgPool()
+  const result = await pool.query(
+    `DELETE FROM topic_groups tg
+     WHERE tg.source = $1
+       AND NOT EXISTS (SELECT 1 FROM topic_items ti WHERE ti.topic_id = tg.id)`,
+    [source],
+  )
+  return result.rowCount ?? 0
+}
+/** 获取该 source 已有主题列表（作 AI 历史上下文，只传 topic 名 + 概括） */
+export async function getExistingTopics(
+  source: string,
+): Promise<Array<{ topic: string; summary: string }>> {
+  const db = getDb()
+  const rows = await db
+    .select({ topic: topicGroups.topic, summary: topicGroups.summary })
+    .from(topicGroups)
+    .where(eq(topicGroups.source, source))
+  return rows
+}
+/**
+ * 获取该 source 的待聚合批次（队列消费）：
+ * 新数据优先（保证最新热点立即可见）＋ 最旧未聚合补足（消化积压）
+ * 总数为 batchSize
+ */
+export async function getAggregationBatch(
+  source: string,
+  batchSize: number = 100,
+): Promise<
+  Array<{ id: string; title: string | null; summary: string | null; details: string | null }>
+> {
+  const pool = getPgPool()
+  // 新数据：未聚合且 fetched_at 最新（优先取最新一半，保证新热点可见）
+  const freshLimit = Math.max(10, Math.floor(batchSize / 2))
+  const fresh = await pool.query(
+    `SELECT ri.id, ri.title, aa.summary, aa.details
+     FROM raw_items ri
+     LEFT JOIN ai_analysis aa ON aa.item_id = ri.id
+     WHERE ri.source = $1 AND ri.aggregated_at IS NULL AND aa.summary IS NOT NULL
+     ORDER BY ri.fetched_at DESC
+     LIMIT $2`,
+    [source, freshLimit],
+  )
+  const freshIds = new Set(fresh.rows.map((r) => r.id))
+  // 旧数据：未聚合且 fetched_at 最旧（补足剩余，消化积压）
+  const oldLimit = batchSize - fresh.rows.length
+  const old =
+    oldLimit > 0
+      ? await pool.query(
+          `SELECT ri.id, ri.title, aa.summary, aa.details
+         FROM raw_items ri
+         LEFT JOIN ai_analysis aa ON aa.item_id = ri.id
+         WHERE ri.source = $1 AND ri.aggregated_at IS NULL AND aa.summary IS NOT NULL
+           AND NOT (ri.id = ANY($2::text[]))
+         ORDER BY ri.fetched_at ASC
+         LIMIT $3`,
+          [source, [...freshIds], oldLimit],
+        )
+      : { rows: [] as any[] }
+  const merged = [...fresh.rows, ...old.rows]
+  return merged.map((r) => ({
+    id: r.id as string,
+    title: r.title as string | null,
+    summary: r.summary as string | null,
+    details: r.details as string | null,
+  }))
+}
+/** 标记一批 item 已聚合（队列消费完成，时间戳=现在，相当于挪到队尾） */
+export async function markItemsAggregated(itemIds: string[]): Promise<void> {
+  if (itemIds.length === 0) return
+  const pool = getPgPool()
+  await pool.query('UPDATE raw_items SET aggregated_at = NOW() WHERE id = ANY($1::text[])', [
+    itemIds,
+  ])
 }
 /** 主题组元信息（不含 items，列表轻量加载用） */
 export interface TopicGroupMeta {

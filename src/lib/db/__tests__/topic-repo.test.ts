@@ -1,12 +1,18 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createTestTables, insertTestItem, dropTestSchema } from './db-test-helper'
 import { storeRawItems } from '../news-repo'
+import { storeAIAnalysis } from '../ai-repo'
+import { getPgPool } from '../connection'
 import {
   storeTopicGroups,
   getTopicGroupMeta,
   getTopicGroupItems,
   getItemDetail,
   markGroupAsRead,
+  getExistingTopics,
+  deleteEmptyTopics,
+  getAggregationBatch,
+  markItemsAggregated,
 } from '../topic-repo'
 import { markAsRead } from '../read-repo'
 import type { NewRawItem } from '../../schema'
@@ -88,5 +94,95 @@ describe('TopicRepo — 懒加载查询', () => {
     expect(metas).toHaveLength(0)
     const all = await getTopicGroupItems(group1Id, false)
     expect(all).toHaveLength(0)
+  })
+})
+
+describe('TopicRepo — 队列增量聚合', () => {
+  beforeAll(async () => {
+    await createTestTables()
+  })
+  afterAll(async () => {
+    await dropTestSchema()
+  })
+  it('storeTopicGroups：同名主题复用（增量 upsert，不重建），item 幂等', async () => {
+    const suffix = `q1:${Date.now()}`
+    await storeRawItems([
+      { ...insertTestItem({ id: `${suffix}:a`, title: 'Queue A' }), source: SOURCE },
+      { ...insertTestItem({ id: `${suffix}:b`, title: 'Queue B' }), source: SOURCE },
+      { ...insertTestItem({ id: `${suffix}:c`, title: 'Queue C' }), source: SOURCE },
+    ] as unknown as NewRawItem[])
+    // 第一轮：建「AI 工具」主题
+    await storeTopicGroups(SOURCE, [
+      { topic: 'AI 工具', summary: '第一轮', itemIds: [`${suffix}:a`] },
+    ])
+    const first = await getTopicGroupMeta(SOURCE, true)
+    const aiGroup = first.find((g) => g.topic === 'AI 工具')!
+    expect(aiGroup.totalCount).toBe(1)
+    // 第二轮：同一主题追加成员（不应新建同名组）
+    await storeTopicGroups(SOURCE, [
+      { topic: 'AI 工具', summary: '第二轮', itemIds: [`${suffix}:b`, `${suffix}:c`] },
+    ])
+    const second = await getTopicGroupMeta(SOURCE, true)
+    const aiGroups = second.filter((g) => g.topic === 'AI 工具')
+    expect(aiGroups).toHaveLength(1) // 同名只保留一个组
+    expect(aiGroups[0].totalCount).toBe(3) // a+b+c 全部归入
+  })
+  it('getExistingTopics：只返回该 source 的主题名 + 概括', async () => {
+    const topics = await getExistingTopics(SOURCE)
+    expect(topics.some((t) => t.topic === 'AI 工具')).toBe(true)
+    // 字段形状：topic + summary
+    for (const t of topics) {
+      expect(typeof t.topic).toBe('string')
+      expect(typeof t.summary).toBe('string')
+    }
+  })
+  it('deleteEmptyTopics：删除无 items 的空主题', async () => {
+    const suffix = `q2:${Date.now()}`
+    await storeRawItems([
+      { ...insertTestItem({ id: `${suffix}:a`, title: 'Empty A' }), source: SOURCE },
+    ] as unknown as NewRawItem[])
+    // 建一个主题（成员 a）；随后 a 被数据清理删除 → 级联删除关联 → 主题变空
+    await storeTopicGroups(SOURCE, [{ topic: '临时主题', summary: 'x', itemIds: [`${suffix}:a`] }])
+    // 模拟 cleanupOldData 删除 raw_items（ON DELETE CASCADE 级联清掉 topic_items）
+    const pool = getPgPool()
+    await pool.query('DELETE FROM raw_items WHERE id = $1', [`${suffix}:a`])
+    const deleted = await deleteEmptyTopics(SOURCE)
+    expect(deleted).toBeGreaterThanOrEqual(1)
+    const after = await getTopicGroupMeta(SOURCE, true)
+    expect(after.some((g) => g.topic === '临时主题')).toBe(false)
+  })
+  it('markItemsAggregated：队列消费后标记聚合，getAggregationBatch 不再返回', async () => {
+    const suffix = `q3:${Date.now()}`
+    await storeRawItems([
+      { ...insertTestItem({ id: `${suffix}:a`, title: 'Agg A' }), source: SOURCE },
+      { ...insertTestItem({ id: `${suffix}:b`, title: 'Agg B' }), source: SOURCE },
+    ] as unknown as NewRawItem[])
+    await storeAIAnalysis(`${suffix}:a`, '摘要 A')
+    await storeAIAnalysis(`${suffix}:b`, '摘要 B')
+    // 标记前：都在待聚合批次里
+    const before = await getAggregationBatch(SOURCE, 100)
+    const ids = before.map((i) => i.id)
+    expect(ids).toContain(`${suffix}:a`)
+    // 标记后：不再出现
+    await markItemsAggregated([`${suffix}:a`, `${suffix}:b`])
+    const after = await getAggregationBatch(SOURCE, 100)
+    expect(after.map((i) => i.id)).not.toContain(`${suffix}:a`)
+    expect(after.map((i) => i.id)).not.toContain(`${suffix}:b`)
+  })
+  it('getAggregationBatch：新数据优先，source 隔离', async () => {
+    const suffix = `q4:${Date.now()}`
+    // github 源：新数据
+    await storeRawItems([
+      { ...insertTestItem({ id: `${suffix}:gh`, title: 'GH New' }), source: 'github' },
+    ] as unknown as NewRawItem[])
+    await storeAIAnalysis(`${suffix}:gh`, 'GH 摘要')
+    // producthunt 源：不同 source 的数据不应被取到
+    await storeRawItems([
+      { ...insertTestItem({ id: `${suffix}:ph`, title: 'PH Item' }), source: 'producthunt' },
+    ] as unknown as NewRawItem[])
+    await storeAIAnalysis(`${suffix}:ph`, 'PH 摘要')
+    const ghBatch = await getAggregationBatch('github', 100)
+    expect(ghBatch.map((i) => i.id)).toContain(`${suffix}:gh`)
+    expect(ghBatch.map((i) => i.id)).not.toContain(`${suffix}:ph`)
   })
 })

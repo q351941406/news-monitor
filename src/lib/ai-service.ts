@@ -29,7 +29,7 @@ export interface AIService {
     items: Array<{ id: string; title: string | null; rawData: unknown }>,
   ): Promise<BatchSummaryResult[]>
 
-  /** 主题聚合：基于已有摘要，将相关 items 聚合到主题下 */
+  /** 主题聚合：基于已有摘要 + 已有主题列表（历史上下文），将 items 聚合/归并到主题下 */
   generateTopicAggregation(
     items: Array<{
       id: string
@@ -37,6 +37,7 @@ export interface AIService {
       summary: string | null
       details: string | null
     }>,
+    existingTopics: Array<{ topic: string; summary: string }>,
   ): Promise<TopicGroup[]>
 }
 
@@ -140,6 +141,7 @@ function buildTopicPrompt(
     summary: string | null
     details: string | null
   }>,
+  existingTopics: Array<{ topic: string; summary: string }> = [],
 ): string {
   const content = items
     .map((item, i) => {
@@ -149,8 +151,16 @@ function buildTopicPrompt(
 重点: ${item.details || '无'}`
     })
     .join('\n---\n')
-
-  return `请分析以下 ${items.length} 条内容，将相关的内容聚合到一起。
+  const history = existingTopics.map((t, i) => `- ${t.topic}：${t.summary || '无概括'}`).join('\n')
+  const historyBlock =
+    existingTopics.length > 0
+      ? `\n以下是你之前已经建立的主题（作为历史参考，请优先归并到这些主题）：\n${history}\n`
+      : ''
+  return `请分析以下 ${items.length} 条内容，将相关的内容聚合到一起。${historyBlock}
+规则：
+- 优先把内容归并到「已有主题」中（使用与已有主题完全一致的 topic 名称，保持主题稳定）
+- 只有确实无法归入任何已有主题的新方向，才创建新主题
+- 同类内容合并为一个主题，不要重复建组
 ${content}
 每个主题包含：topic（主题名称）、summary（一句话概括）、itemIds（包含的新闻 ID）。
 itemIds 使用每条开头的 ID 字段值。`
@@ -214,10 +224,9 @@ export function createAIService(): AIService {
       return allResults
     },
 
-    async generateTopicAggregation(items) {
+    async generateTopicAggregation(items, existingTopics) {
       if (items.length < 3) return []
-
-      const prompt = buildTopicPrompt(items)
+      const prompt = buildTopicPrompt(items, existingTopics)
       const output = await callAIWithRetry(model, topicSchema, prompt, 3, 16000)
       return output?.groups || []
     },

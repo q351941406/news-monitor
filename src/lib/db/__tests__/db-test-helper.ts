@@ -69,7 +69,8 @@ export async function createTestTables() {
         raw_data JSONB NOT NULL,
         is_read BOOLEAN DEFAULT FALSE NOT NULL,
         fetched_at BIGINT NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW()
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        aggregated_at TIMESTAMPTZ
       )
     `)
     await pool.query(`

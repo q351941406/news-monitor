@@ -17,6 +17,10 @@ export { markAsRead, markAsUnread, markAllAsRead, resetAllRead } from './read-re
 export {
   initDatabase,
   storeTopicGroups,
+  deleteEmptyTopics,
+  getExistingTopics,
+  getAggregationBatch,
+  markItemsAggregated,
   getTopicGroupMeta,
   getTopicGroupItems,
   getItemDetail,
