@@ -73,6 +73,11 @@ async function aggregateOneBatch(
   for (let si = 0; si < subBatches.length; si++) {
     const sub = subBatches[si]
     console.log(`  --- Sub-batch ${si + 1}/${subBatches.length} (${sub.length} items) ---`)
+    // 子批不足 3 条时，AI 无法聚类（generateTopicAggregation 返回空是正常降级），跳过即可
+    if (sub.length < 3) {
+      console.log(`  Sub-batch ${si + 1} has ${sub.length} item(s) < 3, skip`)
+      continue
+    }
     const groups = await aiService.generateTopicAggregation(sub, existingTopics)
     if (!groups || groups.length === 0) {
       throw new Error(
