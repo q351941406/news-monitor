@@ -229,7 +229,7 @@ export function createAIService(): AIService {
     async generateTopicAggregation(items, existingTopics) {
       if (items.length < 3) return []
       const prompt = buildTopicPrompt(items, existingTopics)
-      const output = await callAIWithRetry(model, topicSchema, prompt, 5, 16000)
+      const output = await callAIWithRetry(model, topicSchema, prompt, 3, 16000)
       return output?.groups || []
     },
   }
