@@ -151,9 +151,11 @@ function buildTopicPrompt(
 重点: ${item.details || '无'}`
     })
     .join('\n---\n')
-  const history = existingTopics.map((t, i) => `- ${t.topic}：${t.summary || '无概括'}`).join('\n')
+  // 限制历史主题数量（最多 10 个），避免 prompt 过长导致 DeepSeek 结构化输出失败
+  const recentTopics = existingTopics.slice(0, 10)
+  const history = recentTopics.map((t) => `- ${t.topic}：${t.summary || '无概括'}`).join('\n')
   const historyBlock =
-    existingTopics.length > 0
+    recentTopics.length > 0
       ? `\n以下是你之前已经建立的主题（作为历史参考，请优先归并到这些主题）：\n${history}\n`
       : ''
   return `请分析以下 ${items.length} 条内容，将相关的内容聚合到一起。${historyBlock}
@@ -227,7 +229,7 @@ export function createAIService(): AIService {
     async generateTopicAggregation(items, existingTopics) {
       if (items.length < 3) return []
       const prompt = buildTopicPrompt(items, existingTopics)
-      const output = await callAIWithRetry(model, topicSchema, prompt, 3, 16000)
+      const output = await callAIWithRetry(model, topicSchema, prompt, 5, 16000)
       return output?.groups || []
     },
   }
