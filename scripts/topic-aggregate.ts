@@ -17,12 +17,46 @@ import { createAIService } from '@/lib/ai-service'
 import { withRunLog } from '@/lib/run-logger'
 const log = logger.child({ script: 'topic-aggregate' })
 
-/** 单批聚合：取一批 → AI 聚合 → 增量 upsert → 标记已聚合，返回消费条数（0=无积压/失败） */
+/** 估算单条 item 在聚合 prompt 中的字符数（与 buildTopicPrompt 格式一致） */
+function itemPromptLen(item: {
+  id: string
+  title: string | null
+  summary: string | null
+  details: string | null
+}): number {
+  return (
+    `[x] ID: ${item.id}
+标题: ${item.title || '无'}
+摘要: ${item.summary || '无'}
+重点: ${item.details || '无'}`.length + 6
+  )
+}
+/** 按 prompt 字符数切分批次：每批总长不超过 MAX_PROMPT_CHARS，避免 DeepSeek 结构化输出失败 */
+function splitByPromptLen<
+  T extends { id: string; title: string | null; summary: string | null; details: string | null },
+>(items: T[], maxChars: number = 8000): T[][] {
+  const batches: T[][] = []
+  let cur: T[] = []
+  let curLen = 0
+  for (const item of items) {
+    const len = itemPromptLen(item)
+    if (cur.length > 0 && curLen + len > maxChars) {
+      batches.push(cur)
+      cur = []
+      curLen = 0
+    }
+    cur.push(item)
+    curLen += len
+  }
+  if (cur.length > 0) batches.push(cur)
+  return batches
+}
+/** 单批聚合：取一批 → 按字符数切分子批 → 逐子批 AI 聚合 → 增量 upsert → 标记已聚合 */
 async function aggregateOneBatch(
   source: string,
   aiService: ReturnType<typeof createAIService>,
 ): Promise<number> {
-  // 1. 取该 source 的待聚合批次（新数据优先 + 最旧补足，每批 30 条，减小 prompt 保证 AI 可靠）
+  // 1. 取该 source 的待聚合批次（新数据优先 + 最旧补足）
   const items = await getAggregationBatch(source, 50)
   console.log(`  Found ${items.length} pending items`)
   if (items.length < 3) {
@@ -32,21 +66,26 @@ async function aggregateOneBatch(
   // 2. 取该 source 已有主题（作 AI 历史上下文）
   const existingTopics = await getExistingTopics(source)
   console.log(`  Existing topics: ${existingTopics.map((t) => t.topic).join(', ') || '（无）'}`)
-  // 3. 调用 AI 进行主题聚合（带历史上下文，增量归并）
-  const groups = await aiService.generateTopicAggregation(items, existingTopics)
-  if (!groups || groups.length === 0) {
-    // 有数据但 AI 没产出主题 = 真实失败，必须抛错让 workflow 标记失败（触发自动重试 + Sentry 告警）
-    throw new Error(
-      `AI topic aggregation failed for ${source}: no topics generated (${items.length} items pending)`,
-    )
+  // 3. 按 prompt 字符数切分子批（关键修复：prompt 过大 → DeepSeek NoOutput）
+  const subBatches = splitByPromptLen(items)
+  console.log(`  Split into ${subBatches.length} sub-batch(es) by prompt length`)
+  let totalGroups = 0
+  for (let si = 0; si < subBatches.length; si++) {
+    const sub = subBatches[si]
+    console.log(`  --- Sub-batch ${si + 1}/${subBatches.length} (${sub.length} items) ---`)
+    const groups = await aiService.generateTopicAggregation(sub, existingTopics)
+    if (!groups || groups.length === 0) {
+      throw new Error(
+        `AI topic aggregation failed for ${source}: no topics generated for sub-batch ${si + 1} (${sub.length} items)`,
+      )
+    }
+    await storeTopicGroups(source, groups)
+    totalGroups += groups.length
   }
-  console.log(`  AI returned ${groups.length} topics`)
-  // 4. 增量 upsert 存储（已有主题追加成员 / 新主题新建）
-  await storeTopicGroups(source, groups)
-  // 5. 删除该 source 下已无任何 items 的空主题
+  // 4. 删除该 source 下已无任何 items 的空主题
   const deleted = await deleteEmptyTopics(source)
-  console.log(`  ✅ Stored ${groups.length} topic groups, deleted ${deleted} empty topics`)
-  // 6. 标记本批已聚合（队列消费完成，挪到队尾）
+  console.log(`  ✅ Stored ${totalGroups} topic groups, deleted ${deleted} empty topics`)
+  // 5. 标记本批已聚合（队列消费完成，挪到队尾）
   await markItemsAggregated(items.map((i) => i.id))
   console.log(`  ✅ Marked ${items.length} items as aggregated`)
   return items.length
