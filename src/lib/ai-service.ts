@@ -39,10 +39,6 @@ export interface AIService {
     }>,
     existingTopics: Array<{ topic: string; summary: string }>,
   ): Promise<TopicGroup[]>
-  /** 主题整理（大扫除）：把已有主题合并/重命名/去重，输出规范主题清单 */
-  reorganizeTopics(
-    existingTopics: Array<{ topic: string; summary: string }>,
-  ): Promise<Array<{ topic: string; summary: string }>>
 }
 
 // ─── 生产实现 ───────────────────────────────────────────
@@ -255,30 +251,6 @@ export function createAIService(): AIService {
       const prompt = buildTopicPrompt(items, existingTopics)
       const output = await callAIWithRetry(model, topicSchema, prompt, 3, 16000)
       return output?.groups || []
-    },
-    async reorganizeTopics(existingTopics) {
-      const reorgSchema = z.object({
-        topics: z.array(
-          z.object({
-            topic: z.string().describe('整理后的主题名称（合并/重命名后）'),
-            summary: z.string().describe('该主题的一句话概括'),
-          }),
-        ),
-      })
-      const list = existingTopics
-        .map((t, i) => `${i + 1}. ${t.topic}：${t.summary || '无概括'}`)
-        .join('\n')
-      const prompt = `请整理以下 ${existingTopics.length} 个主题。这些主题来自 AI 多次聚合，存在大量重复和碎片化问题（同类内容被拆成多个主题、命名混乱、存在无意义主题）。
-要求：
-- 合并所有相近/重复的主题为一个（主题名取最准确、最简洁的）
-- 重命名命名不当的主题，使其准确、简洁、专业
-- 删除无意义的主题（如「信息不明」「描述缺失」这类占位主题，除非确实有足够内容）
-- 目标：输出 ${Math.max(8, Math.ceil(existingTopics.length / 8))} 个左右、结构清晰、互不重叠的主题
-- 输出顺序按主题重要程度降序
-现有主题：
-${list}`
-      const output = await callAIWithRetry(model, reorgSchema, prompt, 3, 16000)
-      return output?.topics || []
     },
   }
 }

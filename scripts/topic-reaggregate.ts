@@ -119,16 +119,12 @@ async function main() {
     async (): Promise<{ itemsCount: number }> => {
       const ai = createAIService()
 
-      // ── 阶段 A：整理主题清单 ──
-      console.log(`\n[${new Date().toISOString()}] 阶段 A：整理主题清单...`)
+      // ── 阶段 A：规则预合并主题清单（不依赖 AI，避免超长 prompt）──
+      console.log(`\n[${new Date().toISOString()}] 阶段 A：规则预合并主题...`)
       const existingTopics = await getExistingTopics(source)
       console.log(`  现有主题: ${existingTopics.length} 个`)
-      // ① 规则预合并（文本相似度，不依赖 AI）
-      const ruleMerged = ruleMergeTopics(existingTopics)
-      console.log(`  规则预合并后: ${ruleMerged.length} 个`)
-      // ② AI 精修（输入已缩小，避免超长 prompt）
-      const reorganized = await ai.reorganizeTopics(ruleMerged)
-      console.log(`  ✅ 整理后: ${reorganized.length} 个主题`)
+      const reorganized = ruleMergeTopics(existingTopics)
+      console.log(`  规则预合并后: ${reorganized.length} 个主题`)
       reorganized.forEach((t, i) => console.log(`    ${i + 1}. ${t.topic}`))
 
       // ── 阶段 B：全量 items 分批归并 ──
