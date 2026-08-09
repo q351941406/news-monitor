@@ -151,8 +151,10 @@ function buildTopicPrompt(
 重点: ${item.details || '无'}`
     })
     .join('\n---\n')
-  // 注入全部已有主题作为历史上下文（不再截断），让 AI 有全局视角、避免碎片化
-  const history = existingTopics.map((t) => `- ${t.topic}：${t.summary || '无概括'}`).join('\n')
+  // 注入全部已有主题作为历史上下文，让 AI 有全局视角、避免碎片化
+  // 只注入主题名（summary 会显著增大 prompt 体积：208 个主题 × summary ≈ 4 万字符，
+  // 是线上 NoOutput 的根因）；归并判断主要靠主题名，AI 能自行理解
+  const history = existingTopics.map((t) => `- ${t.topic}`).join('\n')
   const historyBlock =
     existingTopics.length > 0
       ? `\n以下是你之前已经建立的全部主题（历史上下文）：\n${history}\n`
