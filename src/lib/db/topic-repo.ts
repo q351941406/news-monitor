@@ -156,6 +156,14 @@ export async function getAggregationBatch(
   }))
 }
 /** 标记一批 item 已聚合（队列消费完成，时间戳=现在，相当于挪到队尾） */
+/** 重置聚合标记：把该 source 全部已聚合数据重新标记为未聚合（大扫除全量重聚用） */
+export async function resetAggregationMarks(source: string): Promise<number> {
+  const pool = getPgPool()
+  const result = await pool.query('UPDATE raw_items SET aggregated_at = NULL WHERE source = $1', [
+    source,
+  ])
+  return result.rowCount ?? 0
+}
 export async function markItemsAggregated(itemIds: string[]): Promise<void> {
   if (itemIds.length === 0) return
   const pool = getPgPool()

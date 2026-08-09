@@ -12,11 +12,12 @@ import dotenv from 'dotenv'
 import path from 'path'
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
 import {
-  getAllSummarizedItems,
   getExistingTopics,
-  deleteAllTopics,
   storeTopicGroups,
   markItemsAggregated,
+  resetAggregationMarks,
+  getAggregationBatch,
+  deleteEmptyTopics,
 } from '@/lib/db'
 import { createAIService } from '@/lib/ai-service'
 import { withRunLog } from '@/lib/run-logger'
@@ -149,46 +150,46 @@ async function main() {
       reorganized.forEach((t, i) => console.log(`    ${i + 1}. ${t.topic}`))
 
       // ── 阶段 C：合并 + 全删重建 ──
-      // ── 阶段 B：全量 items 一次性归并（不分批）──
-      console.log(`\n[${new Date().toISOString()}] 阶段 B：归并...`)
-      const allItems = await getAllSummarizedItems(source)
-      console.log(`  全部已摘要 items: ${allItems.length} 条`)
-      const t0 = Date.now()
-      const allGroups = (await ai.generateTopicAggregation(allItems, reorganized)) || []
-      console.log(
-        `  AI 归并耗时 ${((Date.now() - t0) / 1000).toFixed(1)}s，产出 ${allGroups.length} 个主题`,
-      )
-      console.log(`\n[${new Date().toISOString()}] 阶段 C：合并重建...`)
-      // 按 topic 名合并（同名去重）
-      const mergedMap = new Map<string, { topic: string; summary: string; itemIds: Set<string> }>()
-      for (const g of allGroups) {
-        const key = g.topic.trim()
-        if (!mergedMap.has(key)) {
-          mergedMap.set(key, { topic: key, summary: g.summary, itemIds: new Set() })
+      // ── 阶段 B：队列循环消费（复用爬虫模式：一次 getAggregationBatch 50 条）──
+      console.log(`\n[${new Date().toISOString()}] 阶段 B：队列循环消费...`)
+      // 1. 重置队列：让全部数据（含已聚合）重新进队列，实现全量重聚
+      const reset = await resetAggregationMarks(source)
+      console.log(`  重置聚合标记: ${reset} 条`)
+      // 2. 循环消费：每次取 50 条 → 按字符数切子批 → AI 归并 → 增量 upsert → 标记
+      let totalItems = 0
+      let totalGroups = 0
+      let rounds = 0
+      // 队列消费循环（最多 20 轮，防止死循环）
+      while (rounds < 20) {
+        const batch = await getAggregationBatch(source, 50)
+        if (batch.length < 3) break
+        rounds++
+        console.log(`  --- 轮 ${rounds}: ${batch.length} 条 ---`)
+        // 已有主题（含本轮之前归并的）作历史上下文
+        const existing = await getExistingTopics(source)
+        const historyChars = existing.reduce(
+          (s, t) => s + t.topic.length + (t.summary?.length || 0) + 8,
+          0,
+        )
+        const itemBudget = Math.max(1500, 8000 - historyChars)
+        const subBatches = splitByPromptLen(batch, itemBudget)
+        for (let si = 0; si < subBatches.length; si++) {
+          const sub = subBatches[si]
+          if (sub.length < 3) continue
+          console.log(`    子批 ${si + 1}/${subBatches.length} (${sub.length} 条)`)
+          const groups = await ai.generateTopicAggregation(sub, existing)
+          if (groups?.length) {
+            await storeTopicGroups(source, groups)
+            totalGroups += groups.length
+          }
         }
-        const target = mergedMap.get(key)!
-        if (g.summary && g.summary.length > target.summary.length) target.summary = g.summary
-        g.itemIds.forEach((id) => target.itemIds.add(id))
+        await markItemsAggregated(batch.map((i) => i.id))
+        totalItems += batch.length
       }
-      const finalGroups = [...mergedMap.values()].map((g) => ({
-        topic: g.topic,
-        summary: g.summary,
-        itemIds: [...g.itemIds],
-      }))
-      console.log(
-        `  合并后主题: ${finalGroups.length} 个（覆盖 ${finalGroups.reduce((s, g) => s + g.itemIds.length, 0)} 条）`,
-      )
-
-      // 全删重建
-      const deleted = await deleteAllTopics(source)
-      console.log(`  删除旧主题: ${deleted} 个`)
-      await storeTopicGroups(source, finalGroups)
-      console.log(`  ✅ 已写入 ${finalGroups.length} 个新主题`)
-
-      // 标记全部已聚合
-      await markItemsAggregated(allItems.map((i) => i.id))
-      console.log(`  ✅ 已标记 ${allItems.length} 条全部聚合完成`)
-      return { itemsCount: allItems.length }
+      // 3. 删除空主题
+      const deleted = await deleteEmptyTopics(source)
+      console.log(`  ✅ 消费 ${totalItems} 条 / ${totalGroups} 个主题组，删除空主题 ${deleted} 个`)
+      return { itemsCount: totalItems }
     },
   )
 }

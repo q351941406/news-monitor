@@ -23,6 +23,7 @@ export {
   getAllSummarizedItems,
   deleteAllTopics,
   markItemsAggregated,
+  resetAggregationMarks,
   getTopicGroupMeta,
   getTopicGroupItems,
   getItemDetail,
