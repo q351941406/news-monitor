@@ -103,16 +103,26 @@ export async function deleteEmptyTopics(source: string): Promise<number> {
   )
   return result.rowCount ?? 0
 }
-/** 获取该 source 已有主题列表（作 AI 历史上下文，只传 topic 名 + 概括） */
+/** 获取该 source 已有主题列表（作 AI 历史上下文：topic 名 + 概括 + 当前成员数）
+ * itemCount 让 AI 感知主题规模，避免为已有规模的主题再造相似新主题 */
 export async function getExistingTopics(
   source: string,
-): Promise<Array<{ topic: string; summary: string }>> {
-  const db = getDb()
-  const rows = await db
-    .select({ topic: topicGroups.topic, summary: topicGroups.summary })
-    .from(topicGroups)
-    .where(eq(topicGroups.source, source))
-  return rows
+): Promise<Array<{ topic: string; summary: string; itemCount: number }>> {
+  const pool = getPgPool()
+  const { rows } = await pool.query(
+    `SELECT tg.topic, tg.summary, COUNT(ti.item_id)::int AS item_count
+     FROM topic_groups tg
+     LEFT JOIN topic_items ti ON ti.topic_id = tg.id
+     WHERE tg.source = $1
+     GROUP BY tg.id, tg.topic, tg.summary
+     ORDER BY item_count DESC, tg.created_at DESC`,
+    [source],
+  )
+  return rows.map((r) => ({
+    topic: r.topic as string,
+    summary: r.summary as string,
+    itemCount: (r.item_count as number) ?? 0,
+  }))
 }
 /**
  * 获取该 source 的待聚合批次（队列消费）：
@@ -161,6 +171,18 @@ export async function getAggregationBatch(
     details: r.details as string | null,
   }))
 }
+/** 获取该 source 剩余待聚合 items 数（大扫除完整性检测用：没跑完要失败告警） */
+export async function getPendingItemCount(source: string): Promise<number> {
+  const pool = getPgPool()
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS cnt
+     FROM raw_items ri
+     LEFT JOIN ai_analysis aa ON aa.item_id = ri.id
+     WHERE ri.source = $1 AND ri.aggregated_at IS NULL AND aa.summary IS NOT NULL`,
+    [source],
+  )
+  return rows[0]?.cnt ?? 0
+}
 /** 标记一批 item 已聚合（队列消费完成，时间戳=现在，相当于挪到队尾） */
 /** 重置聚合标记：把该 source 全部已聚合数据重新标记为未聚合（大扫除全量重聚用） */
 export async function resetAggregationMarks(source: string): Promise<number> {
@@ -178,27 +200,6 @@ export async function markItemsAggregated(itemIds: string[]): Promise<void> {
   ])
 }
 /** 获取某 source 全部已摘要 items（大扫除用，无分页） */
-export async function getAllSummarizedItems(
-  source: string,
-): Promise<
-  Array<{ id: string; title: string | null; summary: string | null; details: string | null }>
-> {
-  const pool = getPgPool()
-  const { rows } = await pool.query(
-    `SELECT ri.id, ri.title, aa.summary, aa.details
-     FROM raw_items ri
-     LEFT JOIN ai_analysis aa ON aa.item_id = ri.id
-     WHERE ri.source = $1 AND aa.summary IS NOT NULL
-     ORDER BY ri.fetched_at DESC`,
-    [source],
-  )
-  return rows.map((r) => ({
-    id: r.id as string,
-    title: r.title as string | null,
-    summary: r.summary as string | null,
-    details: r.details as string | null,
-  }))
-}
 /** 删除某 source 的全部主题组及关联（大扫除重建前调用） */
 export async function deleteAllTopics(source: string): Promise<number> {
   const pool = getPgPool()

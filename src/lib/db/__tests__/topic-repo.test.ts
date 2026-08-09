@@ -131,14 +131,19 @@ describe('TopicRepo — 队列增量聚合', () => {
     const updated = after.find((g) => g.topic === 'AI 工具')!
     expect(updated.summary).toBe('第二轮')
   })
-  it('getExistingTopics：只返回该 source 的主题名 + 概括', async () => {
+  it('getExistingTopics：返回该 source 的主题名 + 概括 + 成员数', async () => {
     const topics = await getExistingTopics(SOURCE)
     expect(topics.some((t) => t.topic === 'AI 工具')).toBe(true)
-    // 字段形状：topic + summary
+    // 字段形状：topic + summary + itemCount
     for (const t of topics) {
       expect(typeof t.topic).toBe('string')
       expect(typeof t.summary).toBe('string')
+      expect(typeof t.itemCount).toBe('number')
+      expect(t.itemCount).toBeGreaterThanOrEqual(0)
     }
+    // 前序测试中「AI 工具」已归入 3 条成员，成员数应反映真实规模
+    const aiGroup = topics.find((t) => t.topic === 'AI 工具')
+    expect(aiGroup!.itemCount).toBe(3)
   })
   it('deleteEmptyTopics：删除无 items 的空主题', async () => {
     const suffix = `q2:${Date.now()}`

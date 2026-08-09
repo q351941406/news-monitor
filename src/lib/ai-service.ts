@@ -37,7 +37,7 @@ export interface AIService {
       summary: string | null
       details: string | null
     }>,
-    existingTopics: Array<{ topic: string; summary: string }>,
+    existingTopics: Array<{ topic: string; summary: string; itemCount: number }>,
   ): Promise<TopicGroup[]>
 }
 
@@ -153,7 +153,7 @@ function buildTopicPrompt(
     summary: string | null
     details: string | null
   }>,
-  existingTopics: Array<{ topic: string; summary: string }> = [],
+  existingTopics: Array<{ topic: string; summary: string; itemCount: number }> = [],
 ): string {
   const content = items
     .map((item, i) => {
@@ -167,7 +167,9 @@ ID: "${item.id}"
   // 注入全部已有主题作为历史上下文，让 AI 有全局视角、避免碎片化
   // 注入完整主题名 + 概括（summary 是 AI 判断「两个主题是否相同」的关键，
   // 截断会导致同义主题无法合并 → 碎片化。prompt 体积问题由「每轮 30 条」控制）
-  const history = existingTopics.map((t) => `- ${t.topic}：${t.summary || '无概括'}`).join('\n')
+  const history = existingTopics
+    .map((t) => `- ${t.topic}：${t.summary || '无概括'}（当前 ${t.itemCount} 条）`)
+    .join('\n')
   const historyBlock =
     existingTopics.length > 0
       ? `\n以下是你之前已经建立的全部主题（历史上下文）：\n${history}\n`
@@ -176,6 +178,8 @@ ID: "${item.id}"
 规则：
 - 已有主题是你的「当前知识」：可以把新内容归并进去；也可以**修改已有主题**——
   合并相近主题、重命名成更准确的名称、调整概括，让整个主题体系更整洁
+- 已有主题后的「（当前 N 条）」是它的规模：新内容优先归入已有规模的主题；
+  只有零散或明显同义的小主题才考虑合并，且合并后名称保持准确、简短
 - 只有确实无法归入任何已有主题的新方向，才创建新主题（数量尽量少）
 - 同类或相似内容最好合并为一个主题，禁止为同类内容重复建主题
 - 输出**全部相关主题**（包括你有把握的已有主题 + 新建主题），不要遗漏任何一条内容

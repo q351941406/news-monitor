@@ -1,4 +1,8 @@
 name: Topic Reaggregate (大扫除)
+# 同一 source 只允许一个大扫除在跑（全删重建过程是破坏性的，禁止并发）
+concurrency:
+  group: reaggregate-${{ inputs.source }}
+  cancel-in-progress: true
 on:
   workflow_dispatch:
     inputs:
@@ -16,7 +20,7 @@ permissions:
 jobs:
   reaggregate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
