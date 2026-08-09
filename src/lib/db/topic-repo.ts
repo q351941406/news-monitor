@@ -63,6 +63,12 @@ export async function storeTopicGroups(
         summary: group.summary,
       })
       topicIdByName.set(group.topic, topicId)
+    } else if (group.summary) {
+      // 同名主题复用：同步更新概括（AI 每次生成的 summary 可能更准确）
+      await db
+        .update(topicGroups)
+        .set({ summary: group.summary })
+        .where(eq(topicGroups.id, topicId))
     }
     for (const itemId of group.itemIds) {
       const exists = await db

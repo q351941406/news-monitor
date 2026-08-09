@@ -126,6 +126,10 @@ describe('TopicRepo — 队列增量聚合', () => {
     const aiGroups = second.filter((g) => g.topic === 'AI 工具')
     expect(aiGroups).toHaveLength(1) // 同名只保留一个组
     expect(aiGroups[0].totalCount).toBe(3) // a+b+c 全部归入
+    // 同名复用时应同步更新 summary（否则概括停留在第一轮）
+    const after = await getTopicGroupMeta(SOURCE, true)
+    const updated = after.find((g) => g.topic === 'AI 工具')!
+    expect(updated.summary).toBe('第二轮')
   })
   it('getExistingTopics：只返回该 source 的主题名 + 概括', async () => {
     const topics = await getExistingTopics(SOURCE)
