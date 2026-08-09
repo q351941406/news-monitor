@@ -174,7 +174,7 @@ async function callAIWithRetry<T>(
   schema: z.ZodSchema<T>,
   prompt: string,
   maxRetries: number = 3,
-  maxOutputTokens: number = 100000,
+  maxOutputTokens: number = 384000,
 ): Promise<T | null> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -183,6 +183,12 @@ async function callAIWithRetry<T>(
         output: Output.object({ schema }),
         prompt,
         maxOutputTokens,
+        // 开启思考模式（Anthropic 兼容协议 → DeepSeek），提升复杂聚类的推理质量
+        providerOptions: {
+          anthropic: {
+            thinking: { type: 'enabled', budgetTokens: 20000 },
+          },
+        },
       })
       return result.output as T
     } catch (error) {
