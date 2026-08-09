@@ -52,7 +52,7 @@ async function main() {
       let totalGroups = 0
       let rounds = 0
       while (rounds < 20) {
-        const batch = await getAggregationBatch(source, 50)
+        const batch = await getAggregationBatch(source, 30)
         if (batch.length < 3) break
         rounds++
         console.log(`  --- 轮 ${rounds}: ${batch.length} 条 ---`)
