@@ -29,6 +29,52 @@ function parseArgs() {
   return { source: sourceArg.split('=')[1] }
 }
 
+/** 规则预合并：按主题名的公共核心词聚类（如「游戏作弊与脚本执行工具」/「游戏破解与作弊工具」都含"作弊"） */
+function ruleMergeTopics(topics: Array<{ topic: string; summary: string }>) {
+  const groups: Array<{ topic: string; summary: string }> = []
+  const used = new Set<number>()
+  const keywords = (name: string): string[] => {
+    const words = new Set<string>()
+    name.match(/[a-zA-Z][a-zA-Z0-9\-]{2,}/g)?.forEach((w) => words.add(w.toLowerCase()))
+    const cn = name.replace(/[a-zA-Z0-9\s（）()、/_-]/g, '')
+    for (let i = 0; i + 1 < cn.length; i++) {
+      const bigram = cn.slice(i, i + 2)
+      if (
+        ['工具', '相关', '项目', '技术', '平台', '系统', '应用', '与', '和', '及', '类'].includes(
+          bigram,
+        )
+      )
+        continue
+      if (cn.split(bigram).length > 2) words.add(bigram)
+    }
+    return [...words]
+  }
+  for (let i = 0; i < topics.length; i++) {
+    if (used.has(i)) continue
+    const ki = new Set(keywords(topics[i].topic))
+    const cluster = [topics[i]]
+    used.add(i)
+    for (let j = i + 1; j < topics.length; j++) {
+      if (used.has(j)) continue
+      const kj = new Set(keywords(topics[j].topic))
+      const shared = [...ki].filter((w) => kj.has(w))
+      if (shared.length >= 2) {
+        cluster.push(topics[j])
+        used.add(j)
+        shared.forEach((w) => ki.add(w))
+      }
+    }
+    if (cluster.length > 1) {
+      cluster.sort((a, b) => b.topic.length - a.topic.length)
+      groups.push({ topic: cluster[0].topic, summary: cluster[0].summary })
+      console.log(`  🔗 合并 ${cluster.length} 个 → "${cluster[0].topic}"`)
+    } else {
+      groups.push(topics[i])
+    }
+  }
+  return groups
+}
+
 /** 估算单条 item 在聚合 prompt 中的字符数 */
 function itemPromptLen(item: {
   id: string
@@ -77,7 +123,11 @@ async function main() {
       console.log(`\n[${new Date().toISOString()}] 阶段 A：整理主题清单...`)
       const existingTopics = await getExistingTopics(source)
       console.log(`  现有主题: ${existingTopics.length} 个`)
-      const reorganized = await ai.reorganizeTopics(existingTopics)
+      // ① 规则预合并（文本相似度，不依赖 AI）
+      const ruleMerged = ruleMergeTopics(existingTopics)
+      console.log(`  规则预合并后: ${ruleMerged.length} 个`)
+      // ② AI 精修（输入已缩小，避免超长 prompt）
+      const reorganized = await ai.reorganizeTopics(ruleMerged)
       console.log(`  ✅ 整理后: ${reorganized.length} 个主题`)
       reorganized.forEach((t, i) => console.log(`    ${i + 1}. ${t.topic}`))
 
