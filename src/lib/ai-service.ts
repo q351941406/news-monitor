@@ -60,7 +60,11 @@ const topicSchema = z.object({
     z.object({
       topic: z.string().describe('主题名称，简洁明了'),
       summary: z.string().describe('该主题的一句话概括'),
-      itemIds: z.array(z.string()).describe('该主题包含的新闻 ID'),
+      itemIds: z
+        .array(z.string())
+        .describe(
+          '该主题包含的新闻 ID，必须使用完整 ID（如 github:owner/repo），禁止使用序号 [1] 或缩写',
+        ),
     }),
   ),
 })
@@ -145,16 +149,17 @@ function buildTopicPrompt(
 ): string {
   const content = items
     .map((item, i) => {
-      return `[${i + 1}] ID: ${item.id}
+      return `条目 ${i + 1}
+ID: "${item.id}"
 标题: ${item.title || '无'}
 摘要: ${item.summary || '无'}
 重点: ${item.details || '无'}`
     })
     .join('\n---\n')
   // 注入全部已有主题作为历史上下文，让 AI 有全局视角、避免碎片化
-  // 只注入主题名（summary 会显著增大 prompt 体积：208 个主题 × summary ≈ 4 万字符，
-  // 是线上 NoOutput 的根因）；归并判断主要靠主题名，AI 能自行理解
-  const history = existingTopics.map((t) => `- ${t.topic}`).join('\n')
+  // 注入完整主题名 + 概括（summary 是 AI 判断「两个主题是否相同」的关键，
+  // 截断会导致同义主题无法合并 → 碎片化。prompt 体积问题由「每轮 30 条」控制）
+  const history = existingTopics.map((t) => `- ${t.topic}：${t.summary || '无概括'}`).join('\n')
   const historyBlock =
     existingTopics.length > 0
       ? `\n以下是你之前已经建立的全部主题（历史上下文）：\n${history}\n`
@@ -168,7 +173,8 @@ function buildTopicPrompt(
 - 输出**全部相关主题**（包括你有把握的已有主题 + 新建主题），不要遗漏任何一条内容
 ${content}
 每个主题包含：topic（主题名称）、summary（一句话概括）、itemIds（包含的新闻 ID）。
-itemIds 使用每条开头的 ID 字段值。`
+itemIds 必须使用条目中 ID: 后面引号内的**完整值**（例如 "github:owner/repo"），
+**绝对不要**使用「条目 N」序号，也不要省略 github: 前缀。`
 }
 
 async function callAIWithRetry<T>(
