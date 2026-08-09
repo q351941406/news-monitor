@@ -58,8 +58,16 @@ const batchSchema = z.object({
 const topicSchema = z.object({
   groups: z.array(
     z.object({
-      topic: z.string().describe('主题名称，简洁明了'),
-      summary: z.string().describe('该主题的一句话概括'),
+      topic: z
+        .string()
+        .describe(
+          '主题名称：简洁核心名（≤12字），禁止括号、禁止包含平台/工具/家族等细节，如「游戏作弊与外挂工具」；细节一律放 summary',
+        ),
+      summary: z
+        .string()
+        .describe(
+          '该主题的完整概括：把平台、工具、具体细节（如 Roblox/Minecraft/Aimbot 等）全部写在这里',
+        ),
       itemIds: z
         .array(z.string())
         .describe(
@@ -172,7 +180,8 @@ ID: "${item.id}"
 - 同类或相似内容最好合并为一个主题，禁止为同类内容重复建主题
 - 输出**全部相关主题**（包括你有把握的已有主题 + 新建主题），不要遗漏任何一条内容
 ${content}
-每个主题包含：topic（主题名称）、summary（一句话概括）、itemIds（包含的新闻 ID）。
+每个主题包含：topic（主题名称，必须简洁：≤12字、无括号、无平台/工具细节）、summary（完整概括：平台/工具/细节全放这里）、itemIds（包含的新闻 ID）。
+规则：同类内容的 topic 名称必须完全一致（如「游戏作弊与外挂工具」），禁止用括号加细节区分。
 itemIds 必须使用条目中 ID: 后面引号内的**完整值**（例如 "github:owner/repo"），
 **绝对不要**使用「条目 N」序号，也不要省略 github: 前缀。`
 }

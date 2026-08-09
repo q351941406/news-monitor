@@ -57,10 +57,25 @@ async function main() {
         rounds++
         console.log(`  --- 轮 ${rounds}: ${batch.length} 条 ---`)
         const existing = await getExistingTopics(source)
+        const tStart = Date.now()
         const groups = await ai.generateTopicAggregation(batch, existing)
+        const elapsed = ((Date.now() - tStart) / 1000).toFixed(1)
+        const promptEst =
+          batch.reduce(
+            (s, it) =>
+              s + (it.title || '').length + (it.summary || '').length + (it.details || '').length,
+            0,
+          ) + existing.reduce((s, t) => s + t.topic.length + (t.summary || '').length, 0)
         if (groups?.length) {
           await storeTopicGroups(source, groups)
           totalGroups += groups.length
+          console.log(
+            `    ✅ 归并 ${groups.length} 组 | 耗时 ${elapsed}s | items≈${Math.round(promptEst / 100) / 10}K chars | 当前主题 ${existing.length} → ${existing.length + groups.length}±`,
+          )
+        } else {
+          console.log(
+            `    ⚠️ 本轮无输出 | 耗时 ${elapsed}s | items≈${Math.round(promptEst / 100) / 10}K chars`,
+          )
         }
         await markItemsAggregated(batch.map((i) => i.id))
         totalItems += batch.length
