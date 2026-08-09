@@ -148,39 +148,16 @@ async function main() {
       console.log(`  规则预合并后: ${reorganized.length} 个主题`)
       reorganized.forEach((t, i) => console.log(`    ${i + 1}. ${t.topic}`))
 
-      // ── 阶段 B：全量 items 分批归并 ──
-      console.log(`\n[${new Date().toISOString()}] 阶段 B：分批归并...`)
+      // ── 阶段 C：合并 + 全删重建 ──
+      // ── 阶段 B：全量 items 一次性归并（不分批）──
+      console.log(`\n[${new Date().toISOString()}] 阶段 B：归并...`)
       const allItems = await getAllSummarizedItems(source)
       console.log(`  全部已摘要 items: ${allItems.length} 条`)
-      const historyChars = reorganized.reduce(
-        (s, t) => s + t.topic.length + (t.summary?.length || 0) + 8,
-        0,
+      const t0 = Date.now()
+      const allGroups = (await ai.generateTopicAggregation(allItems, reorganized)) || []
+      console.log(
+        `  AI 归并耗时 ${((Date.now() - t0) / 1000).toFixed(1)}s，产出 ${allGroups.length} 个主题`,
       )
-      const batches = splitByPromptLen(allItems, historyChars)
-      console.log(`  切分为 ${batches.length} 批`)
-
-      // 每批归并 → 收集该批的 TopicGroup
-      const allGroups: Array<{ topic: string; summary: string; itemIds: string[] }> = []
-      for (let i = 0; i < batches.length; i++) {
-        const batch = batches[i]
-        if (batch.length < 3) {
-          console.log(
-            `  --- Batch ${i + 1}/${batches.length} (${batch.length} items) < 3, skip ---`,
-          )
-          continue
-        }
-        console.log(`  --- Batch ${i + 1}/${batches.length} (${batch.length} items) ---`)
-        const groups = await ai.generateTopicAggregation(batch, reorganized)
-        if (!groups || groups.length === 0) {
-          console.log(`  ⚠️ Batch ${i + 1} no groups, retrying with larger budget...`)
-          const retry = await ai.generateTopicAggregation(batch, reorganized.slice(0, 15))
-          if (retry?.length) allGroups.push(...retry)
-          continue
-        }
-        allGroups.push(...groups)
-      }
-
-      // ── 阶段 C：合并 + 全删重建 ──
       console.log(`\n[${new Date().toISOString()}] 阶段 C：合并重建...`)
       // 按 topic 名合并（同名去重）
       const mergedMap = new Map<string, { topic: string; summary: string; itemIds: Set<string> }>()
