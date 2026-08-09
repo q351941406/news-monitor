@@ -30,44 +30,65 @@ function parseArgs() {
 }
 
 /** 规则预合并：按主题名的公共核心词聚类（如「游戏作弊与脚本执行工具」/「游戏破解与作弊工具」都含"作弊"） */
-function ruleMergeTopics(topics: Array<{ topic: string; summary: string }>) {
-  const groups: Array<{ topic: string; summary: string }> = []
-  const used = new Set<number>()
-  const keywords = (name: string): string[] => {
-    const words = new Set<string>()
-    name.match(/[a-zA-Z][a-zA-Z0-9\-]{2,}/g)?.forEach((w) => words.add(w.toLowerCase()))
-    const cn = name.replace(/[a-zA-Z0-9\s（）()、/_-]/g, '')
-    for (let i = 0; i + 1 < cn.length; i++) {
-      const bigram = cn.slice(i, i + 2)
-      if (
-        ['工具', '相关', '项目', '技术', '平台', '系统', '应用', '与', '和', '及', '类'].includes(
-          bigram,
-        )
-      )
-        continue
-      if (cn.split(bigram).length > 2) words.add(bigram)
-    }
-    return [...words]
+/** 规则预合并：提取主题名的特征词（英文词 + 中文 2-gram），
+ * 两两比较共享特征数，共享 ≥ MIN_SHARED 即视为同类主题合并。
+ * 仅用于大扫除：把明显重复的碎片主题先压一遍，再交给后续归并。
+ */
+const STOP_BIGRAMS = new Set([
+  '工具',
+  '相关',
+  '项目',
+  '技术',
+  '平台',
+  '系统',
+  '应用',
+  '与',
+  '和',
+  '及',
+  '类',
+  '库',
+  '的',
+  '在',
+  '中',
+  '基于',
+  '方案',
+  '合集',
+])
+function extractFeatures(name: string): Set<string> {
+  const feats = new Set<string>()
+  // 英文词（≥3 字母，含连字符）
+  name.match(/[a-zA-Z][a-zA-Z0-9-]{2,}/g)?.forEach((w) => feats.add(w.toLowerCase()))
+  // 中文 2-gram
+  const cn = name.replace(/[a-zA-Z0-9\s（）()、/_-]/g, '')
+  for (let i = 0; i + 1 < cn.length; i++) {
+    const g = cn.slice(i, i + 2)
+    if (!STOP_BIGRAMS.has(g)) feats.add(g)
   }
+  return feats
+}
+function ruleMergeTopics(topics: Array<{ topic: string; summary: string }>) {
+  const features = topics.map((t) => extractFeatures(t.topic))
+  const used = new Set<number>()
+  const groups: Array<{ topic: string; summary: string }> = []
+  const MIN_SHARED = 2
   for (let i = 0; i < topics.length; i++) {
     if (used.has(i)) continue
-    const ki = new Set(keywords(topics[i].topic))
     const cluster = [topics[i]]
     used.add(i)
     for (let j = i + 1; j < topics.length; j++) {
       if (used.has(j)) continue
-      const kj = new Set(keywords(topics[j].topic))
-      const shared = [...ki].filter((w) => kj.has(w))
-      if (shared.length >= 2) {
+      const shared = [...features[i]].filter((w) => features[j].has(w)).length
+      if (shared >= MIN_SHARED) {
         cluster.push(topics[j])
         used.add(j)
-        shared.forEach((w) => ki.add(w))
       }
     }
     if (cluster.length > 1) {
+      // 取最长名字作代表（通常信息最全）
       cluster.sort((a, b) => b.topic.length - a.topic.length)
       groups.push({ topic: cluster[0].topic, summary: cluster[0].summary })
       console.log(`  🔗 合并 ${cluster.length} 个 → "${cluster[0].topic}"`)
+      cluster.forEach((t) => console.log(`      - ${t.topic}`))
     } else {
       groups.push(topics[i])
     }
