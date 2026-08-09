@@ -195,3 +195,43 @@ describe('TopicRepo — 队列增量聚合', () => {
     expect(ghBatch.map((i) => i.id)).not.toContain(`${suffix}:ph`)
   })
 })
+describe('TopicRepo — itemId 前缀容错', () => {
+  beforeAll(async () => {
+    await createTestTables()
+    await storeRawItems([
+      {
+        ...insertTestItem({ id: 'github:owner/repo', title: 'Repo X' }),
+        source: 'github',
+        rawData: {},
+      },
+      { ...insertTestItem({ id: 'ph:123', title: 'PH X' }), source: 'producthunt', rawData: {} },
+      { ...insertTestItem({ id: 'x:999', title: 'Tweet X' }), source: 'twitter', rawData: {} },
+    ] as unknown as NewRawItem[])
+  })
+  afterAll(async () => {
+    await dropTestSchema()
+  })
+  it('AI 省略前缀时自动补全并关联到正确主题', async () => {
+    await storeTopicGroups('github', [{ topic: 'G组', summary: 's', itemIds: ['owner/repo'] }])
+    await storeTopicGroups('producthunt', [{ topic: 'P组', summary: 's', itemIds: ['123'] }])
+    await storeTopicGroups('twitter', [{ topic: 'T组', summary: 's', itemIds: ['999'] }])
+    const g = await getTopicGroupMeta('github', true)
+    expect(
+      (await getTopicGroupItems(g.find((x) => x.topic === 'G组')!.id, true)).map((i) => i.id),
+    ).toEqual(['github:owner/repo'])
+    const p2 = await getTopicGroupMeta('producthunt', true)
+    expect(
+      (await getTopicGroupItems(p2.find((x) => x.topic === 'P组')!.id, true)).map((i) => i.id),
+    ).toEqual(['ph:123'])
+    const t = await getTopicGroupMeta('twitter', true)
+    expect(
+      (await getTopicGroupItems(t.find((x) => x.topic === 'T组')!.id, true)).map((i) => i.id),
+    ).toEqual(['x:999'])
+  })
+  it('补前缀后仍匹配不到时安全跳过（不抛错、不产生空壳内容）', async () => {
+    await storeTopicGroups('github', [{ topic: '坏组', summary: 's', itemIds: ['不存在的id'] }])
+    const metas = await getTopicGroupMeta('github', true)
+    const items = await getTopicGroupItems(metas.find((x) => x.topic === '坏组')!.id, true)
+    expect(items).toHaveLength(0)
+  })
+})

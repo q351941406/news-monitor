@@ -10,6 +10,12 @@ import { eq, and } from 'drizzle-orm'
 import { rawItems, topicGroups, topicItems } from '../schema'
 import { getDb, getPgPool, type NewsItem } from './connection'
 /** 初始化数据库表 */
+/** 各数据源 raw_items.id 的前缀（AI 偶尔省略前缀时用于容错补全） */
+const SOURCE_PREFIX: Record<string, string> = {
+  github: 'github:',
+  producthunt: 'ph:',
+  twitter: 'x:',
+}
 export async function initDatabase() {
   const pool = getPgPool()
   await pool.query(`
@@ -71,23 +77,35 @@ export async function storeTopicGroups(
         .where(eq(topicGroups.id, topicId))
     }
     for (const itemId of group.itemIds) {
-      const exists = await db
-        .select({ id: rawItems.id })
-        .from(rawItems)
-        .where(eq(rawItems.id, itemId))
-        .limit(1)
-      if (exists.length > 0) {
-        // 幂等：已存在关联则跳过
-        const linked = await db
-          .select({ topicId: topicItems.topicId })
-          .from(topicItems)
-          .where(and(eq(topicItems.topicId, topicId), eq(topicItems.itemId, itemId)))
+      // 容错：AI 可能省略 source 前缀（如返回 "owner/repo" 而非 "github:owner/repo"），
+      // 依次尝试 原值 → 补前缀值，命中的才做关联
+      const candidates = itemId.includes(':')
+        ? [itemId]
+        : [itemId, `${SOURCE_PREFIX[source] ?? `${source}:`}${itemId}`]
+      let linkedItemId: string | null = null
+      for (const candidate of candidates) {
+        const exists = await db
+          .select({ id: rawItems.id })
+          .from(rawItems)
+          .where(eq(rawItems.id, candidate))
           .limit(1)
-        if (linked.length === 0) {
-          await db.insert(topicItems).values({ topicId, itemId })
+        if (exists.length > 0) {
+          linkedItemId = candidate
+          break
         }
-      } else {
+      }
+      if (!linkedItemId) {
         console.log(`  ⚠️ Skipping invalid itemId: ${itemId}`)
+        continue
+      }
+      // 幂等：已存在关联则跳过
+      const linked = await db
+        .select({ topicId: topicItems.topicId })
+        .from(topicItems)
+        .where(and(eq(topicItems.topicId, topicId), eq(topicItems.itemId, linkedItemId)))
+        .limit(1)
+      if (linked.length === 0) {
+        await db.insert(topicItems).values({ topicId, itemId: linkedItemId })
       }
     }
   }

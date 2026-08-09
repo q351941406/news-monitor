@@ -186,8 +186,8 @@ ID: "${item.id}"
 ${content}
 每个主题包含：topic（主题名称，必须简洁：≤12字、无括号、无平台/工具细节）、summary（完整概括：平台/工具/细节全放这里）、itemIds（包含的新闻 ID）。
 规则：同类内容的 topic 名称必须完全一致（如「游戏作弊与外挂工具」），禁止用括号加细节区分。
-itemIds 必须使用条目中 ID: 后面引号内的**完整值**（例如 "github:owner/repo"），
-**绝对不要**使用「条目 N」序号，也不要省略 github: 前缀。`
+itemIds 必须**原样照抄**条目中 ID: 后面引号内的完整值（如 "github:owner/repo"、"ph:123"、"x:456"），
+**绝对不要**省略前缀、**绝对不要**使用「条目 N」序号或自行改写。`
 }
 
 async function callAIWithRetry<T>(
