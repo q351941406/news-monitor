@@ -139,8 +139,8 @@ async function main() {
     log.error('Available sources: github, producthunt, twitter')
     process.exit(1)
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    log.error('❌ ANTHROPIC_API_KEY not configured')
+  if (!process.env.AI_API_KEY) {
+    log.error('❌ AI_API_KEY not configured')
     process.exit(1)
   }
   await aggregateTopics(source)

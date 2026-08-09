@@ -20,8 +20,8 @@ services:
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       # 其他敏感变量应通过 .env 文件注入，不进 git
-      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      # ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL}
+      # AI_API_KEY: ${AI_API_KEY}
+      # AI_BASE_URL: ${AI_BASE_URL}
       # UPSTASH_REDIS_URL: ${UPSTASH_REDIS_URL}
       # UPSTASH_REDIS_TOKEN: ${UPSTASH_REDIS_TOKEN}
     depends_on:

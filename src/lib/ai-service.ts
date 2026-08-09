@@ -3,7 +3,7 @@
  *
  * 接口小，实现深。生产环境调真实 LLM，测试时通过 vi.mock 替换。
  */
-import { createAnthropic } from '@ai-sdk/anthropic'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { generateText, Output, NoObjectGeneratedError } from 'ai'
 import { z } from 'zod'
 
@@ -78,11 +78,12 @@ const topicSchema = z.object({
 })
 
 function createClient() {
-  const anthropic = createAnthropic({
-    baseURL: process.env.ANTHROPIC_BASE_URL || 'https://api.deepseek.com/anthropic',
-    apiKey: process.env.ANTHROPIC_API_KEY || '',
+  const provider = createOpenAICompatible({
+    name: 'ai-provider',
+    baseURL: process.env.AI_BASE_URL || 'https://opencode.ai/zen/go/v1',
+    apiKey: process.env.AI_API_KEY || '',
   })
-  return anthropic(process.env.ANTHROPIC_MODEL || 'deepseek-v4-flash')
+  return provider(process.env.AI_MODEL || 'deepseek-v4-flash')
 }
 
 /** 估算 token 数量（中文约 2 字符/token，英文约 4 字符/token） */
@@ -142,6 +143,8 @@ ${content}
 - 每条返回 id、摘要、重点
 - 摘要：详细概括核心内容，包含关键背景和上下文
 - 重点：提取所有重要细节、技术要点、应用场景
+严格按以下 JSON 结构输出（顶层 key 必须是 results，数组里每个对象三个字段）：
+{"results":[{"id":"完整ID","summary":"一句话概括","details":"补充信息"}]}
 - 保留原文中的具体数据、技术术语、关键信息
 - 按顺序返回，不要遗漏任何一条`
 }
@@ -187,7 +190,9 @@ ${content}
 每个主题包含：topic（主题名称，必须简洁：≤12字、无括号、无平台/工具细节）、summary（完整概括：平台/工具/细节全放这里）、itemIds（包含的新闻 ID）。
 规则：同类内容的 topic 名称必须完全一致（如「游戏作弊与外挂工具」），禁止用括号加细节区分。
 itemIds 必须**原样照抄**条目中 ID: 后面引号内的完整值（如 "github:owner/repo"、"ph:123"、"x:456"），
-**绝对不要**省略前缀、**绝对不要**使用「条目 N」序号或自行改写。`
+**绝对不要**省略前缀、**绝对不要**使用「条目 N」序号或自行改写。
+严格按以下 JSON 结构输出（顶层 key 必须是 groups，数组里每个对象三个字段）：
+{"groups":[{"topic":"主题名","summary":"完整概括","itemIds":["完整ID1","完整ID2"]}]}`
 }
 
 async function callAIWithRetry<T>(
@@ -202,14 +207,10 @@ async function callAIWithRetry<T>(
       const result = await generateText({
         model,
         output: Output.object({ schema }),
-        prompt,
         maxOutputTokens,
-        // 开启思考模式（Anthropic 兼容协议 → DeepSeek），提升复杂聚类的推理质量
-        providerOptions: {
-          anthropic: {
-            thinking: { type: 'enabled', budgetTokens: 20000 },
-          },
-        },
+        // OpenAI 兼容协议：json_object 模式要求 prompt 含 "json" 字样；
+        // 思考模式由服务端（deepseek reasoning）默认开启，无需 providerOptions
+        prompt: `${prompt}\n\n严格以 JSON 格式输出，不要包含任何 JSON 以外的内容。`,
       })
       return result.output as T
     } catch (error) {
@@ -217,7 +218,7 @@ async function callAIWithRetry<T>(
       const errObj = error as { cause?: unknown; message?: string; constructor?: { name?: string } }
       // 失败诊断：打印 prompt 规模 + 错误细节，便于定位（如 prompt 过长 / 内容异常）
       console.log(
-        `  📊 Attempt ${attempt}/${maxRetries} | prompt=${prompt.length} chars | model=${process.env.ANTHROPIC_MODEL || 'default'}`,
+        `  📊 Attempt ${attempt}/${maxRetries} | prompt=${prompt.length} chars | model=${process.env.AI_MODEL || 'default'}`,
       )
       if (isNoOutput) {
         console.log(`  ⚠️ NoObjectGeneratedError: ${errObj.cause || errObj.message || error}`)

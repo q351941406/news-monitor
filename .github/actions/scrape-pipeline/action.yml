@@ -35,9 +35,9 @@ runs:
       env:
         INPUT_SOURCE: ${{ inputs.source }}
         DATABASE_URL: ${{ env.DATABASE_URL }}
-        ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
-        ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
-        ANTHROPIC_MODEL: ${{ env.ANTHROPIC_MODEL }}
+        AI_API_KEY: ${{ env.AI_API_KEY }}
+        AI_BASE_URL: ${{ env.AI_BASE_URL }}
+        AI_MODEL: ${{ env.AI_MODEL }}
       run: npx tsx scripts/scrape.ts --source="$INPUT_SOURCE"
       shell: bash
 
@@ -45,9 +45,9 @@ runs:
       env:
         INPUT_SOURCE: ${{ inputs.source }}
         DATABASE_URL: ${{ env.DATABASE_URL }}
-        ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
-        ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
-        ANTHROPIC_MODEL: ${{ env.ANTHROPIC_MODEL }}
+        AI_API_KEY: ${{ env.AI_API_KEY }}
+        AI_BASE_URL: ${{ env.AI_BASE_URL }}
+        AI_MODEL: ${{ env.AI_MODEL }}
       run: npx tsx scripts/ai-process.ts --source="$INPUT_SOURCE"
       shell: bash
 
@@ -55,9 +55,9 @@ runs:
       env:
         INPUT_SOURCE: ${{ inputs.source }}
         DATABASE_URL: ${{ env.DATABASE_URL }}
-        ANTHROPIC_API_KEY: ${{ env.ANTHROPIC_API_KEY }}
-        ANTHROPIC_BASE_URL: ${{ env.ANTHROPIC_BASE_URL }}
-        ANTHROPIC_MODEL: ${{ env.ANTHROPIC_MODEL }}
+        AI_API_KEY: ${{ env.AI_API_KEY }}
+        AI_BASE_URL: ${{ env.AI_BASE_URL }}
+        AI_MODEL: ${{ env.AI_MODEL }}
       run: npx tsx scripts/topic-aggregate.ts --source="$INPUT_SOURCE"
       shell: bash
 

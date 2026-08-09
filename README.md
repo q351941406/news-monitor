@@ -172,9 +172,9 @@ npm run topic-aggregate -- --source=github
 | 变量                 | 说明                                 | 必需 |
 | -------------------- | ------------------------------------ | ---- |
 | `DATABASE_URL`       | PostgreSQL 连接字符串（Neon 或本地） | ✅   |
-| `ANTHROPIC_API_KEY`  | DeepSeek API Key                     | ✅   |
-| `ANTHROPIC_BASE_URL` | API 地址                             | ✅   |
-| `ANTHROPIC_MODEL`    | 模型名称                             | ✅   |
+| `AI_API_KEY`         | DeepSeek API Key                     | ✅   |
+| `AI_BASE_URL`        | API 地址                             | ✅   |
+| `AI_MODEL`           | 模型名称                             | ✅   |
 | `PRODUCTHUNT_TOKEN`  | Product Hunt API Token               | ❌   |
 | `TWITTER_AUTH_TOKEN` | Twitter 认证 Token                   | ❌   |
 | `TWITTER_CT0`        | Twitter CT0 Cookie                   | ❌   |
