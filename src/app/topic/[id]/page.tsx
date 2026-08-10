@@ -24,11 +24,13 @@ interface Props {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { id } = await params
+  const { id: rawId } = await params
+  // Next.js App Router 不会自动 URL-decode 动态段参数，需手动解码（topic id 含冒号）
+  const id = decodeURIComponent(rawId)
   const group = await getTopicById(id)
-  if (!group) return { title: '主题不存在 - News Monitor' }
+  if (!group) return { title: '主题不存在' }
   const sourceLabel = SOURCE_LABEL[group.source] ?? group.source
-  const title = `${group.topic} - ${sourceLabel}热点 - News Monitor`
+  const title = `${group.topic} - ${sourceLabel}热点`
   const description =
     group.summary?.slice(0, 150) ??
     `${group.topic} 相关热点新闻聚合，共 ${group.items.length} 条，来自 ${sourceLabel}。`
@@ -48,7 +50,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function TopicPage({ params }: Props) {
-  const { id } = await params
+  const { id: rawId } = await params
+  // Next.js App Router 不会自动 URL-decode 动态段参数，需手动解码（topic id 含冒号）
+  const id = decodeURIComponent(rawId)
   const group = await getTopicById(id)
   if (!group) notFound()
 
