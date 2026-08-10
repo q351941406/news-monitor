@@ -161,3 +161,27 @@ describe('GitHubSource', () => {
     expect(items[14].id).toBe('github:owner/repo14')
   })
 })
+
+describe('parseTrendingHtml - 降级分支', () => {
+  it('跳过无 h2 的块', () => {
+    const html = `<article class="Box-row">no heading here</article>`
+    expect(parseTrendingHtml(html)).toHaveLength(0)
+  })
+
+  it('跳过 h2 无链接的块', () => {
+    const html = `<article class="Box-row"><h2 class="h3 lh-condensed"><span>No Link</span></h2></article>`
+    expect(parseTrendingHtml(html)).toHaveLength(0)
+  })
+
+  it('缺 description/stars/starsToday/language 时用默认值', () => {
+    const html = `<article class="Box-row">
+      <h2 class="h3 lh-condensed"><a href="/owner/repo">owner/repo</a></h2>
+    </article>`
+    const repos = parseTrendingHtml(html)
+    expect(repos).toHaveLength(1)
+    expect(repos[0].description).toBe('')
+    expect(repos[0].stars).toBe(0)
+    expect(repos[0].starsToday).toBe(0)
+    expect(repos[0].language).toBe('Unknown')
+  })
+})

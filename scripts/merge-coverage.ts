@@ -50,7 +50,7 @@ function main() {
   )
 
   // DevOps 门槛
-  const thresholds = { lines: 80, statements: 80, functions: 75, branches: 70 }
+  const thresholds = { lines: 80, statements: 80, functions: 80, branches: 80 }
   let pass = true
   const vals: Record<string, number> = {
     lines: t.lines.pct,
@@ -68,7 +68,7 @@ function main() {
     console.error('❌ 覆盖率低于 DevOps 门槛，请补充测试')
     process.exit(1)
   }
-  console.log('✅ 覆盖率达标 (lines/statements ≥80%, functions ≥75%, branches ≥70%)')
+  console.log('✅ 覆盖率达标 (lines/statements/functions/branches 全部 ≥80%)')
 }
 
 main()
