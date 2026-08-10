@@ -28,7 +28,16 @@ export interface AIService {
   generateBatchSummary(
     items: Array<{ id: string; title: string | null; rawData: unknown }>,
   ): Promise<BatchSummaryResult[]>
-
+  /**
+   * 单条详细摘要：一条内容一个 prompt，rawData 全量喂给 AI（如 readme）。
+   * 用于内容体积大的 source（如 github），避免批量塞爆上下文。
+   * 返回 null 表示 AI 调用失败（已内部重试）。
+   */
+  generateSingleSummary(item: {
+    id: string
+    title: string | null
+    rawData: unknown
+  }): Promise<BatchSummaryResult | null>
   /** 主题聚合：基于已有摘要 + 已有主题列表（历史上下文），将 items 聚合/归并到主题下 */
   generateTopicAggregation(
     items: Array<{
@@ -55,6 +64,11 @@ const batchSchema = z.object({
   ),
 })
 
+const singleSchema = z.object({
+  id: z.string().describe('原始数据的 ID'),
+  summary: z.string().describe('一句话概括核心内容'),
+  details: z.string().describe('补充重要信息，可以自由发挥'),
+})
 const topicSchema = z.object({
   groups: z.array(
     z.object({
@@ -119,6 +133,33 @@ function splitBatches<T>(
   return batches
 }
 
+function buildSingleSummaryPrompt(item: {
+  id: string
+  title: string | null
+  rawData: unknown
+}): string {
+  const data = item.rawData as Record<string, unknown>
+  let keyInfo = ''
+  if (data.description) keyInfo += `描述: ${data.description}\n`
+  if (data.language) keyInfo += `语言: ${data.language}\n`
+  if (data.stars) keyInfo += `Stars: ${data.stars}\n`
+  if (data.starsToday) keyInfo += `今日新增 Stars: ${data.starsToday}\n`
+  const readmeBlock =
+    typeof data.readme === 'string' && data.readme
+      ? `\nREADME 全文（可能含 HTML，忽略其中的图片/徽章/样式）：\n${data.readme}\n`
+      : ''
+  return `请用中文详细分析以下 GitHub 仓库内容。
+ID: ${item.id}
+标题: ${item.title || '无'}
+${keyInfo}${readmeBlock}
+要求：
+- 摘要：详细概括仓库核心内容，包含关键背景和上下文
+- 重点：提取所有重要细节、技术要点、应用场景、特性
+严格按以下 JSON 结构输出：
+{"id":"${item.id}","summary":"一句话概括","details":"补充信息"}
+- id 必须原样返回，不要改动
+- 保留原文中的具体数据、技术术语、关键信息`
+}
 function buildBatchPrompt(
   items: Array<{ id: string; title: string | null; rawData: unknown }>,
 ): string {
@@ -274,6 +315,11 @@ export function createAIService(): AIService {
       return allResults
     },
 
+    async generateSingleSummary(item) {
+      const prompt = buildSingleSummaryPrompt(item)
+      const output = await callAIWithRetry(model, singleSchema, prompt, 3, 8192)
+      return output || null
+    },
     async generateTopicAggregation(items, existingTopics) {
       if (items.length < 3) return []
       const prompt = buildTopicPrompt(items, existingTopics)

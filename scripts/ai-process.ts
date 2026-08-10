@@ -45,8 +45,51 @@ async function processBatch(source: string) {
     await withRunLog({ source, stage: 'ai-process' }, async () => ({ itemsCount: 0 }))
     return
   }
-  // 2. 调用 AIService（内部处理分批、重试）
   const aiService = createAIService()
+  const db = getDb()
+  // GitHub：逐条模式。每条一个 prompt（rawData 含完整 readme），AI 返回即落盘，
+  // 一条失败不影响其他条；已成功落盘的条目不重复处理（onConflict 幂等）。
+  if (source === 'github') {
+    let successCount = 0
+    let failCount = 0
+    for (let i = 0; i < allItems.length; i++) {
+      const item = allItems[i]
+      console.log(`  [${i + 1}/${allItems.length}] ${item.id} ...`)
+      const result = await aiService.generateSingleSummary(item)
+      if (!result) {
+        failCount++
+        console.log(`    ❌ AI failed for ${item.id}`)
+        continue
+      }
+      try {
+        // 逐条模式 item.id 即 raw_items 主键；AI 返回的 id 不可信（可能丢前缀），落盘用 item.id
+        await db
+          .insert(aiAnalysis)
+          .values({
+            itemId: item.id,
+            summary: result.summary,
+            details: result.details,
+          })
+          .onConflictDoUpdate({
+            target: aiAnalysis.itemId,
+            set: {
+              summary: result.summary,
+              details: result.details,
+              processedAt: new Date(),
+            },
+          })
+        successCount++
+        console.log(`    ✅ Stored ${item.id}`)
+      } catch (error) {
+        failCount++
+        log.error({ err: error }, `  ❌ Failed to store result for ${result.id}:`)
+      }
+    }
+    console.log(`  ✅ Stored ${successCount} results (${failCount} failed)`)
+    await withRunLog({ source, stage: 'ai-process' }, async () => ({ itemsCount: successCount }))
+    return
+  }
+  // 其他 source：批量模式（内部分批、重试）
   const results = await aiService.generateBatchSummary(allItems)
   if (!results || results.length === 0) {
     console.log('  ❌ No results generated')
@@ -54,8 +97,6 @@ async function processBatch(source: string) {
     return
   }
   console.log(`  AI returned ${results.length} results`)
-  // 3. 批量存储
-  const db = getDb()
   let successCount = 0
   for (const result of results) {
     try {

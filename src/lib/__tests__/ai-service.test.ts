@@ -97,6 +97,55 @@ describe('AIService - generateBatchSummary', () => {
   })
 })
 
+describe('AIService - generateSingleSummary', () => {
+  it('单条摘要成功且 prompt 包含完整 readme', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({
+        id: 'github:owner/repo',
+        summary: '测试摘要',
+        details: '测试详情',
+      }),
+    )
+    const service = createAIService()
+    const item = {
+      id: 'github:owner/repo',
+      title: 'owner/repo',
+      rawData: {
+        description: 'test desc',
+        language: 'TypeScript',
+        stars: 100,
+        starsToday: 5,
+        readme: '# Full README\n\nThis is the complete readme content.',
+      },
+    }
+    const result = await service.generateSingleSummary(item)
+    expect(result).toEqual({ id: 'github:owner/repo', summary: '测试摘要', details: '测试详情' })
+    // 验证 prompt 把完整 readme 喂给了 AI
+    const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
+    expect(callArg.prompt).toContain('标题: owner/repo')
+    expect(callArg.prompt).toContain('This is the complete readme content.')
+  })
+  it('无 readme 时 prompt 不包含 README 段落', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({ id: 'x', summary: 's', details: 'd' }),
+    )
+    const service = createAIService()
+    await service.generateSingleSummary({ id: 'x', title: 'X', rawData: { description: 'd' } })
+    const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
+    expect(callArg.prompt).not.toContain('README 全文')
+  })
+  it('AI 调用失败返回 null', async () => {
+    // 内部重试退避 ~6s，给足超时
+    vi.mocked(generateText).mockRejectedValue(new Error('boom'))
+    const service = createAIService()
+    const result = await service.generateSingleSummary({
+      id: 'x',
+      title: null,
+      rawData: { readme: 'big' },
+    })
+    expect(result).toBeNull()
+  }, 20000)
+})
 describe('AIService - generateTopicAggregation', () => {
   it('items 少于 3 个返回空数组', async () => {
     const service = createAIService()
