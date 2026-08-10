@@ -26,6 +26,8 @@ export {
   resetAggregationMarks,
   getTopicGroupMeta,
   getTopicGroupItems,
+  getTopicById,
+  getAllTopics,
   getItemDetail,
   markGroupAsRead,
 } from './topic-repo'

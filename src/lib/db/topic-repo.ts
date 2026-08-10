@@ -332,3 +332,58 @@ export async function markGroupAsRead(topicId: string): Promise<number> {
   )
   return result.rowCount ?? 0
 }
+
+/** 单个主题组完整信息（详情页用）：元信息 + 全部 items（含已读） */
+export async function getTopicById(
+  topicId: string,
+): Promise<{ topic: string; summary: string; source: string; items: TopicItem[] } | null> {
+  const pool = getPgPool()
+  const { rows } = await pool.query(
+    `SELECT tg.id, tg.topic, tg.summary, tg.source,
+       ri.id AS item_id, ri.title, ri.url, ri.source AS item_source,
+       ri.fetched_at, ri.is_read, aa.summary AS item_summary
+     FROM topic_groups tg
+     LEFT JOIN topic_items ti ON ti.topic_id = tg.id
+     LEFT JOIN raw_items ri ON ri.id = ti.item_id
+     LEFT JOIN ai_analysis aa ON aa.item_id = ri.id
+     WHERE tg.id = $1
+     ORDER BY ri.fetched_at DESC`,
+    [topicId],
+  )
+  if (rows.length === 0) return null
+  const first = rows[0]
+  const items: TopicItem[] = rows
+    .filter((r) => r.item_id !== null)
+    .map((r) => ({
+      id: r.item_id as string,
+      source: r.item_source as string,
+      title: r.title as string | null,
+      url: r.url as string,
+      summary: (r.item_summary as string | null) ?? null,
+      fetchedAt: Number(r.fetched_at),
+      isRead: r.is_read as boolean,
+    }))
+  return {
+    topic: first.topic as string,
+    summary: first.summary as string,
+    source: first.source as string,
+    items,
+  }
+}
+
+/** 全量主题列表（sitemap 用）：id + 主题名 + 来源 */
+export async function getAllTopics(): Promise<
+  Array<{ id: string; topic: string; source: string }>
+> {
+  const pool = getPgPool()
+  const { rows } = await pool.query(
+    `SELECT tg.id, tg.topic, tg.source
+     FROM topic_groups tg
+     ORDER BY tg.created_at DESC`,
+  )
+  return rows.map((r) => ({
+    id: r.id as string,
+    topic: r.topic as string,
+    source: r.source as string,
+  }))
+}

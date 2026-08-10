@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import Link from 'next/link'
 import { ChevronDown, ChevronRight, ExternalLink, Check } from 'lucide-react'
 import MarkdownContent from './MarkdownContent'
 /** 列表轻量条目（不含原文/AI 详情） */
@@ -94,7 +95,14 @@ export default function TopicGroup({
         </div>
         <div className="flex-1 min-w-0">
           <h2 className="font-serif text-xl font-semibold text-stone-900 tracking-tight">
-            {topic}
+            <Link
+              href={`/topic/${encodeURIComponent(id)}`}
+              onClick={(e) => e.stopPropagation()}
+              className="hover:text-blue-700 transition-colors"
+              aria-label={`查看主题「${topic}」的完整内容`}
+            >
+              {topic}
+            </Link>
           </h2>
           <p className="text-sm text-stone-500 mt-0.5">
             {unreadCount > 0 ? (
