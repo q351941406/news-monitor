@@ -135,3 +135,59 @@ describe('fetchWithRetry', () => {
     expect(Math.max(...delays)).toBeGreaterThanOrEqual(5000 * 0.7)
   })
 })
+
+describe('retry - 边界分支', () => {
+  it('AbortError 不重试直接抛', async () => {
+    const fn = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('aborted'), { name: 'AbortError' }))
+    await expect(fetchWithRetry(fn, { retries: 3 })).rejects.toThrow('aborted')
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it('网络错误码（ECONNRESET）触发重试', async () => {
+    const err = Object.assign(new Error('reset'), { code: 'ECONNRESET' })
+    const fn = vi.fn().mockRejectedValueOnce(err).mockResolvedValueOnce('ok')
+    const result = await fetchWithRetry(fn, { retries: 2, backoffMs: 1 })
+    expect(result).toBe('ok')
+    expect(fn).toHaveBeenCalledTimes(2)
+  })
+
+  it('可重试 HTTP 状态（500）触发重试', async () => {
+    const err = Object.assign(new Error('server error'), { status: 500 })
+    const fn = vi.fn().mockRejectedValueOnce(err).mockResolvedValueOnce('recovered')
+    const result = await fetchWithRetry(fn, { retries: 2, backoffMs: 1 })
+    expect(result).toBe('recovered')
+  })
+
+  it('不可重试 HTTP 状态（404）直接抛出不重试', async () => {
+    const err = Object.assign(new Error('not found'), { status: 404 })
+    const fn = vi.fn().mockRejectedValue(err)
+    await expect(fetchWithRetry(fn, { retries: 3 })).rejects.toThrow('not found')
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it('自定义 retryOn 覆盖默认策略', async () => {
+    const fn = vi.fn().mockRejectedValueOnce(new Error('custom fail')).mockResolvedValueOnce('ok')
+    const result = await fetchWithRetry(fn, {
+      retries: 1,
+      backoffMs: 1,
+      retryOn: (e) => (e as Error).message === 'custom fail',
+    })
+    expect(result).toBe('ok')
+  })
+
+  it('onRetry 钩子被调用并收到退避时长', async () => {
+    const onRetry = vi.fn()
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('x'))
+      .mockRejectedValueOnce(new Error('x'))
+      .mockResolvedValueOnce('ok')
+    await fetchWithRetry(fn, { retries: 2, backoffMs: 5, onRetry })
+    expect(onRetry).toHaveBeenCalledTimes(2)
+    const [attempt, , delayMs] = onRetry.mock.calls[0]
+    expect(attempt).toBe(1)
+    expect(delayMs).toBeGreaterThanOrEqual(5)
+  })
+})

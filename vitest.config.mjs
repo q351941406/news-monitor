@@ -44,7 +44,8 @@ export default defineConfig({
         perFile: false,
       },
       // 覆盖率低于门槛时让 build/test 失败
-      reporter: ['text', 'json-summary', 'html'],
+      reportsDirectory: 'coverage/unit',
+      reporter: ['text', 'json-summary', 'html', 'json'],
       reportOnFailure: true,
     },
   },

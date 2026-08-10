@@ -31,8 +31,6 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm test
-      - name: Coverage gate
-        run: npm run test:coverage:check
   integration:
     runs-on: ubuntu-latest
     services:
@@ -64,3 +62,10 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/news_monitor_test
         run: npm run test:integration
+      - name: Coverage gate (unit ∪ integration ≥ 80%)
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/news_monitor_test
+        run: |
+          npm run test:coverage:unit
+          npm run test:coverage:integration
+          npm run test:coverage:merge

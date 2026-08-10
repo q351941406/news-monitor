@@ -97,6 +97,21 @@ export async function createTestTables() {
         PRIMARY KEY (topic_id, item_id)
       )
     `)
+    await pool.query(`
+      CREATE TABLE run_logs (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        stage TEXT NOT NULL,
+        status TEXT NOT NULL,
+        items_count BIGINT DEFAULT 0 NOT NULL,
+        duration_ms BIGINT DEFAULT 0 NOT NULL,
+        error TEXT,
+        started_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      )
+    `)
+    await pool.query(
+      'CREATE INDEX IF NOT EXISTS idx_run_logs_started_at ON run_logs(started_at DESC)',
+    )
     await pool.query('CREATE INDEX IF NOT EXISTS idx_raw_items_source ON raw_items(source)')
     await pool.query(
       'CREATE INDEX IF NOT EXISTS idx_raw_items_fetched_at ON raw_items(fetched_at DESC)',

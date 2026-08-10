@@ -13,7 +13,7 @@
     "test:integration": "vitest run --config vitest.config.integration.mjs",
     "test:all": "npm test && npm run test:integration",
     "test:coverage": "vitest run --config vitest.config.mjs --coverage",
-    "test:coverage:check": "vitest run --config vitest.config.mjs --coverage",
+    "test:coverage:check": "npm run test:coverage:unit && npm run test:coverage:integration && npm run test:coverage:merge",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
@@ -25,7 +25,10 @@
     "scrape": "npx tsx scripts/scrape.ts",
     "ai-process": "npx tsx scripts/ai-process.ts",
     "topic-aggregate": "npx tsx scripts/topic-aggregate.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:coverage:unit": "vitest run --config vitest.config.mjs --coverage",
+    "test:coverage:integration": "vitest run --config vitest.config.integration.mjs --coverage",
+    "test:coverage:merge": "npx tsx scripts/merge-coverage.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.7",
