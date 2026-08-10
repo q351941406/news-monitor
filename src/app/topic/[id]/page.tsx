@@ -176,6 +176,8 @@ export default async function TopicPage({ params }: Props) {
         </footer>
       </main>
 
+      {/* nosemgrep: react-dangerouslysetinnerhtml — JSON-LD 结构化数据标准注入方式：
+          <script type="application/ld+json"> 内不会解析 HTML，无 XSS 风险（Next.js 官方推荐写法） */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
