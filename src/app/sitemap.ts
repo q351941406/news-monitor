@@ -13,16 +13,18 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://news.myaicode.qzz.
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const topics = await getAllTopics()
+  // 主题页 lastModified 用真实创建时间，让 Google 区分新旧内容、优先抓新主题
   const topicEntries: MetadataRoute.Sitemap = topics.map((t) => ({
     url: `${SITE_URL}/topic/${encodeURIComponent(t.id)}`,
-    lastModified: new Date(),
+    lastModified: t.createdAt,
     changeFrequency: 'hourly',
     priority: 0.7,
   }))
   return [
     {
+      // 首页反映最新抓取时间：用最新主题的创建时间（数据一直在更新）
       url: `${SITE_URL}/`,
-      lastModified: new Date(),
+      lastModified: topics[0]?.createdAt ?? new Date(),
       changeFrequency: 'hourly',
       priority: 1.0,
     },

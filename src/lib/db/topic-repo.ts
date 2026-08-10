@@ -373,11 +373,11 @@ export async function getTopicById(
 
 /** 全量主题列表（sitemap 用）：id + 主题名 + 来源 */
 export async function getAllTopics(): Promise<
-  Array<{ id: string; topic: string; source: string }>
+  Array<{ id: string; topic: string; source: string; createdAt: Date }>
 > {
   const pool = getPgPool()
   const { rows } = await pool.query(
-    `SELECT tg.id, tg.topic, tg.source
+    `SELECT tg.id, tg.topic, tg.source, tg.created_at
      FROM topic_groups tg
      ORDER BY tg.created_at DESC`,
   )
@@ -385,5 +385,6 @@ export async function getAllTopics(): Promise<
     id: r.id as string,
     topic: r.topic as string,
     source: r.source as string,
+    createdAt: r.created_at as Date,
   }))
 }
