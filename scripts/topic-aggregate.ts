@@ -66,17 +66,13 @@ async function aggregateOneBatch(
   // 2. 取该 source 已有主题（作 AI 历史上下文）
   const existingTopics = await getExistingTopics(source)
   console.log(`  Existing topics: ${existingTopics.map((t) => t.topic).join(', ') || '（无）'}`)
-  // [FIX-A] 历史上下文体量必须受控：98 个主题的完整 summary 可达 2.4 万字符，
-  // 直接挤爆 item 预算（itemBudget 被 clamp 到 1500 → 每条 item 独立成批 → 全部 <3 被跳过）。
-  // 只保留规模最大（成员数 top 20）的主题，且 summary 截断到 80 字，历史块降到 ~3 千字符。
-  const historyForAI = existingTopics
-    .slice()
-    .sort((a, b) => b.itemCount - a.itemCount)
-    .slice(0, 20)
-    .map((t) => ({ ...t, summary: (t.summary || '').slice(0, 80) }))
   // 3. 按 prompt 字符数切分子批（关键修复：prompt 过大 → DeepSeek NoOutput）
-  //    [FIX-A] item 预算固定 8000：历史块体积已由 historyForAI 控制，不再与 item 抢预算
-  const itemBudget = 8000
+  //    预算需扣除「已有主题历史块」的长度（每批 prompt = items + 全部已有主题）
+  const historyChars = existingTopics.reduce(
+    (sum, t) => sum + t.topic.length + (t.summary?.length || 0) + 8,
+    0,
+  )
+  const itemBudget = Math.max(1500, 8000 - historyChars)
   const subBatches = splitByPromptLen(items, itemBudget)
   console.log(`  Split into ${subBatches.length} sub-batch(es) by prompt length`)
   let totalGroups = 0
@@ -90,7 +86,7 @@ async function aggregateOneBatch(
       console.log(`  Sub-batch ${si + 1} has ${sub.length} item(s) < 3, keep pending`)
       continue
     }
-    const groups = await aiService.generateTopicAggregation(sub, historyForAI)
+    const groups = await aiService.generateTopicAggregation(sub, existingTopics)
     if (!groups || groups.length === 0) {
       // [FIX-C] 不再 throw：AI 返回空时保留 pending，避免整批数据被"假消费"后永久隐身
       console.log(
