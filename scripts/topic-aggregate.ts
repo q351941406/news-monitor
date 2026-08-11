@@ -67,8 +67,9 @@ async function aggregateOneBatch(
   const existingTopics = await getExistingTopics(source)
   console.log(`  Existing topics: ${existingTopics.map((t) => t.topic).join(', ') || '（无）'}`)
   // 3. 按 prompt 字符数切分子批（防止单批 items 过多导致 prompt 超限）
-  //    items 预算固定 8000，不因历史上下文膨胀而缩小（历史块由 AI 输出上限 16000 tokens 兜底）
-  const itemBudget = 8000
+  //    github 条目长（details 含仓库详情），不受 8000 字符分批约束：一次整批送 AI，避免被切碎成单条小批
+  //    其余源条目短，维持 8000 防爆
+  const itemBudget = source === 'github' ? Infinity : 8000
   const subBatches = splitByPromptLen(items, itemBudget)
   console.log(`  Split into ${subBatches.length} sub-batch(es) by prompt length`)
   let totalGroups = 0
