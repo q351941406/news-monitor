@@ -8,7 +8,12 @@ import {
   markAllAsRead,
   resetAllRead,
 } from '@/lib/db'
-import { markGroupAsRead } from '@/lib/db'
+import {
+  markGroupAsRead,
+  deleteReadEmptyTopics,
+  deleteReadEmptyTopicsBySource,
+  deleteReadEmptyTopicsByItemId,
+} from '@/lib/db'
 import { isAdminAuthorized, unauthorized } from '@/lib/admin-auth'
 
 // GET — 公开读操作，任何人可看
@@ -33,6 +38,8 @@ export async function POST(request: NextRequest) {
   const { action, itemId, topicId, source } = body
   if (action === 'read' && itemId) {
     await markAsRead(itemId)
+    // 实时清理：若该 item 所属主题组已无任何未读（含该组只剩它一条的情况），物理删除整组
+    await deleteReadEmptyTopicsByItemId(itemId)
     return NextResponse.json({ success: true })
   }
   if (action === 'unread' && itemId) {
@@ -41,10 +48,20 @@ export async function POST(request: NextRequest) {
   }
   if (action === 'readGroup' && topicId) {
     await markGroupAsRead(topicId)
+    // 整组已读 → 该组已无未读 item，物理删除（级联删关联）
+    await deleteReadEmptyTopics([topicId])
     return NextResponse.json({ success: true })
   }
   if (action === 'readAll') {
     await markAllAsRead(source || undefined)
+    // 全量已读 → 所有主题组均无未读，批量物理删除（级联删关联）
+    if (source) {
+      await deleteReadEmptyTopicsBySource(source)
+    } else {
+      for (const s of ['github', 'producthunt', 'twitter']) {
+        await deleteReadEmptyTopicsBySource(s)
+      }
+    }
     return NextResponse.json({ success: true })
   }
   if (action === 'resetAll') {

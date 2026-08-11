@@ -8,7 +8,7 @@ import path from 'path'
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
 import {
   storeTopicGroups,
-  deleteEmptyTopics,
+  deleteReadEmptyTopicsBySource,
   getExistingTopics,
   getAggregationBatch,
   markItemsAggregated,
@@ -66,41 +66,53 @@ async function aggregateOneBatch(
   // 2. 取该 source 已有主题（作 AI 历史上下文）
   const existingTopics = await getExistingTopics(source)
   console.log(`  Existing topics: ${existingTopics.map((t) => t.topic).join(', ') || '（无）'}`)
+  // [FIX-A] 历史上下文体量必须受控：98 个主题的完整 summary 可达 2.4 万字符，
+  // 直接挤爆 item 预算（itemBudget 被 clamp 到 1500 → 每条 item 独立成批 → 全部 <3 被跳过）。
+  // 只保留规模最大（成员数 top 20）的主题，且 summary 截断到 80 字，历史块降到 ~3 千字符。
+  const historyForAI = existingTopics
+    .slice()
+    .sort((a, b) => b.itemCount - a.itemCount)
+    .slice(0, 20)
+    .map((t) => ({ ...t, summary: (t.summary || '').slice(0, 80) }))
   // 3. 按 prompt 字符数切分子批（关键修复：prompt 过大 → DeepSeek NoOutput）
-  //    预算需扣除「已有主题历史块」的长度（每批 prompt = items + 全部已有主题）
-  const historyChars = existingTopics.reduce(
-    (sum, t) => sum + t.topic.length + (t.summary?.length || 0) + 8,
-    0,
-  )
-  const itemBudget = Math.max(1500, 8000 - historyChars)
+  //    [FIX-A] item 预算固定 8000：历史块体积已由 historyForAI 控制，不再与 item 抢预算
+  const itemBudget = 8000
   const subBatches = splitByPromptLen(items, itemBudget)
   console.log(`  Split into ${subBatches.length} sub-batch(es) by prompt length`)
   let totalGroups = 0
+  // [FIX-C] 只收集真正聚合成功的 item id；跳过/AI 失败的保持 pending，下轮重试，绝不被"假消费"
+  const consumedIds: string[] = []
   for (let si = 0; si < subBatches.length; si++) {
     const sub = subBatches[si]
     console.log(`  --- Sub-batch ${si + 1}/${subBatches.length} (${sub.length} items) ---`)
     // 子批不足 3 条时，AI 无法聚类（generateTopicAggregation 返回空是正常降级），跳过即可
     if (sub.length < 3) {
-      console.log(`  Sub-batch ${si + 1} has ${sub.length} item(s) < 3, skip`)
+      console.log(`  Sub-batch ${si + 1} has ${sub.length} item(s) < 3, keep pending`)
       continue
     }
-    const groups = await aiService.generateTopicAggregation(sub, existingTopics)
+    const groups = await aiService.generateTopicAggregation(sub, historyForAI)
     if (!groups || groups.length === 0) {
-      throw new Error(
-        `AI topic aggregation failed for ${source}: no topics generated for sub-batch ${si + 1} (${sub.length} items)`,
+      // [FIX-C] 不再 throw：AI 返回空时保留 pending，避免整批数据被"假消费"后永久隐身
+      console.log(
+        `  ⚠️ AI returned no topics for sub-batch ${si + 1} (${sub.length} items), keep pending`,
       )
+      continue
     }
     await storeTopicGroups(source, groups)
     totalGroups += groups.length
+    consumedIds.push(...sub.map((i) => i.id))
   }
-  // 4. 删除该 source 下已无任何 items 的空主题
-  const deleted = await deleteEmptyTopics(source)
-  console.log(`  ✅ Stored ${totalGroups} topic groups, deleted ${deleted} empty topics`)
-  // 5. 标记本批已聚合（队列消费完成，挪到队尾）
-  await markItemsAggregated(items.map((i) => i.id))
-  console.log(`  ✅ Marked ${items.length} items as aggregated`)
-  return items.length
+  // 4. 清理"已读空组"（物理删除：空壳组 + 全已读组，级联删关联，防止主题组无限膨胀）
+  const deleted = await deleteReadEmptyTopicsBySource(source)
+  console.log(`  ✅ Stored ${totalGroups} topic groups, deleted ${deleted} read-empty topics`)
+  // 5. 标记本批已聚合（队列消费完成，挪到队尾）—— 仅标记真正聚合成功的
+  await markItemsAggregated(consumedIds)
+  console.log(
+    `  ✅ Marked ${consumedIds.length}/${items.length} items as aggregated (${items.length - consumedIds.length} kept pending)`,
+  )
+  return consumedIds.length
 }
+
 async function aggregateTopics(source: string) {
   console.log(`
 [${new Date().toISOString()}] Aggregating topics for ${source}...`)

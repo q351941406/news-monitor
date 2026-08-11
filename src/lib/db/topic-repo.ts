@@ -121,6 +121,62 @@ export async function deleteEmptyTopics(source: string): Promise<number> {
   )
   return result.rowCount ?? 0
 }
+
+/** 删除指定主题组中「已无任何未读 items」的组（物理删除，级联删关联）
+ * 覆盖两种情形：空壳组（无 items）＋ 全已读组
+ * 原子 DELETE：只在组内不存在未读 item 时才删除，天然无竞态 */
+
+/** 删除「包含指定 item 且已无任何未读」的主题组（实时清理，标记单条已读后调用） */
+export async function deleteReadEmptyTopicsByItemId(itemId: string): Promise<number> {
+  const pool = getPgPool()
+  const result = await pool.query(
+    `DELETE FROM topic_groups tg
+     WHERE tg.id IN (
+       SELECT DISTINCT ti.topic_id FROM topic_items ti WHERE ti.item_id = $1
+     )
+       AND NOT EXISTS (
+         SELECT 1 FROM topic_items ti2
+         JOIN raw_items ri ON ri.id = ti2.item_id
+         WHERE ti2.topic_id = tg.id AND ri.is_read = FALSE
+       )`,
+    [itemId],
+  )
+  return result.rowCount ?? 0
+}
+
+export async function deleteReadEmptyTopics(topicIds: string[]): Promise<number> {
+  if (topicIds.length === 0) return 0
+  const pool = getPgPool()
+  const result = await pool.query(
+    `DELETE FROM topic_groups tg
+     WHERE tg.id = ANY($1::text[])
+       AND NOT EXISTS (
+         SELECT 1 FROM topic_items ti
+         JOIN raw_items ri ON ri.id = ti.item_id
+         WHERE ti.topic_id = tg.id AND ri.is_read = FALSE
+       )`,
+    [topicIds],
+  )
+  return result.rowCount ?? 0
+}
+
+/** 删除某 source 下「已无任何未读 items」的全部主题组（物理删除，级联删关联）
+ * 用于批量兜底清理：readAll、聚合脚本每轮、或定时维护 */
+export async function deleteReadEmptyTopicsBySource(source: string): Promise<number> {
+  const pool = getPgPool()
+  const result = await pool.query(
+    `DELETE FROM topic_groups tg
+     WHERE tg.source = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM topic_items ti
+         JOIN raw_items ri ON ri.id = ti.item_id
+         WHERE ti.topic_id = tg.id AND ri.is_read = FALSE
+       )`,
+    [source],
+  )
+  return result.rowCount ?? 0
+}
+
 /** 获取该 source 已有主题列表（作 AI 历史上下文：topic 名 + 概括 + 当前成员数）
  * itemCount 让 AI 感知主题规模，避免为已有规模的主题再造相似新主题 */
 export async function getExistingTopics(
