@@ -110,26 +110,11 @@ async function aggregateTopics(source: string) {
   console.log(`
 [${new Date().toISOString()}] Aggregating topics for ${source}...`)
   const result = await withRunLog({ source, stage: 'topic-aggregate' }, async () => {
-    // 循环消费：单次脚本运行最多处理 5 批（每批 30 条 ≈ 150 条），消化积压
-    // 直到积压清空（返回 0）或达到轮次上限
+    // 一次运行只处理一批：getAggregationBatch 每批最多 50 条，无多轮循环
     const aiService = createAIService()
-    let totalConsumed = 0
-    let emptyRounds = 0
-    const MAX_ROUNDS = 5
-    for (let round = 1; round <= MAX_ROUNDS; round++) {
-      console.log(`--- Round ${round}/${MAX_ROUNDS} ---`)
-      const consumed = await aggregateOneBatch(source, aiService)
-      totalConsumed += consumed
-      if (consumed === 0) {
-        emptyRounds++
-        // 连续两次取不到数据即认为积压已清空
-        if (emptyRounds >= 2 || round === 1) break
-      } else {
-        emptyRounds = 0
-      }
-    }
-    console.log(`  ✅ Total: ${totalConsumed} items aggregated in this run`)
-    return { itemsCount: totalConsumed }
+    const consumed = await aggregateOneBatch(source, aiService)
+    console.log(`  ✅ Total: ${consumed} items aggregated in this run`)
+    return { itemsCount: consumed }
   })
   return result
 }
