@@ -1,7 +1,7 @@
 /**
  * 新闻仓库 — 原始数据 CRUD
  */
-import { eq, and, desc, sql } from 'drizzle-orm'
+import { eq, and, desc, sql, ilike } from 'drizzle-orm'
 import { rawItems, aiAnalysis, type NewRawItem } from '../schema'
 import { getDb, type NewsItem } from './connection'
 /** 存储原始数据（存在则跳过） */
@@ -89,4 +89,60 @@ export async function getNewsCounts(): Promise<Record<string, { total: number; u
     }
   }
   return result
+}
+
+/** 归档页查询：已读条目列表（支持来源/关键词/时间/分页） */
+export interface ArchiveQuery {
+  days?: number | null
+  source?: string
+  page?: number
+  pageSize?: number
+  q?: string
+}
+export async function getArchivedNews(
+  opts: ArchiveQuery,
+): Promise<{ items: NewsItem[]; total: number }> {
+  const db = getDb()
+  const { source, page = 1, pageSize = 20, q, days } = opts
+  const conditions = [eq(rawItems.isRead, true)]
+  if (source && source !== 'all') {
+    conditions.push(eq(rawItems.source, source))
+  }
+  if (q?.trim()) {
+    conditions.push(ilike(rawItems.title, `%${q.trim()}%`))
+  }
+  if (days && days > 0) {
+    const cutoff = Date.now() - days * 86400000
+    conditions.push(sql`${rawItems.fetchedAt} >= ${cutoff}`)
+  }
+  const where = and(...conditions)
+  const [countRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(rawItems)
+    .where(where)
+  const total = countRow?.count ?? 0
+  const results = await db
+    .select({
+      id: rawItems.id,
+      source: rawItems.source,
+      title: rawItems.title,
+      url: rawItems.url,
+      rawData: rawItems.rawData,
+      summary: aiAnalysis.summary,
+      details: aiAnalysis.details,
+      fetchedAt: rawItems.fetchedAt,
+      isRead: rawItems.isRead,
+    })
+    .from(rawItems)
+    .leftJoin(aiAnalysis, eq(rawItems.id, aiAnalysis.itemId))
+    .where(where)
+    .orderBy(desc(rawItems.fetchedAt))
+    .offset((page - 1) * pageSize)
+    .limit(pageSize)
+  return { items: results as NewsItem[], total }
+}
+/** 彻底删除一条原始条目（级联删除 ai_analysis / topic_items 关联） */
+export async function deleteItem(itemId: string): Promise<void> {
+  const db = getDb()
+  await db.delete(rawItems).where(eq(rawItems.id, itemId))
 }

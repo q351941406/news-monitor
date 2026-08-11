@@ -11,7 +11,15 @@
  * - run-log-repo: 运行日志（仪表盘）
  */
 export { getDb, getPgPool, type NewsItem } from './connection'
-export { storeRawItems, existsItem, getNews, getAllNews, getNewsCounts } from './news-repo'
+export {
+  storeRawItems,
+  existsItem,
+  getNews,
+  getAllNews,
+  getNewsCounts,
+  getArchivedNews,
+  deleteItem,
+} from './news-repo'
 export { storeAIAnalysis, getUnprocessedItems } from './ai-repo'
 export { markAsRead, markAsUnread, markAllAsRead, resetAllRead } from './read-repo'
 export {

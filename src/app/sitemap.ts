@@ -28,6 +28,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'hourly',
       priority: 1.0,
     },
+    {
+      // 历史归档页：已读内容长期保留，供搜索引擎索引
+      url: `${SITE_URL}/archive`,
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 0.5,
+    },
     ...topicEntries,
   ]
 }

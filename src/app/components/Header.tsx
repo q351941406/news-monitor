@@ -1,7 +1,17 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
-import { Menu, X, CheckCheck, RotateCcw, Settings, Activity, Lock, Unlock } from 'lucide-react'
+import {
+  Menu,
+  X,
+  CheckCheck,
+  RotateCcw,
+  Settings,
+  Activity,
+  Archive,
+  Lock,
+  Unlock,
+} from 'lucide-react'
 interface HeaderProps {
   unreadCount: number
   showRead: boolean
@@ -60,6 +70,14 @@ export default function Header({
           </div>
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-4">
+            <Link
+              href="/archive"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm text-stone-600 hover:text-stone-900 transition-colors"
+              title="历史归档"
+            >
+              <Archive className="w-4 h-4" />
+              历史归档
+            </Link>
             <Link
               href="/dashboard"
               className="inline-flex items-center gap-2 px-3 py-2 text-sm text-stone-600 hover:text-stone-900 transition-colors"
@@ -153,6 +171,14 @@ export default function Header({
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-stone-100">
             <div className="flex flex-col gap-4">
+              <Link
+                href="/archive"
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-600 bg-stone-100 rounded-lg hover:bg-stone-200 transition-colors"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Archive className="w-4 h-4" />
+                历史归档
+              </Link>
               <Link
                 href="/dashboard"
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-600 bg-stone-100 rounded-lg hover:bg-stone-200 transition-colors"
