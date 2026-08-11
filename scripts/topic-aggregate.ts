@@ -66,13 +66,9 @@ async function aggregateOneBatch(
   // 2. 取该 source 已有主题（作 AI 历史上下文）
   const existingTopics = await getExistingTopics(source)
   console.log(`  Existing topics: ${existingTopics.map((t) => t.topic).join(', ') || '（无）'}`)
-  // 3. 按 prompt 字符数切分子批（关键修复：prompt 过大 → DeepSeek NoOutput）
-  //    预算需扣除「已有主题历史块」的长度（每批 prompt = items + 全部已有主题）
-  const historyChars = existingTopics.reduce(
-    (sum, t) => sum + t.topic.length + (t.summary?.length || 0) + 8,
-    0,
-  )
-  const itemBudget = Math.max(1500, 8000 - historyChars)
+  // 3. 按 prompt 字符数切分子批（防止单批 items 过多导致 prompt 超限）
+  //    items 预算固定 8000，不因历史上下文膨胀而缩小（历史块由 AI 输出上限 16000 tokens 兜底）
+  const itemBudget = 8000
   const subBatches = splitByPromptLen(items, itemBudget)
   console.log(`  Split into ${subBatches.length} sub-batch(es) by prompt length`)
   let totalGroups = 0
