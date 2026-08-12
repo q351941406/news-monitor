@@ -26,6 +26,7 @@
 - **X / Twitter** - 每小时追踪科技/AI 相关推文
 - **AI 智能分析** - 自动生成摘要和重点
 - **AI 主题聚合** - 队列式增量聚合（新数据优先+最旧补足），带历史主题上下文归并，同名主题稳定复用
+- **AI 用量监控** - 每次模型调用的 token 数/耗时/成败自动埋点，运维仪表盘实时展示
 - **已读管理** - 标记已读/未读，支持批量操作
 
 ## 技术栈
@@ -117,8 +118,10 @@ npm install
 cp .env.example .env.local
 # 编辑 .env.local 填入配置
 
-# 初始化数据库
-npm run db:init
+# 初始化数据库（幂等迁移，与 CI/生产同款）
+npm run db:migrate:ci
+# 可选：灌入开发种子数据（300 条 + 12 个主题）
+npx tsx scripts/seed-dev.ts
 
 # 启动开发服务器
 npm run dev
@@ -142,7 +145,7 @@ curl http://localhost:3000/api/health
 # → {"status":"ok","db":"up","uptime":12,"timestamp":"..."}
 
 # 5. 初始化数据库（首次启动）
-docker compose exec app npx tsx scripts/init-db.ts
+docker compose exec app npm run db:migrate:ci
 
 # 停止
 docker compose down
@@ -208,12 +211,16 @@ npm run topic-aggregate -- --source=github
 │   ├── scrape.ts             # 爬虫脚本
 │   ├── ai-process.ts         # AI 处理脚本
 │   ├── topic-aggregate.ts    # 主题聚合脚本
-│   └── init-db.ts            # 数据库初始化
+│   ├── migrate-ci.ts         # 幂等数据库迁移（CI/生产部署用）
+│   └── seed-dev.ts           # 开发种子数据
 ├── .github/workflows/
-│   ├── scrape-github.yml
-│   ├── scrape-twitter.yml
-│   ├── scrape-producthunt.yml
-│   ├── test.yml              # 单元 + 集成测试
+│   ├── scrape-github.yml     # GitHub Trending 定时抓取
+│   ├── scrape-twitter.yml    # Twitter 定时抓取
+│   ├── scrape-producthunt.yml# Product Hunt 定时抓取
+│   ├── reaggregate.yml       # 主题手动重聚合
+│   ├── test.yml              # 单元 + 集成测试 + 覆盖率门槛
+│   ├── security.yml          # Semgrep SAST + npm audit
+│   ├── gitleaks.yml          # 密钥扫描
 │   └── sync-branch-protection.yml
 ├── Dockerfile                # 生产镜像（multi-stage, standalone）
 ├── docker-compose.yml        # 本地 app + Postgres
@@ -246,6 +253,11 @@ npm run db:push
 npm run db:studio
 ```
 
+### 自动迁移（生产部署）
+
+Vercel 构建时自动执行幂等迁移（`buildCommand: "npm run db:migrate:ci && npm run build"`），
+**schema 变更随代码发布自动应用**，无需手动操作。`migrate-ci.ts` 用 `__ci_migrations` 表记录
+已应用项，重复/并发执行安全。
 CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
 
 ## 🔁 网络重试与 Sentry 错误追踪
@@ -268,18 +280,20 @@ CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
 
 ## 📊 测试覆盖率
 
-| 维度       | 阈值 | 说明                                       |
-| ---------- | ---- | ------------------------------------------ |
-| Lines      | 30%  | 门槛设在 `vitest.config.mjs`（唯一事实源） |
-| Branches   | 38%  | 当前实测 ~32/40/31/33%，门槛留 -2% 缓冲    |
-| Functions  | 30%  | 后续每个 sprint 上调 5%                    |
-| Statements | 31%  |                                            |
+**双层门槛机制**：
+
+| 门槛          | 阈值            | 执行位置                                                   |
+| ------------- | --------------- | ---------------------------------------------------------- |
+| 本地快速门槛  | lines 30% 等    | `vitest.config.mjs`，`npm run test:coverage` 开发期自查用  |
+| **CI 硬门槛** | **四指标 ≥80%** | `scripts/merge-coverage.ts` 合并 unit ∪ integration 后检查 |
+
+> CI 红线：`merge-coverage.ts` 对 **lines/statements/functions/branches 全部要求 ≥80%**，不足则退出码非 0 阻断合并。当前实测：lines 90.6% / statements 90.6% / functions 89.6% / branches 81.2%。
 
 跑覆盖率 + 门槛检查：
 
 ```bash
-npm run test:coverage        # 生成 HTML 报告到 coverage/
-npm run test:coverage:check  # 低于门槛则退出码非 0
+npm run test:coverage           # 生成 HTML 报告到 coverage/
+npm run test:coverage:check     # unit + integration + merge，低于 80% 则退出码非 0
 ```
 
 ## 运维
@@ -313,6 +327,7 @@ GitHub Dependabot 每**周一**自动检查 `npm` / `GitHub Actions` / `Docker b
 ### 定时任务可靠性
 
 所有 scrape-* 工作流都带 **15 分钟超时**。运行结果统一记录在**内置运维仪表盘**（`/dashboard`），避免静默失败。
+仪表盘包含：抓取任务状态/成功率/耗时、7 天趋势、静默失败告警、**AI 调用用量**（token 数/失败数/按操作分布/7 天趋势）。
 
 | 数据源       | Cron (UTC)     | 错峰原因                                |
 | ------------ | -------------- | --------------------------------------- |
@@ -335,10 +350,9 @@ MIT
 
 ## ⚠️ 已知风险与暂缓项
 
-| 项                          | 风险                                                         | 状态 | 处置计划                                                                                                 |
-| --------------------------- | ------------------------------------------------------------ | ---- | -------------------------------------------------------------------------------------------------------- |
-| postcss (next 传递依赖)     | XSS / 任意文件读取（仅构建期）                               | 暂缓 | 修复需 next@16 大升级；postcss 处理本地 CSS 非用户输入，实际可利用性极低。next 16 稳定后随大版本升级解决 |
-| rolldown PARSE_ERROR        | vitest 4 覆盖率收集对 `import type` 报错（warning 非 error） | 已知 | 影响：被解析失败的文件不纳入覆盖率统计；CI 不受影响，阈值按实际覆盖率设定                                |
-| GitHub Actions Node 20 弃用 | checkout/setup-node 触发弃用提示                             | 已知 | 官方已自动用 Node 24 运行，等待 action 作者更新版本声明                                                  |
+| 项                      | 风险                                                | 状态 | 处置计划                                                                                                 |
+| ----------------------- | --------------------------------------------------- | ---- | -------------------------------------------------------------------------------------------------------- |
+| postcss (next 传递依赖) | XSS / 任意文件读取（仅构建期）                      | 暂缓 | 修复需 next@16 大升级；postcss 处理本地 CSS 非用户输入，实际可利用性极低。next 16 稳定后随大版本升级解决 |
+| rolldown 覆盖率解析     | vitest 4 覆盖率收集对个别语法报 warning（非 error） | 已知 | Node 锁 22.23.2 后本地/CI 行为一致；不影响覆盖率统计结果                                                 |
 
 > 这些是**主动评估后接受的权衡**，不是遗漏。处置窗口按上方计划跟进。
