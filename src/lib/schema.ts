@@ -57,3 +57,17 @@ export type AIAnalysis = typeof aiAnalysis.$inferSelect
 export type NewAIAnalysis = typeof aiAnalysis.$inferInsert
 export type RunLog = typeof runLogs.$inferSelect
 export type NewRunLog = typeof runLogs.$inferInsert
+
+/** AI 调用用量记录（token 统计，供运维仪表盘展示） */
+export const aiUsageLogs = pgTable('ai_usage_logs', {
+  id: text('id').primaryKey(), // UUID
+  operation: text('operation').notNull(), // batchSummarize / singleSummary / topicAggregation
+  inputTokens: bigint('input_tokens', { mode: 'number' }).default(0).notNull(),
+  outputTokens: bigint('output_tokens', { mode: 'number' }).default(0).notNull(),
+  durationMs: bigint('duration_ms', { mode: 'number' }).default(0).notNull(),
+  status: text('status').notNull(), // success / failure
+  attempts: bigint('attempts', { mode: 'number' }).default(1).notNull(), // 含重试的尝试次数
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+})
+export type AIUsageLog = typeof aiUsageLogs.$inferSelect
+export type NewAIUsageLog = typeof aiUsageLogs.$inferInsert

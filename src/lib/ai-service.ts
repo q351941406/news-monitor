@@ -5,6 +5,7 @@
  */
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { generateText, Output, NoObjectGeneratedError } from 'ai'
+import { logAIUsage } from './db/ai-usage-repo'
 import { z } from 'zod'
 
 // ─── 类型定义 ───────────────────────────────────────────
@@ -242,7 +243,9 @@ async function callAIWithRetry<T>(
   prompt: string,
   maxRetries: number = 3,
   maxOutputTokens: number = 384000,
+  operation: string = 'batchSummarize',
 ): Promise<T | null> {
+  const startedAt = Date.now()
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const result = await generateText({
@@ -252,6 +255,16 @@ async function callAIWithRetry<T>(
         // OpenAI 兼容协议：json_object 模式要求 prompt 含 "json" 字样；
         // 思考模式由服务端（deepseek reasoning）默认开启，无需 providerOptions
         prompt: `${prompt}\n\n严格以 JSON 格式输出，不要包含任何 JSON 以外的内容。`,
+      })
+      // AI 用量埋点（fire-and-forget）：输入/输出 token、耗时、成败
+      const usage = (result as { usage?: { inputTokens?: number; outputTokens?: number } }).usage
+      void logAIUsage({
+        operation,
+        inputTokens: usage?.inputTokens ?? estimateTokens(prompt),
+        outputTokens: usage?.outputTokens ?? 0,
+        durationMs: Date.now() - startedAt,
+        status: 'success',
+        attempts: attempt,
       })
       return result.output as T
     } catch (error) {
@@ -273,6 +286,15 @@ async function callAIWithRetry<T>(
         }
       }
       if (attempt === maxRetries) {
+        // 记录失败埋点（实际尝试次数）后退出
+        void logAIUsage({
+          operation,
+          inputTokens: estimateTokens(prompt),
+          outputTokens: 0,
+          durationMs: Date.now() - startedAt,
+          status: 'failure',
+          attempts: attempt,
+        })
         console.log('  ❌ All attempts failed')
         return null
       }
@@ -288,7 +310,6 @@ async function callAIWithRetry<T>(
   }
   return null
 }
-
 // ─── Factory ────────────────────────────────────────────
 
 export function createAIService(): AIService {
@@ -306,7 +327,14 @@ export function createAIService(): AIService {
         console.log(`  Batch ${i + 1}/${batches.length} (${batch.length} items)`)
         const prompt = buildBatchPrompt(batch)
 
-        const output = await callAIWithRetry(model, batchSchema, prompt, 3, 100000)
+        const output = await callAIWithRetry(
+          model,
+          batchSchema,
+          prompt,
+          3,
+          100000,
+          'batchSummarize',
+        )
         if (output?.results) {
           allResults.push(...output.results)
         }
@@ -317,13 +345,13 @@ export function createAIService(): AIService {
 
     async generateSingleSummary(item) {
       const prompt = buildSingleSummaryPrompt(item)
-      const output = await callAIWithRetry(model, singleSchema, prompt, 3, 8192)
+      const output = await callAIWithRetry(model, singleSchema, prompt, 3, 8192, 'singleSummary')
       return output || null
     },
     async generateTopicAggregation(items, existingTopics) {
       if (items.length < 3) return []
       const prompt = buildTopicPrompt(items, existingTopics)
-      const output = await callAIWithRetry(model, topicSchema, prompt, 3, 16000)
+      const output = await callAIWithRetry(model, topicSchema, prompt, 3, 16000, 'topicAggregation')
       return output?.groups || []
     },
   }

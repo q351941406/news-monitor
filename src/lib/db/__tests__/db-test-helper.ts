@@ -116,6 +116,19 @@ export async function createTestTables() {
     await pool.query(
       'CREATE INDEX IF NOT EXISTS idx_raw_items_fetched_at ON raw_items(fetched_at DESC)',
     )
+    await pool.query(`
+      CREATE TABLE ai_usage_logs (
+        id TEXT PRIMARY KEY,
+        operation TEXT NOT NULL,
+        input_tokens BIGINT DEFAULT 0 NOT NULL,
+        output_tokens BIGINT DEFAULT 0 NOT NULL,
+        duration_ms BIGINT DEFAULT 0 NOT NULL,
+        status TEXT NOT NULL,
+        attempts BIGINT DEFAULT 1 NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+      )
+    `)
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage_logs(created_at)')
   } finally {
     await pool.end()
   }

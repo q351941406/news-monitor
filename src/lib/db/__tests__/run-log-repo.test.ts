@@ -90,6 +90,12 @@ describe('RunLogRepo', () => {
 })
 
 describe('run-log-repo - 分支补测', () => {
+  beforeAll(async () => {
+    await createTestTables()
+  })
+  afterAll(async () => {
+    await dropTestSchema()
+  })
   it('aggregateSourceStats: last_run_at 比较取最新 + 无 recentRuns 时 successRate 100', () => {
     const rows = [
       { source: 'github', total_items: '10', last_run_at: '2026-08-01T00:00:00Z' },

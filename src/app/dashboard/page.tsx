@@ -12,6 +12,7 @@ import {
   Activity,
   TrendingUp,
   Clock,
+  Sparkles,
 } from 'lucide-react'
 
 interface RunLog {
@@ -42,11 +43,38 @@ interface SourceStat {
   totalItems: number
 }
 
+interface AIUsageDaily {
+  date: string
+  calls: number
+  inputTokens: number
+  outputTokens: number
+  failures: number
+}
+interface AIUsageStats {
+  todayCalls: number
+  todayInputTokens: number
+  todayOutputTokens: number
+  todayFailures: number
+  totalCalls: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalFailures: number
+  byOperation: Array<{
+    operation: string
+    calls: number
+    inputTokens: number
+    outputTokens: number
+    failures: number
+    successRate: number
+  }>
+  daily: AIUsageDaily[]
+}
 interface Metrics {
   recentRuns: RunLog[]
   dailyStats: DailyStat[]
   sourceStats: SourceStat[]
   alerts: Array<{ type: string; source: string; message: string }>
+  aiUsage: AIUsageStats
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -64,6 +92,18 @@ const SOURCE_COLORS: Record<string, string> = {
   producthunt: 'bg-orange-600',
   twitter: 'bg-sky-500',
 }
+
+function formatToken(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
+}
+const OPERATION_LABELS: Record<string, string> = {
+  batchSummarize: '批量摘要',
+  singleSummary: '单条摘要',
+  topicAggregation: '主题聚合',
+}
+const aiModelLabel = process.env.NEXT_PUBLIC_AI_MODEL || 'deepseek-v4-flash'
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`
@@ -256,6 +296,99 @@ export default function DashboardPage() {
             <TrendChart dailyStats={metrics.dailyStats} />
           </div>
         )}
+
+        {/* AI 用量统计 */}
+        <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 p-5 border-b border-stone-100">
+            <Sparkles className="w-4 h-4 text-violet-500" />
+            <h2 className="font-semibold text-stone-900 text-sm">AI 调用用量</h2>
+            <span className="text-[11px] text-stone-400 ml-1">
+              Token 统计 · 模型: {aiModelLabel}
+            </span>
+          </div>
+          <div className="p-5 grid gap-5 md:grid-cols-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-violet-50/60 border border-violet-100 p-4">
+                <div className="text-xs text-violet-600/70">今日 Token</div>
+                <div className="text-2xl font-bold text-stone-900 mt-1 tabular-nums">
+                  {formatToken(
+                    (metrics?.aiUsage.todayInputTokens || 0) +
+                      (metrics?.aiUsage.todayOutputTokens || 0),
+                  )}
+                </div>
+                <div className="text-[11px] text-stone-400 mt-1">
+                  {metrics?.aiUsage.todayCalls || 0} 次调用 · {metrics?.aiUsage.todayFailures || 0}{' '}
+                  失败
+                </div>
+              </div>
+              <div className="rounded-lg bg-stone-50 border border-stone-100 p-4">
+                <div className="text-xs text-stone-500">累计 Token</div>
+                <div className="text-2xl font-bold text-stone-900 mt-1 tabular-nums">
+                  {formatToken(
+                    (metrics?.aiUsage.totalInputTokens || 0) +
+                      (metrics?.aiUsage.totalOutputTokens || 0),
+                  )}
+                </div>
+                <div className="text-[11px] text-stone-400 mt-1">
+                  {metrics?.aiUsage.totalCalls || 0} 次调用 · {metrics?.aiUsage.totalFailures || 0}{' '}
+                  失败
+                </div>
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-stone-500 mb-2">按操作分布（近 7 天）</div>
+              <div className="space-y-2">
+                {(metrics?.aiUsage.byOperation || []).map((op) => (
+                  <div key={op.operation} className="flex items-center gap-3 text-sm">
+                    <span className="w-32 text-stone-600 truncate" title={op.operation}>
+                      {OPERATION_LABELS[op.operation] || op.operation}
+                    </span>
+                    <div className="flex-1 h-2 rounded-full bg-stone-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-violet-400"
+                        style={{ width: `${op.successRate}%` }}
+                      />
+                    </div>
+                    <span className="text-[11px] text-stone-500 tabular-nums w-16 text-right">
+                      {formatToken(op.inputTokens + op.outputTokens)}
+                    </span>
+                    <span className="text-[11px] text-stone-400 tabular-nums w-14 text-right">
+                      {op.calls} 次
+                    </span>
+                  </div>
+                ))}
+                {(metrics?.aiUsage.byOperation || []).length === 0 && (
+                  <div className="text-stone-400 text-sm py-4 text-center">暂无 AI 调用记录</div>
+                )}
+              </div>
+            </div>
+          </div>
+          {(metrics?.aiUsage.daily || []).length > 0 && (
+            <div className="px-5 pb-5">
+              <div className="text-xs text-stone-500 mb-2">近 7 天调用趋势</div>
+              <div className="flex items-end gap-1.5 h-24">
+                {metrics?.aiUsage.daily.map((d) => {
+                  const maxCalls = Math.max(...metrics.aiUsage.daily.map((x) => x.calls), 1)
+                  return (
+                    <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group">
+                      <div className="text-[10px] text-stone-400 tabular-nums opacity-0 group-hover:opacity-100 transition-opacity">
+                        {d.calls} 次
+                      </div>
+                      <div
+                        className="w-full rounded-t bg-violet-200 group-hover:bg-violet-300 transition-colors"
+                        style={{
+                          height: `${(d.calls / maxCalls) * 100}%`,
+                          minHeight: d.calls > 0 ? 4 : 0,
+                        }}
+                      />
+                      <div className="text-[10px] text-stone-400">{d.date.slice(5)}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Recent Runs Table */}
         <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">

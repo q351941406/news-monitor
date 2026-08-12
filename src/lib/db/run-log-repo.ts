@@ -4,6 +4,7 @@
 import { desc } from 'drizzle-orm'
 import { runLogs, type RunLog } from '../schema'
 import { getDb, getPgPool } from './connection'
+import { getAIUsageStats } from './ai-usage-repo'
 import { randomUUID } from 'crypto'
 
 /** 记录一次执行结果 */
@@ -180,10 +181,11 @@ export function aggregateSourceStats(rows: SourceStatRow[], recentRuns: RunLog[]
 }
 
 export async function getMetrics() {
-  const [recentRuns, dailyStats, sourceStats] = await Promise.all([
+  const [recentRuns, dailyStats, sourceStats, aiUsage] = await Promise.all([
     getRecentRuns(30),
     getDailyStats(7),
     getSourceStats(),
+    getAIUsageStats(7),
   ])
   // 检测静默失败：最近 3 次同源同阶段连续 0 数据
   const silentFailures = detectSilentFailures(recentRuns)
@@ -204,6 +206,7 @@ export async function getMetrics() {
     dailyStats: normalizedDaily,
     sourceStats: normalizedSource,
     alerts,
+    aiUsage,
   }
 }
 
