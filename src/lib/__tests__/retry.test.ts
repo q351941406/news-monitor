@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { fetchWithRetry, defaultShouldRetry } from '../retry'
+import { fetchWithRetry, defaultShouldRetry, execSyncWithRetry } from '../retry'
 
 describe('defaultShouldRetry', () => {
   it('rejects AbortError (no retry)', () => {
@@ -189,5 +189,82 @@ describe('retry - 边界分支', () => {
     const [attempt, , delayMs] = onRetry.mock.calls[0]
     expect(attempt).toBe(1)
     expect(delayMs).toBeGreaterThanOrEqual(5)
+  })
+})
+
+describe('execSyncWithRetry', () => {
+  it('默认参数下首次成功即返回', () => {
+    const fn = vi.fn().mockReturnValue('ok')
+    expect(execSyncWithRetry(fn)).toBe('ok')
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+  it('失败后重试并成功（覆盖 shouldRetry 继续分支）', () => {
+    const fn = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('first fail')
+      })
+      .mockReturnValueOnce('ok')
+    expect(execSyncWithRetry(fn, { retries: 3, baseDelayMs: 0, jitterRatio: 0 })).toBe('ok')
+    expect(fn).toHaveBeenCalledTimes(2)
+  })
+  it('耗尽所有重试后抛出最后一次错误（覆盖最后一次 break 分支）', () => {
+    const err = new Error('always fail')
+    const fn = vi.fn().mockImplementation(() => {
+      throw err
+    })
+    expect(() => execSyncWithRetry(fn, { retries: 2, baseDelayMs: 0, jitterRatio: 0 })).toThrow(
+      'always fail',
+    )
+    expect(fn).toHaveBeenCalledTimes(2)
+  })
+  it('shouldRetry 返回 false 时立即停止（覆盖提前 break 分支）', () => {
+    const fn = vi.fn().mockImplementation(() => {
+      throw new Error('stop now')
+    })
+    expect(() =>
+      execSyncWithRetry(fn, {
+        retries: 5,
+        baseDelayMs: 0,
+        jitterRatio: 0,
+        shouldRetry: () => false,
+      }),
+    ).toThrow('stop now')
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+  it('onRetry 钩子收到 attempt/error/delay', () => {
+    const onRetry = vi.fn()
+    const fn = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('boom')
+      })
+      .mockReturnValueOnce('ok')
+    expect(execSyncWithRetry(fn, { retries: 3, baseDelayMs: 100, jitterRatio: 0, onRetry })).toBe(
+      'ok',
+    )
+    expect(onRetry).toHaveBeenCalledTimes(1)
+    const [attempt, err, delay] = onRetry.mock.calls[0]
+    expect(attempt).toBe(1)
+    expect((err as Error).message).toBe('boom')
+    expect(delay).toBeGreaterThanOrEqual(100)
+  })
+  it('重试延迟被 maxBackoffMs 封顶', () => {
+    const onRetry = vi.fn()
+    const fn = vi.fn().mockImplementation(() => {
+      throw new Error('x')
+    })
+    expect(() =>
+      execSyncWithRetry(fn, {
+        retries: 4,
+        baseDelayMs: 1000,
+        maxBackoffMs: 1500,
+        jitterRatio: 0,
+        onRetry,
+      }),
+    ).toThrow()
+    // 第一次 delay=1000, 第二次 min(1500, 1000*2)=1500（封顶），第三次 min(1500, 4000)=1500
+    const delays = onRetry.mock.calls.map(([, , d]) => d as number)
+    expect(delays).toEqual([1000, 1500, 1500])
   })
 })

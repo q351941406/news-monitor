@@ -371,11 +371,11 @@ async function main() {
   }
   // 主题关联：AI 类 items → lt:0/1/2，游戏类 → lt:3/4，加密类 → lt:5/6
   const topicLinks: Array<[string, string[]]> = [
-    ['lt:0', ['github:a/b1', 'github:a/b2', 'github:a/b3']],
-    ['lt:1', ['github:a/b1', 'github:a/b2']],
-    ['lt:3', ['github:c/d1', 'github:c/d2']],
-    ['lt:4', ['github:c/d1', 'github:c/d2']],
-    ['lt:5', ['github:e/f1', 'github:e/f2']],
+    ['lt:0', ['github:gh8', 'github:gh16', 'github:gh24']],
+    ['lt:1', ['github:gh8', 'github:gh16']],
+    ['lt:3', ['github:gh1', 'github:gh9']],
+    ['lt:4', ['github:gh1', 'github:gh9']],
+    ['lt:5', ['github:gh2', 'github:gh10']],
   ]
   for (const [gid, ids] of topicLinks) {
     for (const itId of ids) {
@@ -386,7 +386,7 @@ async function main() {
     }
   }
   // 部分 item 标记已聚合（模拟队列消费过的）
-  const aggregatedIds = ['github:a/b1', 'github:c/d1', 'github:e/f1']
+  const aggregatedIds = ['github:gh8', 'github:gh1', 'github:gh2']
   for (const itId of aggregatedIds) {
     await pool.query('UPDATE raw_items SET aggregated_at = NOW() WHERE id = $1', [itId])
   }

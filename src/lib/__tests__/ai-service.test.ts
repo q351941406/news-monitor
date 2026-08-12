@@ -18,7 +18,7 @@ vi.mock('ai', () => {
 })
 
 import { createAIService, estimateTokens } from '../ai-service'
-import { generateText } from 'ai'
+import { generateText, NoObjectGeneratedError } from 'ai'
 
 function mockGenTextResult(output: unknown) {
   return {
@@ -177,5 +177,58 @@ describe('AIService - generateTopicAggregation', () => {
     expect(result).toHaveLength(2)
     expect(result[0].topic).toBe('AI 技术')
     expect(result[1].itemIds).toEqual(['3'])
+  })
+})
+
+describe('AIService - 主题聚合补充分支', () => {
+  const items3 = [
+    { id: '1', title: 'a', summary: 's', details: 'd' },
+    { id: '2', title: 'b', summary: 's', details: 'd' },
+    { id: '3', title: 'c', summary: 's', details: 'd' },
+  ]
+  it('existingTopics 非空时注入历史上下文（含 summary 空值回退）', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({ groups: [{ topic: '旧主题', summary: 's', itemIds: ['1', '2'] }] }),
+    )
+    const service = createAIService()
+    await service.generateTopicAggregation(items3, [{ topic: '旧主题', summary: '', itemCount: 2 }])
+    const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
+    expect(callArg.prompt).toContain('历史上下文')
+    expect(callArg.prompt).toContain('无概括')
+  })
+  it('NoObjectGeneratedError 触发重试后成功（isNoOutput 退避分支）', async () => {
+    vi.useFakeTimers()
+    try {
+      const noOut1 = new NoObjectGeneratedError('has message')
+      const noOut2 = new NoObjectGeneratedError('')
+      vi.mocked(generateText)
+        .mockRejectedValueOnce(noOut1)
+        .mockRejectedValueOnce(noOut2)
+        .mockResolvedValueOnce(
+          mockGenTextResult({ groups: [{ topic: 'T', summary: 's', itemIds: ['1', '2'] }] }),
+        )
+      const service = createAIService()
+      const promise = service.generateTopicAggregation(items3)
+      await vi.runAllTimersAsync()
+      const result = await promise
+      expect(result).toHaveLength(1)
+      expect(generateText).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('全部失败时返回空数组（output 为 null 的回退分支）', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(generateText).mockRejectedValue(new Error('ai down'))
+      const service = createAIService()
+      const promise = service.generateTopicAggregation(items3)
+      await vi.runAllTimersAsync()
+      const result = await promise
+      expect(result).toEqual([])
+      expect(generateText).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
