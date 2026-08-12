@@ -28,7 +28,7 @@ jobs:
     container:
       image: semgrep/semgrep
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0  # baseline 对比需要完整 git 历史
       - name: Run Semgrep (native CE)
@@ -64,9 +64,9 @@ jobs:
     # 仅在 PR 时运行
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Dependency Review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@ce3cf9537a52e8119d91fd484ab5b8a807627bf8
         with:
           # 拒绝 high/critical 漏洞
           fail-on-severity: high
@@ -76,8 +76,8 @@ jobs:
     name: npm Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'

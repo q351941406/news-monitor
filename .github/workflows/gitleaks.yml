@@ -22,12 +22,12 @@ jobs:
     name: Secret Scanning
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           # 需要完整历史才能扫描所有提交
           fetch-depth: 0
       - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v3
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # 不在 scheduled/PR 模式下 fail build — 仅报告
