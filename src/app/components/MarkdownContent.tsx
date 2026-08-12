@@ -29,7 +29,7 @@ export default function MarkdownContent({ content }: { content: string }) {
       remarkPlugins={[remarkGfm, remarkBreaks]}
       rehypePlugins={[rehypeRaw, rehypeSanitize]}
       components={{
-        a: ({ node, ...props }) => (
+        a: ({ ...props }) => (
           <a
             {...props}
             target="_blank"
@@ -37,21 +37,21 @@ export default function MarkdownContent({ content }: { content: string }) {
             className="text-blue-600 hover:underline"
           />
         ),
-        p: ({ node, ...props }) => (
+        p: ({ ...props }) => (
           <p {...props} className="text-sm text-stone-600 leading-relaxed mb-2" />
         ),
-        table: ({ node, ...props }) => (
+        table: ({ ...props }) => (
           <div className="overflow-x-auto mb-2">
             <table {...props} className="w-full text-xs border-collapse" />
           </div>
         ),
-        th: ({ node, ...props }) => (
+        th: ({ ...props }) => (
           <th
             {...props}
             className="border border-stone-300 px-2 py-1 bg-stone-100 text-left font-semibold"
           />
         ),
-        td: ({ node, ...props }) => <td {...props} className="border border-stone-300 px-2 py-1" />,
+        td: ({ ...props }) => <td {...props} className="border border-stone-300 px-2 py-1" />,
       }}
     >
       {normalizeChineseStrong(content)}

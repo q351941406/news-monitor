@@ -236,7 +236,7 @@ export async function getAggregationBatch(
          LIMIT $3`,
           [source, [...freshIds], oldLimit],
         )
-      : { rows: [] as any[] }
+      : { rows: [] }
   const merged = [...fresh.rows, ...old.rows]
   return merged.map((r) => ({
     id: r.id as string,
