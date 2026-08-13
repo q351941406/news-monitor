@@ -92,6 +92,10 @@ jobs:
     runs-on: ubuntu-latest
     # 仅在 PR 时运行
     if: github.event_name == 'pull_request'
+    # 私有仓库需启用 GitHub Advanced Security (GHAS) 才能运行 Dependency Review。
+    # 当前仓库未启用 GHAS 时该 job 会报错，标记 continue-on-error 降级为跳过；
+    # 一旦启用 GHAS 即自动生效。
+    continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Dependency Review
