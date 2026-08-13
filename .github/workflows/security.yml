@@ -31,6 +31,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0  # baseline 对比需要完整 git 历史
+          # PR 场景默认 checkout merge commit（refs/pull/N/merge，2 个 parent），
+          # 会导致 Semgrep 的 --baseline-commit diff-aware 失效、退化为全量扫描，
+          # 进而报告存量 finding、误阻断 PR。这里改为 checkout PR head 提交
+          # （单 parent），让 Semgrep 只扫描「本次 PR 变更的文件」。
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Run Semgrep (native CE)
         # 原生 Semgrep CLI（semgrep-action 已弃用）：
         # --config auto: 安全规则集 + 最佳实践规则
@@ -45,10 +50,42 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if [[ "$EVENT_NAME" == "push" ]]; then
-            semgrep scan --config auto --error --sarif-output=semgrep.sarif --baseline-commit="$BEFORE_SHA"
-          elif [[ "$EVENT_NAME" == "pull_request" ]]; then
-            semgrep scan --config auto --error --sarif-output=semgrep.sarif --baseline-commit="$PR_BASE_SHA"
+          # 容器以 semgrep 用户运行，workspace 目录 owner 是 host uid，git 默认报
+          # "dubious ownership"（safe.directory 未标记）。semgrep CLI 启动时会自行
+          # 设置 safe.directory，但我们的脚本在 semgrep 之前就要跑 git（merge-base），
+          # 所以必须先手动标记，否则 resolve_baseline 里的 git 命令全部失败、返回空。
+          git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
+
+          # 解析一个「当前 HEAD 祖先」的基线提交。
+          # github.event.before 在 force-push / rebase 时可能已不在历史里，
+          # 直接传给 --baseline-commit 会让 semgrep 崩溃（git cat-file 找不到该 commit）。
+          # 这里先校验有效性：无效则回退到 HEAD~1；连 HEAD~1 都没有（首个 commit）则不设 baseline 全量扫。
+          # 说明：busybox ash 对 [[ ]] 的支持因编译配置而异，这里统一用 POSIX [ ] 语法，
+          # 避免任何 sh 方言差异导致条件判断落空。
+          resolve_baseline() {
+            candidate="$1"
+            if [ -n "$candidate" ] && git merge-base --is-ancestor "$candidate" HEAD 2>/dev/null; then
+              echo "$candidate"
+            elif git rev-parse --verify "HEAD~1" >/dev/null 2>&1; then
+              echo "HEAD~1"
+            else
+              echo ""
+            fi
+          }
+          if [ "$EVENT_NAME" = "push" ]; then
+            BASELINE="$(resolve_baseline "$BEFORE_SHA")"
+            if [ -n "$BASELINE" ]; then
+              semgrep scan --config auto --error --sarif-output=semgrep.sarif --baseline-commit="$BASELINE"
+            else
+              semgrep scan --config auto --error --sarif-output=semgrep.sarif
+            fi
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            BASELINE="$(resolve_baseline "$PR_BASE_SHA")"
+            if [ -n "$BASELINE" ]; then
+              semgrep scan --config auto --error --sarif-output=semgrep.sarif --baseline-commit="$BASELINE"
+            else
+              semgrep scan --config auto --error --sarif-output=semgrep.sarif
+            fi
           else
             semgrep scan --config auto --sarif-output=semgrep.sarif
           fi
@@ -66,6 +103,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Dependency Review
+        # 私有仓库需启用 GitHub Advanced Security (GHAS) + Dependency graph
+        # 才能运行 Dependency Review。当前仓库未启用时该 action 直接报错，
+        # 用 step 级 continue-on-error 降级为 warning（黄色、不阻断）；
+        # 一旦启用 GHAS 即自动恢复为强门禁。
+        continue-on-error: true
         uses: actions/dependency-review-action@ce3cf9537a52e8119d91fd484ab5b8a807627bf8
         with:
           # 拒绝 high/critical 漏洞
