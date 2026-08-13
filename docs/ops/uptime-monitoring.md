@@ -3,7 +3,7 @@
 ## 服务
 - **平台**: UptimeRobot（免费版，50 监控额度）
 - **控制台**: https://dashboard.uptimerobot.com/
-- **告警邮箱**: <email>（已验证）
+- **告警邮箱**: xxx@xxx.com（已验证）
 
 ## 监控项
 
@@ -12,7 +12,7 @@
 | news-monitor-health | https://news.myaicode.qzz.io/api/health | HTTP | 300s (5min) | STARTED |
 
 ## 告警联系人
-- ID: `<contact-id>`，类型: Email，值: `<email>`
+- ID: `xxx`，类型: Email，值: `xxx@xxx.com`
 - threshold=0 / recurrence=0（免费版固定）
 
 ## 工作原理

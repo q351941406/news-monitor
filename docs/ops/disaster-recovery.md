@@ -64,7 +64,7 @@ DATABASE_URL=<恢复分支连接串> curl http://localhost:3000/api/health
 
 | 平台 | 账号 | 说明 |
 | ---- | ---- | ---- |
-| Neon | <email> | 生产数据库，勿删 |
-| Vercel | <email> | 部署平台 |
+| Neon | xxx@xxx.com | 生产数据库，勿删 |
+| Vercel | xxx@xxx.com | 部署平台 |
 | GitHub | q351941406 | 代码 + Actions secrets |
-| Sentry | <email> (主) | 错误监控（见 sentry.md） |
+| Sentry | xxx@xxx.com (主) | 错误监控（见 sentry.md） |

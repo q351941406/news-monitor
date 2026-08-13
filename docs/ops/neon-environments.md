@@ -5,22 +5,22 @@
 ## 结构
 
 ```
-生产库 (<project-id>)
-└── main 分支 (<prod-branch-id>)   ← production 环境使用
-    └── preview 分支 (<preview-branch-id>) ← preview 环境使用（数据从 main 复制）
+生产库 (xxx)
+└── main 分支 (xxx)   ← production 环境使用
+    └── preview 分支 (xxx) ← preview 环境使用（数据从 main 复制）
 ```
 
-- **Neon 项目**: `<project-id>`（名: <project-name>，区域: aws-us-east-1）
+- **Neon 项目**: `xxx`（名: xxx，区域: aws-us-east-1）
 - **生产库**: main 分支，`DATABASE_URL` → production/development 环境
-- **Preview 库**: preview 分支（`<preview-branch-id>`），`DATABASE_URL` → 仅 preview 环境
+- **Preview 库**: preview 分支（`xxx`），`DATABASE_URL` → 仅 preview 环境
 - 应用代码只读取 `DATABASE_URL` 一个变量（运行时 + 迁移 + drizzle 均如此）
 
 ## 连接端点
 
 | 环境 | Endpoint host |
 |---|---|
-| 生产 | `<endpoint-host>-pooler...neon.tech` |
-| Preview | `<endpoint-host>-pooler...neon.tech` |
+| 生产 | `xxx-pooler...neon.tech` |
+| Preview | `xxx-pooler...neon.tech` |
 
 ## 日常操作
 
@@ -29,7 +29,7 @@
 Neon 分支是**创建时快照**，不会自动跟随主分支更新。当生产库数据变化较大、希望 preview 同步时：
 
 1. 删除旧分支：`DELETE /api/v2/projects/{project}/branches/{branch_id}`
-2. 从 main 重建：`POST /api/v2/projects/{project}/branches` body: `{"branch":{"name":"preview","parent_id":"<prod-branch-id>"},"endpoints":[{"type":"read_write"}]}`
+2. 从 main 重建：`POST /api/v2/projects/{project}/branches` body: `{"branch":{"name":"preview","parent_id":"xxx"},"endpoints":[{"type":"read_write"}]}`
 3. 用新分支的 connection_uri 更新 Vercel preview 环境的 `DATABASE_URL`（`upsert=true`，target=`["preview"]`）
 
 ### 切换 Preview 指向（临时对比数据）

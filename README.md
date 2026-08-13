@@ -62,22 +62,7 @@
 - GitHub Actions secrets：`ADMIN_TOKEN`（供 CI 测试）
 - 本地开发：`.env.local` 中 `ADMIN_TOKEN=xxx`
 
-**Token 找回/重置**：
-
-```bash
-# 重新生成一个（替换下面 Vercel + GitHub 两处即可）
-openssl rand -hex 24
-
-# Vercel（替换 projectId）
-curl -X POST -H "Authorization: Bearer $VERCEL_TOKEN" \
-  "https://api.vercel.com/v10/projects/<projectId>/env?upsert=true" \
-  -d '{"key":"ADMIN_TOKEN","value":"<新token>","type":"sensitive","target":["production","preview"]}'
-
-# GitHub
-gh secret set ADMIN_TOKEN -b "<新token>"
-```
-
-> ⚠️ **安全说明**：真实 token 不写入本仓库（gitleaks 会在 CI 拦截），通过上述平台环境变量管理。
+> ⚠️ **安全说明**：真实 token 不写入本仓库（gitleaks 会在 CI 拦截），由维护者通过 Vercel / GitHub 平台环境变量管理；需要重置时用 `openssl rand -hex 24` 重新生成并同步到两处即可。
 > 实现代码：`src/lib/admin-auth.ts`（后端校验）、`src/lib/admin-token.ts`（前端管理）。
 
 ## 架构
@@ -267,14 +252,14 @@ CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
 
 ### Sentry 监控（已启用）
 
-错误上报到 Sentry，新 issue 出现会自动发邮件告警到主邮箱 `<email>`。
+错误上报到 Sentry，新 issue 出现会自动发邮件告警到主邮箱 `xxx@xxx.com`。
 
 - **组织信息 / 环境变量 / 告警规则 / API 操作** → 详见 [`docs/ops/sentry.md`](docs/ops/sentry.md)
 - **备份与灾难恢复**（Neon PITR / 恢复演练）→ 详见 [`docs/ops/disaster-recovery.md`](docs/ops/disaster-recovery.md)
 
 **快速信息**：
 
-- Org: `<org-slug>` ｜ Project: `news-monitor` ｜ 控制台: https://<org-slug>.sentry.io/projects/news-monitor/
+- Org: `xxx` ｜ Project: `news-monitor` ｜ 控制台: https://xxx.sentry.io/projects/news-monitor/
 - 告警规则：新 issue 出现 → 邮件；高优先级 issue → 邮件
 - 健康检查 / AbortError / ECONNRESET 已在 SDK 中过滤，不上报
 

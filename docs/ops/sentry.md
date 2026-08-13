@@ -7,12 +7,12 @@
 
 | 项目 | 值 |
 | ---- | --- |
-| Org slug | `<org-slug>` |
+| Org slug | `xxx` |
 | Project | `news-monitor` |
-| 控制台 | https://<org-slug>.sentry.io/projects/news-monitor/ |
-| DSN | `https://<sentry-key>@<org>.ingest.us.sentry.io/<sentry-project-id>` |
-| 账号邮箱（主） | `<email>` |
-| 账号邮箱（备） | `<email>` |
+| 控制台 | https://xxx.sentry.io/projects/news-monitor/ |
+| DSN | `https://xxx@xxx.ingest.us.sentry.io/xxx` |
+| 账号邮箱（主） | `xxx@xxx.com` |
+| 账号邮箱（备） | `xxx@xxx.com` |
 
 > ⚠️ 主邮箱已切换为 iCloud。所有 Sentry 告警邮件发到主邮箱。
 
@@ -22,7 +22,7 @@
 | ---- | --------- | -------- |
 | `SENTRY_DSN` | 上面 DSN | Vercel (prod+preview) + GitHub secrets |
 | `NEXT_PUBLIC_SENTRY_DSN` | 上面 DSN | Vercel (prod+preview) |
-| `SENTRY_ORG` | `<org-slug>` | Vercel (prod+preview) + GitHub secrets |
+| `SENTRY_ORG` | `xxx` | Vercel (prod+preview) + GitHub secrets |
 | `SENTRY_PROJECT` | `news-monitor` | Vercel (prod+preview) + GitHub secrets |
 | `SENTRY_AUTH_TOKEN` | 用于 source maps 上传（权限大，勿外泄） | GitHub secrets + Vercel (production) |
 
@@ -44,8 +44,8 @@
 
 | 通知来源 | 收件邮箱 |
 | -------- | -------- |
-| Sentry 错误 / 高优先级 / 抓取失败 | `<email>`（Sentry 主邮箱） |
-| GitHub 平台通知（Action 失败等） | `<email>`（GitHub 主邮箱，用户选择保留） |
+| Sentry 错误 / 高优先级 / 抓取失败 | `xxx@xxx.com`（Sentry 主邮箱） |
+| GitHub 平台通知（Action 失败等） | `xxx@xxx.com`（GitHub 主邮箱，用户选择保留） |
 
 > 如需把 GitHub 通知也切到 iCloud：GitHub Settings → Notifications → 通知邮箱选已验证的 iCloud 地址（不改主邮箱）。
 
@@ -63,13 +63,13 @@ SDK 已过滤以下噪音，不上报不告警：
 ```bash
 # 查看未解决 issue
 curl -H "Authorization: Bearer $TOKEN" \
-  "https://sentry.io/api/0/projects/<org-slug>/news-monitor/issues/?query=is:unresolved&statsPeriod=24h"
+  "https://sentry.io/api/0/projects/xxx/news-monitor/issues/?query=is:unresolved&statsPeriod=24h"
 
 # 查看告警规则
 curl -H "Authorization: Bearer $TOKEN" \
-  "https://sentry.io/api/0/projects/<org-slug>/news-monitor/rules/"
+  "https://sentry.io/api/0/projects/xxx/news-monitor/rules/"
 
 # 查看组织成员
 curl -H "Authorization: Bearer $TOKEN" \
-  "https://sentry.io/api/0/organizations/<org-slug>/members/"
+  "https://sentry.io/api/0/organizations/xxx/members/"
 ```
