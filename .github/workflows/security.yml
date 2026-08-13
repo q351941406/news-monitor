@@ -50,12 +50,18 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
+          # 容器以 semgrep 用户运行，workspace 目录 owner 是 host uid，git 默认报
+          # "dubious ownership"（safe.directory 未标记）。semgrep CLI 启动时会自行
+          # 设置 safe.directory，但我们的脚本在 semgrep 之前就要跑 git（merge-base），
+          # 所以必须先手动标记，否则 resolve_baseline 里的 git 命令全部失败、返回空。
+          git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
+
           # 解析一个「当前 HEAD 祖先」的基线提交。
           # github.event.before 在 force-push / rebase 时可能已不在历史里，
           # 直接传给 --baseline-commit 会让 semgrep 崩溃（git cat-file 找不到该 commit）。
           # 这里先校验有效性：无效则回退到 HEAD~1；连 HEAD~1 都没有（首个 commit）则不设 baseline 全量扫。
-          # 注意：容器 shell 是 POSIX sh（busybox ash），必须用 [ ] 而非 [[ ]]（bash 扩展），
-          # 否则 [[ 会被当作命令执行失败，if/elif 全部落空、退化为 else 分支的全量扫描。
+          # 说明：busybox ash 对 [[ ]] 的支持因编译配置而异，这里统一用 POSIX [ ] 语法，
+          # 避免任何 sh 方言差异导致条件判断落空。
           resolve_baseline() {
             candidate="$1"
             if [ -n "$candidate" ] && git merge-base --is-ancestor "$candidate" HEAD 2>/dev/null; then
