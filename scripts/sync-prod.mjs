@@ -1,7 +1,7 @@
 // 从线上拉取 github 全部主题 + items，同步到本地 dev 库
 import { Pool } from 'pg'
 const pool = new Pool({
-  connectionString: 'postgresql://postgres:postgres@localhost:5432/news_monitor_dev',
+  connectionString: process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/news_monitor_dev',
 })
 const API = 'https://news.myaicode.qzz.io'
 const tops = await (await fetch(`${API}/api/topics?source=github&showAll=true`)).json()

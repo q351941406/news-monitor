@@ -16,7 +16,7 @@ services:
       - "3000:3000"
     environment:
       # 本地数据库连接（指向下方 db 服务）
-      DATABASE_URL: postgresql://news:news_dev_password@db:5432/news_monitor
+      DATABASE_URL: postgresql://news:${POSTGRES_PASSWORD:-news_dev_password}@db:5432/news_monitor
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       # 其他敏感变量应通过 .env 文件注入，不进 git
@@ -45,7 +45,7 @@ services:
     environment:
       POSTGRES_DB: news_monitor
       POSTGRES_USER: news
-      POSTGRES_PASSWORD: news_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-news_dev_password}
     ports:
       - "5432:5432"   # 暴露给宿主机，方便用 psql / GUI 工具调试
     volumes:

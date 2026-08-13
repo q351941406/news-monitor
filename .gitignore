@@ -37,3 +37,6 @@ next-env.d.ts
 /legacy
 .env*
 .scratch/
+
+# OpenCode/Claude Code 本地会话状态（含本机路径等个人信息，勿提交）
+.omc/
