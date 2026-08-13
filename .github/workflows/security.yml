@@ -31,6 +31,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0  # baseline 对比需要完整 git 历史
+          # PR 场景默认 checkout merge commit（refs/pull/N/merge，2 个 parent），
+          # 会导致 Semgrep 的 --baseline-commit diff-aware 失效、退化为全量扫描，
+          # 进而报告存量 finding、误阻断 PR。这里改为 checkout PR head 提交
+          # （单 parent），让 Semgrep 只扫描「本次 PR 变更的文件」。
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Run Semgrep (native CE)
         # 原生 Semgrep CLI（semgrep-action 已弃用）：
         # --config auto: 安全规则集 + 最佳实践规则
