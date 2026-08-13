@@ -12,6 +12,7 @@
 | [`docs/ops/disaster-recovery.md`](docs/ops/disaster-recovery.md) | 备份与灾难恢复（Neon PITR、恢复演练）         |
 | [`docs/ops/uptime-monitoring.md`](docs/ops/uptime-monitoring.md) | Uptime 宕机监控（UptimeRobot、告警邮箱）      |
 | [`docs/ops/neon-environments.md`](docs/ops/neon-environments.md) | Neon 环境隔离（Preview 分支库）               |
+| [`docs/ops/branch-protection.md`](docs/ops/branch-protection.md) | main 分支保护手动配置（required checks）      |
 | [`docs/adr/`](docs/adr/)                                         | 架构决策记录（ADR）                           |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md)                             | 系统架构详解                                  |
 | [`CONTEXT.md`](CONTEXT.md)                                       | 项目上下文 / 领域知识                         |
@@ -205,8 +206,7 @@ npm run topic-aggregate -- --source=github
 │   ├── reaggregate.yml       # 主题手动重聚合
 │   ├── test.yml              # 单元 + 集成测试 + 覆盖率门槛
 │   ├── security.yml          # Semgrep SAST + npm audit
-│   ├── gitleaks.yml          # 密钥扫描
-│   └── sync-branch-protection.yml
+│   └── gitleaks.yml          # 密钥扫描
 ├── Dockerfile                # 生产镜像（multi-stage, standalone）
 ├── docker-compose.yml        # 本地 app + Postgres
 ├── .dockerignore
@@ -240,9 +240,14 @@ npm run db:studio
 
 ### 自动迁移（生产部署）
 
-Vercel 构建时自动执行幂等迁移（`buildCommand: "npm run db:migrate:ci && npm run build"`），
-**schema 变更随代码发布自动应用**，无需手动操作。`migrate-ci.ts` 用 `__ci_migrations` 表记录
-已应用项，重复/并发执行安全。
+Vercel 构建时自动执行幂等迁移（`buildCommand: "npm run build && npm run db:migrate:ci"`）。
+顺序是**先构建、后迁移**：代码编译不过就不会触碰生产库，避免「构建失败但 schema 已变更」的
+不可回滚窗口。schema 变更随代码发布自动应用，无需手动操作。`migrate-ci.ts` 用 `__ci_migrations`
+表记录已应用项，重复/并发执行安全。
+
+> ⚠️ **迁移必须向前兼容**（additive / expand-contract）：先加列、后删列，禁止在单次迁移中
+> 破坏性地 drop 列或改类型，否则部署切换窗口内旧代码会读到不兼容的 schema。
+
 CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
 
 ## 🔁 网络重试与 Sentry 错误追踪
