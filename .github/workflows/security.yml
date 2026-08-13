@@ -54,26 +54,28 @@ jobs:
           # github.event.before 在 force-push / rebase 时可能已不在历史里，
           # 直接传给 --baseline-commit 会让 semgrep 崩溃（git cat-file 找不到该 commit）。
           # 这里先校验有效性：无效则回退到 HEAD~1；连 HEAD~1 都没有（首个 commit）则不设 baseline 全量扫。
+          # 注意：容器 shell 是 POSIX sh（busybox ash），必须用 [ ] 而非 [[ ]]（bash 扩展），
+          # 否则 [[ 会被当作命令执行失败，if/elif 全部落空、退化为 else 分支的全量扫描。
           resolve_baseline() {
-            local candidate="$1"
-            if [[ -n "$candidate" ]] && git merge-base --is-ancestor "$candidate" HEAD 2>/dev/null; then
+            candidate="$1"
+            if [ -n "$candidate" ] && git merge-base --is-ancestor "$candidate" HEAD 2>/dev/null; then
               echo "$candidate"
-            elif git merge-base --is-ancestor "HEAD~1" HEAD 2>/dev/null; then
+            elif git rev-parse --verify "HEAD~1" >/dev/null 2>&1; then
               echo "HEAD~1"
             else
               echo ""
             fi
           }
-          if [[ "$EVENT_NAME" == "push" ]]; then
+          if [ "$EVENT_NAME" = "push" ]; then
             BASELINE="$(resolve_baseline "$BEFORE_SHA")"
-            if [[ -n "$BASELINE" ]]; then
+            if [ -n "$BASELINE" ]; then
               semgrep scan --config auto --error --sarif-output=semgrep.sarif --baseline-commit="$BASELINE"
             else
               semgrep scan --config auto --error --sarif-output=semgrep.sarif
             fi
-          elif [[ "$EVENT_NAME" == "pull_request" ]]; then
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
             BASELINE="$(resolve_baseline "$PR_BASE_SHA")"
-            if [[ -n "$BASELINE" ]]; then
+            if [ -n "$BASELINE" ]; then
               semgrep scan --config auto --error --sarif-output=semgrep.sarif --baseline-commit="$BASELINE"
             else
               semgrep scan --config auto --error --sarif-output=semgrep.sarif
