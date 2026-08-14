@@ -3,11 +3,41 @@
  */
 import { withSentryConfig } from '@sentry/nextjs'
 
+const securityHeaders = [
+  // 防点击劫持：禁止任何页面用 iframe 嵌套本站
+  { key: 'X-Frame-Options', value: 'DENY' },
+  // 防 MIME 嗅探：浏览器不得猜测文件类型（避免 text 被当 JS 执行）
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  // 控制 Referer 泄漏：跨站跳转只带 origin，不带完整 URL 路径
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  // 强制 HTTPS：禁止降级到 HTTP（避免中间人篡改）
+  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+  // CSP：声明页面允许加载的资源来源（防 XSS 注入）
+  {
+    key: 'Content-Security-Policy',
+    value: [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: https://pbs.twimg.com https://ph-uploads.imgix.net https://raw.githubusercontent.com https://avatars.githubusercontent.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      "connect-src 'self' https://*.sentry.io https://o*.ingest.sentry.io",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join('; '),
+  },
+]
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // standalone output 让 `next build` 生成 server.js + 必要依赖到 .next/standalone
   // Docker 构建时只需 COPY 该目录，大幅减小镜像体积
   output: 'standalone',
+  // 全站安全响应头（验证: securityheaders.com）
+  async headers() {
+    return [{ source: '/:path*', headers: securityHeaders }]
+  },
   experimental: {
     serverActions: {
       allowedOrigins: ['localhost:3000'],
