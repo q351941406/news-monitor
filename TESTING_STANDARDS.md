@@ -13,6 +13,16 @@
 - 使用真实 PostgreSQL 数据库
 - 通过公共接口验证行为
 - 运行在 vitest.config.integration.mjs
+- **建表复用生产迁移**：每个测试文件创建独立 schema，执行 drizzle/*.sql 全部迁移
+  建表（scripts/migrate-core.ts），测试环境 = 生产迁移后状态
+- **端到端链路测试**（e2e-pipeline*.test.ts）：数据源抓取(mock fetch/CLI) →
+  存储 → AI 摘要落库 → 主题聚合 → API 读取，串起真实主链路
+
+### LLM 全局防护（所有测试）
+
+- vitest.setup.ts 全局 mock `ai` 模块：generateText 默认抛哨兵错误
+- **测试环境永不真实调用 LLM API**；文件级 vi.mock('ai') 可覆盖全局
+  （如 ai-service.test.ts 测试重试/分批时显式提供假响应）
 
 ## Mock 原则 (来自 tdd/mocking.md)
 
