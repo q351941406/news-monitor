@@ -1,7 +1,7 @@
 /**
  * 统计仓库 — 数据统计和清理
  */
-import { eq, and, lt } from 'drizzle-orm'
+import { eq, and, lt, sql } from 'drizzle-orm'
 import { rawItems } from '../schema'
 import { getDb } from './connection'
 
@@ -11,8 +11,12 @@ export async function getUnreadCount(source?: string): Promise<number> {
   const condition = source
     ? and(eq(rawItems.source, source), eq(rawItems.isRead, false))
     : eq(rawItems.isRead, false)
-  const result = await db.select({ count: rawItems.id }).from(rawItems).where(condition)
-  return result.length
+  // SQL count(*) 聚合，避免把匹配行全量拉回内存再数长度
+  const [result] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(rawItems)
+    .where(condition)
+  return result?.count ?? 0
 }
 
 /** 清理过期数据 */

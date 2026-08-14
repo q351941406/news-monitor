@@ -112,9 +112,12 @@ export async function createTestTables() {
     await pool.query(
       'CREATE INDEX IF NOT EXISTS idx_run_logs_started_at ON run_logs(started_at DESC)',
     )
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_raw_items_source ON raw_items(source)')
+    // 与生产迁移 0005 保持一致（首页/归档查询的复合索引）
     await pool.query(
-      'CREATE INDEX IF NOT EXISTS idx_raw_items_fetched_at ON raw_items(fetched_at DESC)',
+      'CREATE INDEX IF NOT EXISTS idx_raw_items_source_read_fetched ON raw_items(source, is_read, fetched_at DESC)',
+    )
+    await pool.query(
+      'CREATE INDEX IF NOT EXISTS idx_raw_items_read_fetched ON raw_items(is_read, fetched_at DESC)',
     )
     await pool.query(`
       CREATE TABLE ai_usage_logs (
