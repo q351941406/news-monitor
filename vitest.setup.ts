@@ -11,6 +11,7 @@
  *   例如 ai-service.test.ts 需要测试重试/分批逻辑时显式提供假响应
  */
 import { vi } from 'vitest'
+import '@testing-library/jest-dom/vitest'
 
 vi.mock('ai', () => {
   const mockGenerateText = vi.fn().mockImplementation(() => {
