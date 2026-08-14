@@ -13,11 +13,18 @@ import { getNewsCounts } from '@/lib/db'
 export const NEWS_COUNTS_TAG = 'news-counts'
 
 /** 带缓存的未读/总数统计（TTL 60s，主动失效优先） */
-export function getNewsCountsCached() {
-  return unstable_cache(() => getNewsCounts(), ['news-counts'], {
-    revalidate: 60,
-    tags: [NEWS_COUNTS_TAG],
-  })()
+export async function getNewsCountsCached() {
+  try {
+    // unstable_cache 在无 Next 运行时（集成测试直调路由）会同步抛错
+    const cached = unstable_cache(() => getNewsCounts(), ['news-counts'], {
+      revalidate: 60,
+      tags: [NEWS_COUNTS_TAG],
+    })
+    return await cached()
+  } catch {
+    // fallback：无缓存运行时直接查 DB（集成测试/非 Next 环境）
+    return getNewsCounts()
+  }
 }
 
 /** 数据变化后主动失效 counts 缓存 */
