@@ -47,4 +47,6 @@
 
 - 核心逻辑：AIService、DB 仓库、Sources → 必须覆盖
 - 边界情况：空数据、API 错误、缺少配置 → 必须覆盖
-- UI 组件：不强制覆盖
+- UI 交互组件：有交互逻辑（useState/onClick/回调）的组件覆盖（jsdom + Testing Library）；
+  纯展示组件（如 MarkdownContent）用 SSR 渲染即可
+- 组件测试用文件级 `// @vitest-environment jsdom` 注释，不污染全局 node 环境

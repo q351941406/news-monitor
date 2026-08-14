@@ -281,8 +281,8 @@ CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
 | 本地快速门槛  | lines 30% 等    | `vitest.config.mjs`，`npm run test:coverage` 开发期自查用  |
 | **CI 硬门槛** | **四指标 ≥80%** | `scripts/merge-coverage.ts` 合并 unit ∪ integration 后检查 |
 
-> CI 红线：`merge-coverage.ts` 对 **lines/statements/functions/branches 全部要求 ≥80%**，不足则退出码非 0 阻断合并。当前实测：lines 90.4% / statements 90.3% / branches 80.7%（合并 unit ∪ integration）。
-> 集成测试层（真实 PostgreSQL）当前 lines 60.7%，三大数据源 github 88.6% / producthunt 87.5% / twitter 79.8%。
+> CI 红线：`merge-coverage.ts` 对 **lines/statements/functions/branches 全部要求 ≥80%**，不足则退出码非 0 阻断合并。当前实测：lines 92.6% / statements 92.3% / branches 82.6%（合并 unit ∪ integration）。
+> 集成测试层（真实 PostgreSQL）当前 lines 60.7%，三大数据源 github 88.6% / producthunt 87.5% / twitter 79.8%，端到端链路用例已覆盖数据源→存储→聚合→展示。
 
 跑覆盖率 + 门槛检查：
 
@@ -296,8 +296,8 @@ npm run test:coverage:check     # unit + integration + merge，低于 80% 则退
 ### 测试
 
 ```bash
-npm test                  # 单元测试（127 用例）
-npm run test:integration  # 集成测试（69 用例，需要本地 Postgres）
+npm test                  # 单元测试（130 用例：含 NewsCard/SourceTabs 组件测试）
+npm run test:integration  # 集成测试（73 用例，需要本地 Postgres）
 npm run test:all          # 全部
 npm run test:coverage     # 覆盖率
 ```
