@@ -15,6 +15,7 @@ import {
 } from '@/lib/db'
 import { createAIService } from '@/lib/ai-service'
 import { withRunLog } from '@/lib/run-logger'
+import { revalidateCacheAfterRun } from './revalidate-cache'
 const log = logger.child({ script: 'topic-aggregate' })
 
 /** 估算单条 item 在聚合 prompt 中的字符数（与 buildTopicPrompt 格式一致） */
@@ -134,6 +135,7 @@ async function main() {
     process.exit(1)
   }
   await aggregateTopics(source)
+  await revalidateCacheAfterRun('topic-aggregate')
 }
 // 仅当作为 CLI 直接执行时才运行 main（被测试 import 时跳过）
 // require.main === module：tsx 运行脚本时成立，vitest import 时失败

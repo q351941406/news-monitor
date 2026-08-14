@@ -15,6 +15,7 @@ import {
   deleteReadEmptyTopicsByItemId,
 } from '@/lib/db'
 import { isAdminAuthorized, unauthorized } from '@/lib/admin-auth'
+import { invalidateNewsCounts } from '@/lib/cache'
 
 // GET — 公开读操作，任何人可看
 export async function GET(request: NextRequest) {
@@ -40,16 +41,19 @@ export async function POST(request: NextRequest) {
     await markAsRead(itemId)
     // 实时清理：若该 item 所属主题组已无任何未读（含该组只剩它一条的情况），物理删除整组
     await deleteReadEmptyTopicsByItemId(itemId)
+    invalidateNewsCounts()
     return NextResponse.json({ success: true })
   }
   if (action === 'unread' && itemId) {
     await markAsUnread(itemId)
+    invalidateNewsCounts()
     return NextResponse.json({ success: true })
   }
   if (action === 'readGroup' && topicId) {
     await markGroupAsRead(topicId)
     // 整组已读 → 该组已无未读 item，物理删除（级联删关联）
     await deleteReadEmptyTopics([topicId])
+    invalidateNewsCounts()
     return NextResponse.json({ success: true })
   }
   if (action === 'readAll') {
@@ -62,10 +66,12 @@ export async function POST(request: NextRequest) {
         await deleteReadEmptyTopicsBySource(s)
       }
     }
+    invalidateNewsCounts()
     return NextResponse.json({ success: true })
   }
   if (action === 'resetAll') {
     await resetAllRead(source || undefined)
+    invalidateNewsCounts()
     return NextResponse.json({ success: true })
   }
   return NextResponse.json({ error: 'Invalid action' }, { status: 400 })

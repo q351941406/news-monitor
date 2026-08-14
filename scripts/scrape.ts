@@ -9,6 +9,7 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') })
 import { sources, getSource } from '../src/sources'
 import { storeRawItems } from '@/lib/db'
 import { withRunLog } from '@/lib/run-logger'
+import { revalidateCacheAfterRun } from './revalidate-cache'
 const log = logger.child({ script: 'scrape' })
 async function main() {
   const args = process.argv.slice(2)
@@ -42,6 +43,8 @@ async function main() {
         timestamp: Date.now(),
       }),
     )
+    // 抓取产生新数据 → 失效前端缓存（需配置 REVALIDATE_URL/ADMIN_TOKEN）
+    await revalidateCacheAfterRun('scrape')
   } catch (error) {
     log.error(`  ❌ Error: ${error}`)
     process.exit(1)

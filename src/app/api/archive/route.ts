@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getArchivedNews, markAsUnread, deleteItem } from '@/lib/db'
 import { isAdminAuthorized, unauthorized } from '@/lib/admin-auth'
+import { invalidateNewsCounts } from '@/lib/cache'
 
 /**
  * 历史归档 API
@@ -26,10 +27,12 @@ export async function POST(request: NextRequest) {
   const { action, itemId } = body ?? {}
   if (action === 'restore' && typeof itemId === 'string') {
     await markAsUnread(itemId)
+    invalidateNewsCounts()
     return NextResponse.json({ success: true })
   }
   if (action === 'delete' && typeof itemId === 'string') {
     await deleteItem(itemId)
+    invalidateNewsCounts()
     return NextResponse.json({ success: true })
   }
   return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
