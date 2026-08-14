@@ -8,20 +8,21 @@
  * search_path，因此测试文件可以安全地并行运行，互不干扰。
  * 测试结束后调用 dropTestSchema() 整体清理。
  *
+ * 建表：复用 scripts/migrate-core.ts 执行 drizzle/*.sql 迁移文件，
+ * 保证测试环境的表结构与生产迁移完全一致（单一真相，永不漂移）。
+ *
  * 需要设置 DATABASE_URL 环境变量指向测试数据库。
  */
 import { Pool } from 'pg'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { resetDbPool } from '../connection'
-
+import { runMigrations } from '../../../../scripts/migrate-core'
 let testPool: Pool | null = null
 let testSchema: string | null = null
-
 /** 当前 worker 专属 schema 的 search_path 连接参数（未初始化时为 undefined） */
 function schemaOptions(): string | undefined {
   return testSchema ? `-c search_path=${testSchema}` : undefined
 }
-
 export function getTestDb() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL 未设置，无法运行数据库集成测试')
@@ -34,8 +35,7 @@ export function getTestDb() {
   }
   return drizzle(testPool)
 }
-
-/** 创建当前 worker 专属 schema 并在其中建表，实现并行测试隔离 */
+/** 创建当前 worker 专属 schema 并应用全部迁移建表，实现并行测试隔离 */
 export async function createTestTables() {
   if (testPool) {
     await testPool.end()
@@ -56,87 +56,15 @@ export async function createTestTables() {
     options: schemaOptions(),
   })
   try {
-    await pool.query('DROP TABLE IF EXISTS topic_items CASCADE')
-    await pool.query('DROP TABLE IF EXISTS topic_groups CASCADE')
-    await pool.query('DROP TABLE IF EXISTS ai_analysis CASCADE')
-    await pool.query('DROP TABLE IF EXISTS raw_items CASCADE')
-    await pool.query(`
-      CREATE TABLE raw_items (
-        id TEXT PRIMARY KEY,
-        source TEXT NOT NULL,
-        title TEXT,
-        url TEXT NOT NULL,
-        raw_data JSONB NOT NULL,
-        is_read BOOLEAN DEFAULT FALSE NOT NULL,
-        fetched_at BIGINT NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        aggregated_at TIMESTAMPTZ
-      )
-    `)
-    await pool.query(`
-      CREATE TABLE ai_analysis (
-        item_id TEXT PRIMARY KEY REFERENCES raw_items(id) ON DELETE CASCADE,
-        summary TEXT NOT NULL,
-        details TEXT,
-        processed_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `)
-    await pool.query(`
-      CREATE TABLE topic_groups (
-        id TEXT PRIMARY KEY,
-        source TEXT NOT NULL,
-        topic TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `)
-    await pool.query(`
-      CREATE TABLE topic_items (
-        topic_id TEXT REFERENCES topic_groups(id) ON DELETE CASCADE,
-        item_id TEXT REFERENCES raw_items(id) ON DELETE CASCADE,
-        PRIMARY KEY (topic_id, item_id)
-      )
-    `)
-    await pool.query(`
-      CREATE TABLE run_logs (
-        id TEXT PRIMARY KEY,
-        source TEXT NOT NULL,
-        stage TEXT NOT NULL,
-        status TEXT NOT NULL,
-        items_count BIGINT DEFAULT 0 NOT NULL,
-        duration_ms BIGINT DEFAULT 0 NOT NULL,
-        error TEXT,
-        started_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
-      )
-    `)
-    await pool.query(
-      'CREATE INDEX IF NOT EXISTS idx_run_logs_started_at ON run_logs(started_at DESC)',
-    )
-    // 与生产迁移 0005 保持一致（首页/归档查询的复合索引）
-    await pool.query(
-      'CREATE INDEX IF NOT EXISTS idx_raw_items_source_read_fetched ON raw_items(source, is_read, fetched_at DESC)',
-    )
-    await pool.query(
-      'CREATE INDEX IF NOT EXISTS idx_raw_items_read_fetched ON raw_items(is_read, fetched_at DESC)',
-    )
-    await pool.query(`
-      CREATE TABLE ai_usage_logs (
-        id TEXT PRIMARY KEY,
-        operation TEXT NOT NULL,
-        input_tokens BIGINT DEFAULT 0 NOT NULL,
-        output_tokens BIGINT DEFAULT 0 NOT NULL,
-        duration_ms BIGINT DEFAULT 0 NOT NULL,
-        status TEXT NOT NULL,
-        attempts BIGINT DEFAULT 1 NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
-      )
-    `)
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_ai_usage_created ON ai_usage_logs(created_at)')
+    // 应用 drizzle/*.sql 全部迁移（0000→0005），与生产迁移完全一致
+    // recordApplied=false：每个 worker 是新 schema，无需追踪表
+    // rewriteSchema：drizzle-kit 生成的迁移硬编码 "public". 前缀，
+    //   测试 schema 下必须重写指向本 worker 的 schema，否则外键错指 public
+    await runMigrations(pool, { recordApplied: false, rewriteSchema: testSchema! })
   } finally {
     await pool.end()
   }
 }
-
 /** 清理当前 worker 的测试 schema（连同全部表数据），并释放连接池 */
 export async function dropTestSchema() {
   if (!testSchema) return
@@ -154,7 +82,6 @@ export async function dropTestSchema() {
   resetDbPool()
   testSchema = null
 }
-
 export function insertTestItem(overrides: Record<string, unknown> = {}) {
   return {
     id: `test:${Date.now()}:${Math.random().toString(36).slice(2, 6)}`,
