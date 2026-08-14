@@ -250,6 +250,10 @@ Vercel 构建时自动执行幂等迁移（`buildCommand: "npm run build && npm 
 
 CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
 
+> **测试环境复用同一套迁移**：集成测试通过 `scripts/migrate-core.ts` 执行 `drizzle/*.sql`
+> 全部迁移建表（测试 schema 内），保证测试环境 = 生产迁移后状态，杜绝 DDL 双源漂移。
+> 该核心同时被生产/CI 的 `migrate-ci.ts` 复用。
+
 ## 🔁 网络重试与 Sentry 错误追踪
 
 所有外部数据源都通过 `src/lib/retry.ts` 中的 `fetchWithRetry` / `execSyncWithRetry` 包装，
@@ -277,7 +281,8 @@ CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
 | 本地快速门槛  | lines 30% 等    | `vitest.config.mjs`，`npm run test:coverage` 开发期自查用  |
 | **CI 硬门槛** | **四指标 ≥80%** | `scripts/merge-coverage.ts` 合并 unit ∪ integration 后检查 |
 
-> CI 红线：`merge-coverage.ts` 对 **lines/statements/functions/branches 全部要求 ≥80%**，不足则退出码非 0 阻断合并。当前实测：lines 90.6% / statements 90.6% / functions 89.6% / branches 81.2%。
+> CI 红线：`merge-coverage.ts` 对 **lines/statements/functions/branches 全部要求 ≥80%**，不足则退出码非 0 阻断合并。当前实测：lines 90.4% / statements 90.3% / branches 80.7%（合并 unit ∪ integration）。
+> 集成测试层（真实 PostgreSQL）当前 lines 60.7%，三大数据源 github 88.6% / producthunt 87.5% / twitter 79.8%。
 
 跑覆盖率 + 门槛检查：
 
@@ -291,11 +296,16 @@ npm run test:coverage:check     # unit + integration + merge，低于 80% 则退
 ### 测试
 
 ```bash
-npm test              # 单元测试
-npm run test:integration  # 集成测试（需要本地 Postgres）
-npm run test:all      # 全部
-npm run test:coverage # 覆盖率
+npm test                  # 单元测试（127 用例）
+npm run test:integration  # 集成测试（69 用例，需要本地 Postgres）
+npm run test:all          # 全部
+npm run test:coverage     # 覆盖率
 ```
+
+> 🔒 **LLM 防护**：所有测试（单元+集成）通过 `vitest.setup.ts` 全局 mock `ai` 模块，
+> **永不真实调用 LLM API**。测试忘记显式 mock 而触发 AI 调用时，会收到哨兵错误并提示。
+> 端到端链路测试（e2e-pipeline*.test.ts）覆盖「数据源抓取→存储→聚合→展示」主链路，
+> 外部边界（fetch/CLI）mock，数据库层全真实。
 
 ### Pre-commit
 
