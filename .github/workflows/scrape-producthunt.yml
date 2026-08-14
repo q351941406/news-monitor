@@ -24,6 +24,8 @@ jobs:
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
           AI_MODEL: ${{ secrets.AI_MODEL }}
+          REVALIDATE_URL: https://news.myaicode.qzz.io/api/admin/revalidate
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
       - name: Auto retry on failure (max 2 attempts)
         if: failure() && github.event_name == 'schedule'
         env:
