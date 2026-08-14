@@ -18,7 +18,7 @@ import { withRunLog } from '@/lib/run-logger'
 const log = logger.child({ script: 'topic-aggregate' })
 
 /** 估算单条 item 在聚合 prompt 中的字符数（与 buildTopicPrompt 格式一致） */
-function itemPromptLen(item: {
+export function itemPromptLen(item: {
   id: string
   title: string | null
   summary: string | null
@@ -32,7 +32,7 @@ function itemPromptLen(item: {
   )
 }
 /** 按 prompt 字符数切分批次：每批总长不超过 MAX_PROMPT_CHARS，避免 DeepSeek 结构化输出失败 */
-function splitByPromptLen<
+export function splitByPromptLen<
   T extends { id: string; title: string | null; summary: string | null; details: string | null },
 >(items: T[], maxChars: number = 8000): T[][] {
   const batches: T[][] = []
@@ -135,7 +135,11 @@ async function main() {
   }
   await aggregateTopics(source)
 }
-main().catch((error) => {
-  log.error({ err: error }, '❌ Fatal error')
-  process.exit(1)
-})
+// 仅当作为 CLI 直接执行时才运行 main（被测试 import 时跳过）
+// require.main === module：tsx 运行脚本时成立，vitest import 时失败
+if (require.main === module) {
+  main().catch((error) => {
+    log.error({ err: error }, '❌ Fatal error')
+    process.exit(1)
+  })
+}

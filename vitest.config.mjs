@@ -16,18 +16,16 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./vitest.setup.ts'],
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'scripts/**/*.test.ts'],
     exclude: ['src/**/db/__tests__/*.test.ts', 'node_modules'],
     coverage: {
       provider: 'v8',
-      include: ['src/**', 'scripts/**'],
+      include: ['src/**'],
       exclude: [
         'src/**/*.test.ts',
         'src/**/*.test.tsx',
         'src/**/db/__tests__/**',
         'src/app/components/**',
-        // 定时任务脚本：由 GitHub Actions 调度执行，非 vitest 单测目标
-        'scripts/**',
         // 无测试的 UI 展示层
         'src/app/**/page.tsx',
         'src/app/layout.tsx',
