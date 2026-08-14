@@ -20,7 +20,7 @@ export default defineConfig({
     exclude: ['src/**/db/__tests__/*.test.ts', 'node_modules'],
     coverage: {
       provider: 'v8',
-      include: ['src/**', 'scripts/**'],
+      include: ['src/**'],
       exclude: [
         'src/**/*.test.ts',
         'src/**/*.test.tsx',
