@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { createHash, timingSafeEqual } from 'crypto'
 
 /**
  * 极简管理员鉴权（单人系统专用）
@@ -25,7 +26,11 @@ export function isAdminAuthorized(req: NextRequest): boolean {
   const bearerToken = bearer.startsWith('Bearer ') ? bearer.slice(7) : ''
 
   const provided = header || bearerToken
-  return provided === expected
+  // 恒定时间比较：先 SHA-256 归一化为等长摘要，避免长度不同抛错 / 泄露长度信息
+  return timingSafeEqual(
+    createHash('sha256').update(provided).digest(),
+    createHash('sha256').update(expected).digest(),
+  )
 }
 
 /**

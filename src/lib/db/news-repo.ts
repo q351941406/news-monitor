@@ -7,14 +7,11 @@ import { getDb, type NewsItem } from './connection'
 /** 存储原始数据（存在则跳过） */
 export async function storeRawItems(items: NewRawItem[]): Promise<number> {
   const db = getDb()
-  let newCount = 0
-  for (const item of items) {
-    const result = await db.insert(rawItems).values(item).onConflictDoNothing()
-    if (result.rowCount && result.rowCount > 0) {
-      newCount++
-    }
-  }
-  return newCount
+  if (items.length === 0) return 0
+  // 批量插入 + ON CONFLICT DO NOTHING：一次 round-trip 完成全部写入
+  // PG 下 rowCount = 实际新插入的行数（冲突行不计入）
+  const result = await db.insert(rawItems).values(items).onConflictDoNothing()
+  return result.rowCount ?? 0
 }
 /** 检查是否已存在 */
 export async function existsItem(itemId: string): Promise<boolean> {
@@ -72,20 +69,23 @@ export async function getAllNews(
 /** 获取每个数据源的真实总数和未读数（不受 limit 影响） */
 export async function getNewsCounts(): Promise<Record<string, { total: number; unread: number }>> {
   const db = getDb()
-  const sources = ['github', 'producthunt', 'twitter']
-  const result: Record<string, { total: number; unread: number }> = {}
-  for (const source of sources) {
-    const [totals] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(rawItems)
-      .where(eq(rawItems.source, source))
-    const [unreads] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(rawItems)
-      .where(and(eq(rawItems.source, source), eq(rawItems.isRead, false)))
-    result[source] = {
-      total: totals?.count ?? 0,
-      unread: unreads?.count ?? 0,
+  // 一次 GROUP BY 查询拿到全部来源的 total/unread，替代 3×2 次串行查询
+  const rows = await db
+    .select({
+      source: rawItems.source,
+      total: sql<number>`count(*)::int`,
+      unread: sql<number>`count(*) FILTER (WHERE ${rawItems.isRead} = false)::int`,
+    })
+    .from(rawItems)
+    .groupBy(rawItems.source)
+  const result: Record<string, { total: number; unread: number }> = {
+    github: { total: 0, unread: 0 },
+    producthunt: { total: 0, unread: 0 },
+    twitter: { total: 0, unread: 0 },
+  }
+  for (const row of rows) {
+    if (row.source in result) {
+      result[row.source] = { total: row.total, unread: row.unread }
     }
   }
   return result
