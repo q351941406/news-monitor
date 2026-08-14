@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// 模拟 AI 用量埋点仓库：单元测试不连真实数据库（避免 ECONNREFUSED 噪音）
+vi.mock('../db/ai-usage-repo', () => ({
+  logAIUsage: vi.fn(),
+}))
+
 // 模拟 generateText 模块
 vi.mock('ai', () => {
   const mockGenerateText = vi.fn()
