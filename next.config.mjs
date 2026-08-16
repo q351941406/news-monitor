@@ -17,11 +17,16 @@ const securityHeaders = [
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
-      "script-src 'self'",
+      // Next.js App Router 用 inline script（self.__next_f.push）注入 RSC 流式数据，
+      // 未配 nonce 时 script-src 必须允许 'unsafe-inline'，否则 hydration 中断报 "Connection closed"。
+      // static.cloudflareinsights.com 是 Cloudflare Web Analytics 的 beacon 脚本。
+      "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https://pbs.twimg.com https://ph-uploads.imgix.net https://raw.githubusercontent.com https://avatars.githubusercontent.com",
       "font-src 'self' https://fonts.gstatic.com",
-      "connect-src 'self' https://*.sentry.io https://o*.ingest.sentry.io",
+      // 注意：Sentry ingest 域名 o<orgid>.ingest.sentry.io 已被 https://*.sentry.io 覆盖；
+      // 原先的 https://o*.ingest.sentry.io 是非法 host-source（通配符不能嵌在 host 中间），会被浏览器忽略
+      "connect-src 'self' https://*.sentry.io",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
