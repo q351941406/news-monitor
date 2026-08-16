@@ -84,3 +84,51 @@ jobs:
           npm run test:coverage:unit
           npm run test:coverage:integration
           npm run test:coverage:merge
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: news_monitor_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - name: Apply migrations
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/news_monitor_test
+        run: npm run db:migrate:ci
+      - name: Production build
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/news_monitor_test
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: npm run build
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Run E2E tests (real browser against production build)
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/news_monitor_test
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+        run: npm run test:e2e
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
