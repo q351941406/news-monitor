@@ -120,9 +120,25 @@ function formatTime(iso: string): string {
   })
 }
 function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+  // date 为 "YYYY-MM-DD"，直接切片避免 new Date 的时区解析偏移
+  const m = date.slice(5, 7)
+  const d = date.slice(8, 10)
+  return `${m}/${d}`
 }
 
+/** 校验 metrics 响应结构，防止后端异常 payload（如 {error}）导致渲染崩溃 */
+function isValidMetrics(data: unknown): data is Metrics {
+  if (!data || typeof data !== 'object') return false
+  const m = data as Record<string, unknown>
+  return (
+    Array.isArray(m.recentRuns) &&
+    Array.isArray(m.dailyStats) &&
+    Array.isArray(m.sourceStats) &&
+    Array.isArray(m.alerts) &&
+    !!m.aiUsage &&
+    typeof m.aiUsage === 'object'
+  )
+}
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -138,11 +154,24 @@ export default function DashboardPage() {
         setLoading(false)
         return
       }
-      const data = await res.json()
+      if (!res.ok) {
+        // 后端异常（如 500）：保留现有数据，不覆盖、不崩溃
+        console.error(`[dashboard] metrics 请求失败: HTTP ${res.status}`)
+        setAuthed(true)
+        return
+      }
+      const data: unknown = await res.json()
+      if (!isValidMetrics(data)) {
+        // 响应结构异常（历史上出现过 {error} 被当 metrics 导致崩溃）
+        console.error('[dashboard] metrics 响应结构异常，忽略本次数据')
+        setAuthed(true)
+        return
+      }
       setMetrics(data)
       setAuthed(true)
-    } catch {
-      // ignore
+    } catch (err) {
+      // 网络异常：保留现有数据
+      console.error('[dashboard] metrics 拉取异常:', err)
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -236,7 +265,7 @@ export default function DashboardPage() {
 
         {/* Source Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {metrics?.sourceStats.map((stat) => {
+          {(metrics?.sourceStats ?? []).map((stat) => {
             const isHealthy = stat.lastStatus === 'success'
             const isSilent = stat.lastStatus === 'success' && stat.totalItems === 0
             return (
@@ -410,7 +439,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {metrics?.recentRuns.map((run) => (
+                {(metrics?.recentRuns ?? []).map((run) => (
                   <tr key={run.id} className="border-b border-stone-50 hover:bg-stone-50/50">
                     <td className="px-5 py-3 text-stone-600 text-xs whitespace-nowrap">
                       {formatTime(run.startedAt)}

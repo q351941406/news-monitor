@@ -117,14 +117,23 @@ export interface Alert {
 }
 
 /** 获取仪表盘所需的全部数据 */
+/** DATE(started_at) 在 pg 里返回 Date 对象，直接 String() 会得到 "Sun Aug 09 ..." 长串，
+ * 统一格式化为 "YYYY-MM-DD"（前端图表直接可用）。兼容已为字符串的输入。 */
+function toDateString(d: string | Date): string {
+  if (typeof d === 'string') return d.slice(0, 10)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 /** 聚合日统计（SQL 行 → camelCase，按 date+source 合并 stage） */
 export function aggregateDailyStats(rows: DailyStatRow[]): DailyStat[] {
   const dailyMap = new Map<string, DailyStat>()
   for (const row of rows) {
-    const key = String(row.date) + '|' + row.source
+    const key = toDateString(row.date) + '|' + row.source
     if (!dailyMap.has(key)) {
       dailyMap.set(key, {
-        date: String(row.date),
+        date: toDateString(row.date),
         source: row.source,
         totalRuns: 0,
         successes: 0,

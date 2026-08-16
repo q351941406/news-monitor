@@ -18,6 +18,9 @@ function getPool(): Pool {
       options: process.env.PG_SEARCH_PATH
         ? `-c search_path=${process.env.PG_SEARCH_PATH}`
         : undefined,
+      // Serverless 冷启动 + Neon 抖动场景下避免连接无限挂起导致请求超时
+      connectionTimeoutMillis: 10_000,
+      idleTimeoutMillis: 30_000,
     })
   }
   return pool
