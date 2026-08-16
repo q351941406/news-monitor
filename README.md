@@ -296,8 +296,10 @@ npm run test:coverage:check     # unit + integration + merge，低于 80% 则退
 ### 测试
 
 ```bash
-npm test                  # 单元测试（130 用例：含 NewsCard/SourceTabs 组件测试）
-npm run test:integration  # 集成测试（73 用例，需要本地 Postgres）
+npm test                  # 单元测试（含 NewsCard/SourceTabs 组件测试）
+npm run test:integration  # 集成测试（需要本地 Postgres）
+npm run test:e2e          # E2E 测试（Playwright 真实浏览器，需先 build + 本地 Postgres）
+npm run test:e2e:ui       # E2E 交互式 UI 模式
 npm run test:all          # 全部
 npm run test:coverage     # 覆盖率
 ```
@@ -306,6 +308,10 @@ npm run test:coverage     # 覆盖率
 > **永不真实调用 LLM API**。测试忘记显式 mock 而触发 AI 调用时，会收到哨兵错误并提示。
 > 端到端链路测试（e2e-pipeline*.test.ts）覆盖「数据源抓取→存储→聚合→展示」主链路，
 > 外部边界（fetch/CLI）mock，数据库层全真实。
+>
+> 🖥️ **浏览器 E2E（Playwright）**：`npm run test:e2e` 用真实 Chromium 跑生产构建，
+> 验证首页 CSP/hydration 无报错、dashboard 在接口异常时优雅降级、静态/归档页正常渲染。
+> 对应 CI `test.yml` 的 `e2e` job（Postgres + 生产 build + Playwright）。
 
 ### Pre-commit
 
