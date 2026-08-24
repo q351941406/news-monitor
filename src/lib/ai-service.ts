@@ -145,10 +145,13 @@ function buildSingleSummaryPrompt(item: {
   if (data.language) keyInfo += `语言: ${data.language}\n`
   if (data.stars) keyInfo += `Stars: ${data.stars}\n`
   if (data.starsToday) keyInfo += `今日新增 Stars: ${data.starsToday}\n`
-  const readmeBlock =
-    typeof data.readme === 'string' && data.readme
-      ? `\nREADME 全文（可能含 HTML，忽略其中的图片/徽章/样式）：\n${data.readme}\n`
-      : ''
+  // README 可能极大（数十万字符），超出多数模型的上下文上限会导致整条失败；
+  // 故截取前 README_MAX_CHARS 字符，保留项目核心信息（开头通常含简介/特性/用法）。
+  const README_MAX_CHARS = 24_000
+  const rawReadme = typeof data.readme === 'string' ? data.readme : ''
+  const readmeBlock = rawReadme
+    ? `\nREADME 全文（可能含 HTML，忽略其中的图片/徽章/样式）：\n${rawReadme.slice(0, README_MAX_CHARS)}${rawReadme.length > README_MAX_CHARS ? '\n\n[README 过长，已截断至前 24000 字符]' : ''}\n`
+    : ''
   return `请用中文详细分析以下 GitHub 仓库内容。
 ID: ${item.id}
 标题: ${item.title || '无'}
