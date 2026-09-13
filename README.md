@@ -126,9 +126,9 @@ docker compose up -d
 # 3. 查看日志
 docker compose logs -f app
 
-# 4. 验证服务
+# 4. 验证服务（默认 liveness，不查数据库）
 curl http://localhost:3000/api/health
-# → {"status":"ok","db":"up","uptime":12,"timestamp":"..."}
+# → {"status":"ok","db":"unchecked","uptime":12,"timestamp":"..."}
 
 # 5. 初始化数据库（首次启动）
 docker compose exec app npm run db:migrate:ci
@@ -149,12 +149,23 @@ npm run topic-aggregate -- --source=github
 
 ## 健康检查
 
-应用暴露 `GET /api/health` 端点：
+应用暴露 `GET /api/health` 端点，**默认只做进程存活检查（liveness），不触碰数据库**：
+
+- **200 OK** — `{ status: 'ok', db: 'unchecked', uptime, timestamp }`
+
+加 `?deep=1` 时执行数据库连通性检查（readiness）：
 
 - **200 OK** — `{ status: 'ok', db: 'up', uptime, timestamp }`
 - **503 Service Unavailable** — `{ status: 'degraded', db: 'down', error, ... }`
 
-供 Docker / Kubernetes / Vercel / 外部探活使用。无缓存（`force-dynamic`），每次请求真实探测 DB 连接。
+```bash
+curl http://localhost:3000/api/health            # liveness：不碰 DB
+curl "http://localhost:3000/api/health?deep=1"   # readiness：真实查询 DB
+```
+
+供 Docker / Kubernetes / Vercel / 外部探活使用。无缓存（`force-dynamic`），每次请求真实探测。
+
+> **为什么默认不查 DB**：高频探活若每次都 `SELECT 1`，会让 Neon 这类 scale-to-zero 数据库的 compute 无法休眠（挂起阈值为「连续 5 分钟无活动」）。外部探活（如 UptimeRobot，5 分钟间隔）会持续重置挂起计时器，导致 compute 近乎 7×24 常驻并耗尽免费 CU-hours 额度。详见 `docs/ops/uptime-monitoring.md`。
 
 ## 环境变量
 
@@ -339,10 +350,14 @@ GitHub Dependabot 每**周一**自动检查 `npm` / `GitHub Actions` / `Docker b
 
 ```bash
 curl http://localhost:3000/api/health
+# → {"status":"ok","db":"unchecked","uptime":12,"timestamp":"..."}
+
+# 需要验证数据库连通性时（readiness）
+curl "http://localhost:3000/api/health?deep=1"
 # → {"status":"ok","db":"up","uptime":12,"timestamp":"..."}
 ```
 
-返回 200 = 健康，503 = 数据库连接异常（用于容器编排 / Vercel 探活）。
+默认探活返回 200 = 进程存活；`?deep=1` 返回 200 = 数据库连通、503 = 数据库连接异常。
 
 ## License
 
