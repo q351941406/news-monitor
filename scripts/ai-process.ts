@@ -33,6 +33,18 @@ async function getUnprocessedItems(source: string, limit: number = 50) {
     .limit(limit)
   return results
 }
+/**
+ * 判定「AI 侧整体不可用」：有数据待处理，却一条都没成功。
+ *
+ * 失败条目会保留未分析状态、下轮重试（这是刻意的，避免整批被"假消费"），
+ * 但若因此让脚本照常以 success 退出，AI 侧长期故障就会完全静默 ——
+ * 线上曾发生 AI 全线失败近 20 天而 workflow 一直显示绿色的情况。
+ * 故此处返回 true 时应抛错，让 run 失败并触发 Sentry 告警。
+ */
+export function shouldFailRun(total: number, successCount: number): boolean {
+  return total > 0 && successCount === 0
+}
+
 // 批处理函数
 async function processBatch(source: string) {
   console.log(`\n[${new Date().toISOString()}] Processing ${source}...`)
@@ -86,6 +98,12 @@ async function processBatch(source: string) {
       }
     }
     console.log(`  ✅ Stored ${successCount} results (${failCount} failed)`)
+    // 全部失败 = AI 侧不可用，必须让 run 失败以便告警（失败条目保持未分析，下轮重试）
+    if (shouldFailRun(allItems.length, successCount)) {
+      throw new Error(
+        `AI 单条摘要全部失败：${failCount}/${allItems.length} 条失败、0 条成功（保留未分析状态待下轮重试）`,
+      )
+    }
     await withRunLog({ source, stage: 'ai-process' }, async () => ({ itemsCount: successCount }))
     return
   }
@@ -93,6 +111,10 @@ async function processBatch(source: string) {
   const results = await aiService.generateBatchSummary(allItems)
   if (!results || results.length === 0) {
     console.log('  ❌ No results generated')
+    // 有待处理数据却 0 产出 = AI 侧不可用，必须让 run 失败以便告警
+    if (shouldFailRun(allItems.length, 0)) {
+      throw new Error(`AI 批量摘要未产出任何结果（待处理 ${allItems.length} 条）`)
+    }
     await withRunLog({ source, stage: 'ai-process' }, async () => ({ itemsCount: 0 }))
     return
   }
@@ -140,7 +162,11 @@ async function main() {
   }
   await processBatch(source)
 }
-main().catch((error) => {
-  log.error({ err: error }, '❌ Fatal error')
-  process.exit(1)
-})
+// 仅当作为 CLI 直接执行时才运行 main（被测试 import 时跳过）
+// require.main === module：tsx 运行脚本时成立，vitest import 时失败
+if (require.main === module) {
+  main().catch((error) => {
+    log.error({ err: error }, '❌ Fatal error')
+    process.exit(1)
+  })
+}

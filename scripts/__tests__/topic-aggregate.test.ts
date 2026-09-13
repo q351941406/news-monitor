@@ -12,7 +12,7 @@ vi.mock('@/lib/ai-service', () => ({ createAIService: vi.fn() }))
 vi.mock('@/lib/logger', () => ({ logger: { child: () => ({ error: vi.fn(), info: vi.fn() }) } }))
 vi.mock('@/lib/run-logger', () => ({ withRunLog: vi.fn() }))
 
-import { splitByPromptLen, itemPromptLen } from '../topic-aggregate'
+import { splitByPromptLen, itemPromptLen, hasAggregatableBatch } from '../topic-aggregate'
 
 interface TestItem {
   id: string
@@ -81,5 +81,33 @@ describe('itemPromptLen - 估算单条 prompt 字符数', () => {
     const len = itemPromptLen(item)
     // 与 buildTopicPrompt 格式一致：含 [x] ID/标题/摘要/重点 标签
     expect(len).toBeGreaterThan(30)
+  })
+})
+
+describe('hasAggregatableBatch - 是否存在可聚合子批', () => {
+  it('子批均 >= 3 条 → 可聚合', () => {
+    expect(hasAggregatableBatch([['a', 'b', 'c']])).toBe(true)
+    expect(
+      hasAggregatableBatch([
+        ['a', 'b'],
+        ['c', 'd', 'e'],
+      ]),
+    ).toBe(true)
+  })
+
+  it('子批均 < 3 条 → 不可聚合（AI 无法聚类，属正常降级）', () => {
+    expect(hasAggregatableBatch([['a'], ['b', 'c']])).toBe(false)
+    expect(hasAggregatableBatch([])).toBe(false)
+  })
+
+  it('回归防线：可聚合却 0 组产出时应判定失败（配合 shouldFailRun）', () => {
+    // 线上 AI 聚类全线失败时，因「保留 pending」的刻意设计而以 success 退出，
+    // 导致聚合停摆近 20 天无人察觉。此断言确保该场景能被识别为「存在可聚合子批」，
+    // 从而在 totalGroups === 0 时抛错。
+    const subBatches = [
+      ['a', 'b', 'c', 'd'],
+      ['e', 'f', 'g'],
+    ]
+    expect(hasAggregatableBatch(subBatches)).toBe(true)
   })
 })
