@@ -53,6 +53,16 @@ export function splitByPromptLen<
   return batches
 }
 /** 单批聚合：取一批 → 按字符数切分子批 → 逐子批 AI 聚合 → 增量 upsert → 标记已聚合 */
+/**
+ * 是否存在「可聚合子批」：AI 聚类至少需要 3 条才有意义，
+ * 少于 3 条的子批跳过属正常降级，不算失败。
+ *
+ * 与 shouldFailRun 配合使用：存在可聚合子批却 0 组产出 = AI 侧不可用。
+ */
+export function hasAggregatableBatch(batches: unknown[][]): boolean {
+  return batches.some((b) => b.length >= 3)
+}
+
 async function aggregateOneBatch(
   source: string,
   aiService: ReturnType<typeof createAIService>,
@@ -104,6 +114,13 @@ async function aggregateOneBatch(
   console.log(
     `  ✅ Marked ${consumedIds.length}/${items.length} items as aggregated (${items.length - consumedIds.length} kept pending)`,
   )
+  // 存在可聚合子批却一组都没产出 = AI 侧不可用。失败条目已保持 pending 待下轮重试，
+  // 但必须让 run 失败以便告警 —— 否则 AI 长期故障会完全静默（线上曾发生近 20 天）。
+  if (hasAggregatableBatch(subBatches) && totalGroups === 0) {
+    throw new Error(
+      `AI 主题聚类全部失败：${items.length} 条待聚合、0 组产出（已保持 pending 待下轮重试）`,
+    )
+  }
   return consumedIds.length
 }
 
