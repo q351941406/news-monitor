@@ -152,7 +152,7 @@ describe('TopicRepo — 队列增量聚合', () => {
     ] as unknown as NewRawItem[])
     // 建一个主题（成员 a）；随后 a 被数据清理删除 → 级联删除关联 → 主题变空
     await storeTopicGroups(SOURCE, [{ topic: '临时主题', summary: 'x', itemIds: [`${suffix}:a`] }])
-    // 模拟 cleanupOldData 删除 raw_items（ON DELETE CASCADE 级联清掉 topic_items）
+    // 模拟数据清理删除 raw_items（ON DELETE CASCADE 级联清掉 topic_items）
     const pool = getPgPool()
     await pool.query('DELETE FROM raw_items WHERE id = $1', [`${suffix}:a`])
     const deleted = await deleteEmptyTopics(SOURCE)

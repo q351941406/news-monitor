@@ -42,7 +42,7 @@ export {
   getItemDetail,
   markGroupAsRead,
 } from './topic-repo'
-export { getUnreadCount, cleanupOldData } from './stats-repo'
+export { getUnreadCount } from './stats-repo'
 export { logRun, getRecentRuns, getDailyStats, getSourceStats, getMetrics } from './run-log-repo'
 // 保留类型向后兼容
 export type { RawItem, NewRawItem } from '../schema'
