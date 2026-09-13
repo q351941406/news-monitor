@@ -1,7 +1,7 @@
 /**
- * 统计仓库 — 数据统计和清理
+ * 统计仓库 — 数据统计
  */
-import { eq, and, lt, sql } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import { rawItems } from '../schema'
 import { getDb } from './connection'
 
@@ -17,11 +17,4 @@ export async function getUnreadCount(source?: string): Promise<number> {
     .from(rawItems)
     .where(condition)
   return result?.count ?? 0
-}
-
-/** 清理过期数据 */
-export async function cleanupOldData(days: number = 30): Promise<void> {
-  const db = getDb()
-  const cutoff = Date.now() - days * 86400 * 1000
-  await db.delete(rawItems).where(lt(rawItems.fetchedAt, cutoff))
 }
