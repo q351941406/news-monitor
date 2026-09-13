@@ -4,7 +4,7 @@
  * 接口小，实现深。生产环境调真实 LLM，测试时通过 vi.mock 替换。
  */
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { generateText, Output, NoObjectGeneratedError } from 'ai'
+import { generateText, Output, NoObjectGeneratedError, NoOutputGeneratedError } from 'ai'
 import { logAIUsage } from './db/ai-usage-repo'
 import { z } from 'zod'
 
@@ -54,6 +54,28 @@ export interface AIService {
 // ─── 生产实现 ───────────────────────────────────────────
 
 const MAX_CONTEXT_TOKENS = 500000
+
+/**
+ * 输出 token 上限。
+ *
+ * 推理模型（DeepSeek 思考模式）的思维链与正文**共享**该预算，设得过小会让 JSON
+ * 被中途截断：实测 maxOutputTokens=8192 时 7572 被思考占用、正文仅剩 619，
+ * 结果抛 NoOutputGeneratedError 整批失败。DeepSeek 上限为 384K，故给足额度；
+ * 若某 provider 对 max_tokens 有更小限制，可用 AI_MAX_OUTPUT_TOKENS 覆盖。
+ */
+const MAX_OUTPUT_TOKENS = Number(process.env.AI_MAX_OUTPUT_TOKENS || 384_000)
+
+/**
+ * provider 附加参数。
+ *
+ * DeepSeek 等推理模型的思考模式**默认开启**（reasoning_effort 默认 high），会大量
+ * 消耗输出预算。本项目的摘要/聚类任务不需要思维链，故默认关闭。
+ * 若切换到不认识 thinking 参数的 provider，可设 AI_THINKING=enabled 停发该参数。
+ */
+function aiProviderOptions() {
+  if (process.env.AI_THINKING === 'enabled') return undefined
+  return { 'ai-provider': { thinking: { type: 'disabled' } } }
+}
 
 const batchSchema = z.object({
   results: z.array(
@@ -255,8 +277,9 @@ async function callAIWithRetry<T>(
         model,
         output: Output.object({ schema }),
         maxOutputTokens,
-        // OpenAI 兼容协议：json_object 模式要求 prompt 含 "json" 字样；
-        // 思考模式由服务端（deepseek reasoning）默认开启，无需 providerOptions
+        providerOptions: aiProviderOptions(),
+        // OpenAI 兼容协议：json_object 模式要求 prompt 含 "json" 字样并给出结构样例
+        // （DeepSeek JSON Output 的两条硬性要求）；思考模式的开关见 aiProviderOptions()
         prompt: `${prompt}\n\n严格以 JSON 格式输出，不要包含任何 JSON 以外的内容。`,
       })
       // AI 用量埋点（fire-and-forget）：输入/输出 token、耗时、成败
@@ -271,7 +294,11 @@ async function callAIWithRetry<T>(
       })
       return result.output as T
     } catch (error) {
-      const isNoOutput = NoObjectGeneratedError.isInstance(error)
+      // 两类错误都表示"模型没能给出可用 JSON"：
+      //   NoObjectGeneratedError —— 有响应但 JSON 解析/schema 校验失败
+      //   NoOutputGeneratedError —— 根本没有输出（如被 maxOutputTokens 截断）
+      const isNoOutput =
+        NoObjectGeneratedError.isInstance(error) || NoOutputGeneratedError.isInstance(error)
       const errObj = error as { cause?: unknown; message?: string; constructor?: { name?: string } }
       // 失败诊断：打印 prompt 规模 + 错误细节，便于定位（如 prompt 过长 / 内容异常）
       console.log(
@@ -335,7 +362,7 @@ export function createAIService(): AIService {
           batchSchema,
           prompt,
           3,
-          100000,
+          MAX_OUTPUT_TOKENS,
           'batchSummarize',
         )
         if (output?.results) {
@@ -348,13 +375,27 @@ export function createAIService(): AIService {
 
     async generateSingleSummary(item) {
       const prompt = buildSingleSummaryPrompt(item)
-      const output = await callAIWithRetry(model, singleSchema, prompt, 3, 8192, 'singleSummary')
+      const output = await callAIWithRetry(
+        model,
+        singleSchema,
+        prompt,
+        3,
+        MAX_OUTPUT_TOKENS,
+        'singleSummary',
+      )
       return output || null
     },
     async generateTopicAggregation(items, existingTopics) {
       if (items.length < 3) return []
       const prompt = buildTopicPrompt(items, existingTopics)
-      const output = await callAIWithRetry(model, topicSchema, prompt, 3, 16000, 'topicAggregation')
+      const output = await callAIWithRetry(
+        model,
+        topicSchema,
+        prompt,
+        3,
+        MAX_OUTPUT_TOKENS,
+        'topicAggregation',
+      )
       return output?.groups || []
     },
   }

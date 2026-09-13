@@ -19,11 +19,16 @@ vi.mock('ai', () => {
       }
       cause?: string
     },
+    NoOutputGeneratedError: class NoOutputGeneratedError extends Error {
+      static isInstance(err: unknown): err is NoOutputGeneratedError {
+        return err instanceof NoOutputGeneratedError
+      }
+    },
   }
 })
 
 import { createAIService, estimateTokens } from '../ai-service'
-import { generateText, NoObjectGeneratedError } from 'ai'
+import { generateText, NoObjectGeneratedError, NoOutputGeneratedError } from 'ai'
 
 function mockGenTextResult(output: unknown) {
   return {
@@ -236,4 +241,64 @@ describe('AIService - 主题聚合补充分支', () => {
       vi.useRealTimers()
     }
   })
+})
+
+describe('推理模型适配（DeepSeek 思考模式）', () => {
+  it('默认关闭思考模式，避免思维链耗尽输出预算', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({ id: 'x', summary: 's', details: 'd' }) as never,
+    )
+    const service = createAIService()
+    await service.generateSingleSummary({ id: 'x', title: 't', rawData: {} })
+
+    const callArg = vi.mocked(generateText).mock.calls[0][0] as {
+      providerOptions?: Record<string, unknown>
+    }
+    expect(callArg.providerOptions).toEqual({
+      'ai-provider': { thinking: { type: 'disabled' } },
+    })
+  })
+
+  it('AI_THINKING=enabled 时不发送 thinking 参数（兼容不支持该参数的 provider）', async () => {
+    process.env.AI_THINKING = 'enabled'
+    try {
+      vi.mocked(generateText).mockResolvedValueOnce(
+        mockGenTextResult({ id: 'x', summary: 's', details: 'd' }) as never,
+      )
+      const service = createAIService()
+      await service.generateSingleSummary({ id: 'x', title: 't', rawData: {} })
+
+      const callArg = vi.mocked(generateText).mock.calls[0][0] as {
+        providerOptions?: unknown
+      }
+      expect(callArg.providerOptions).toBeUndefined()
+    } finally {
+      delete process.env.AI_THINKING
+    }
+  })
+
+  it('输出上限不被人为压低：不再传 8192/16000 之类的小额度', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({ id: 'x', summary: 's', details: 'd' }) as never,
+    )
+    const service = createAIService()
+    await service.generateSingleSummary({ id: 'x', title: 't', rawData: {} })
+
+    const callArg = vi.mocked(generateText).mock.calls[0][0] as { maxOutputTokens: number }
+    // 思维链与正文共享该预算，额度必须给足（DeepSeek 上限 384K）
+    expect(callArg.maxOutputTokens).toBeGreaterThanOrEqual(384_000)
+  })
+
+  it('NoOutputGeneratedError（JSON 被截断/无输出）也按可重试错误处理', async () => {
+    vi.mocked(generateText)
+      .mockRejectedValueOnce(new NoOutputGeneratedError('No output generated.'))
+      .mockResolvedValueOnce(mockGenTextResult({ id: 'x', summary: 's', details: 'd' }) as never)
+
+    const service = createAIService()
+    const result = await service.generateSingleSummary({ id: 'x', title: 't', rawData: {} })
+
+    expect(generateText).toHaveBeenCalledTimes(2)
+    expect(result).not.toBeNull()
+    // 无输出类错误的退避基准为 5s，故放宽该用例超时
+  }, 20_000)
 })
