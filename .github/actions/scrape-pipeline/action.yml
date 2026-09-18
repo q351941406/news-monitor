@@ -21,6 +21,21 @@ runs:
         node-version-file: '.nvmrc'
         cache: 'npm'
 
+    # twitter-cli 是 X 源的运行时依赖（scripts 里通过 execSync 调用）。
+    # 放在 pipeline 内部而非 caller，保证「源需要什么」的知识内聚在一处，
+    # 避免再次出现「源码依赖 CLI、workflow 却没装」的契约断裂。
+    - name: Setup Python (twitter source only)
+      if: ${{ inputs.source == 'twitter' }}
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+      with:
+        python-version: '3.12'
+
+    - name: Install twitter-cli (twitter source only)
+      if: ${{ inputs.source == 'twitter' }}
+      # 固定版本：上游格式变更会静默破坏解析，锁定版本让升级成为显式动作
+      run: pip install 'twitter-cli==0.8.5'
+      shell: bash
+
     - name: Install dependencies
       run: npm ci
       shell: bash
@@ -38,6 +53,12 @@ runs:
         AI_API_KEY: ${{ env.AI_API_KEY }}
         AI_BASE_URL: ${{ env.AI_BASE_URL }}
         AI_MODEL: ${{ env.AI_MODEL }}
+        # 数据源凭据必须在此显式透传。
+        # 历史故障：这些变量曾从 workflow 中消失，而源码缺失时静默返回 []，
+        # 导致 workflow 全绿、抓取断流数十天无人知晓。
+        PRODUCTHUNT_TOKEN: ${{ env.PRODUCTHUNT_TOKEN }}
+        TWITTER_AUTH_TOKEN: ${{ env.TWITTER_AUTH_TOKEN }}
+        TWITTER_CT0: ${{ env.TWITTER_CT0 }}
       run: npx tsx scripts/scrape.ts --source="$INPUT_SOURCE"
       shell: bash
 
