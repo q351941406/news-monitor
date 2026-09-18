@@ -3,6 +3,8 @@
  */
 import { desc } from 'drizzle-orm'
 import { runLogs, type RunLog } from '../schema'
+import { getLastIngestedBySource } from './news-repo'
+import { detectStaleSources } from '../freshness'
 import { getDb, getPgPool } from './connection'
 import { getAIUsageStats } from './ai-usage-repo'
 import { randomUUID } from 'crypto'
@@ -190,11 +192,12 @@ export function aggregateSourceStats(rows: SourceStatRow[], recentRuns: RunLog[]
 }
 
 export async function getMetrics() {
-  const [recentRuns, dailyStats, sourceStats, aiUsage] = await Promise.all([
+  const [recentRuns, dailyStats, sourceStats, aiUsage, lastIngested] = await Promise.all([
     getRecentRuns(30),
     getDailyStats(7),
     getSourceStats(),
     getAIUsageStats(7),
+    getLastIngestedBySource(),
   ])
   // 检测静默失败：最近 3 次同源同阶段连续 0 数据
   const silentFailures = detectSilentFailures(recentRuns)
@@ -203,12 +206,22 @@ export async function getMetrics() {
   const normalizedDaily = aggregateDailyStats(dailyStats)
   const normalizedSource = aggregateSourceStats(sourceStats, recentRuns)
 
-  // alerts: 将 silentFailures 转换为前端格式
-  const alerts: Alert[] = silentFailures.map((f) => ({
-    type: 'silent_failure',
-    source: f.source,
-    message: '连续 ' + f.consecutiveZeros + ' 次抓取 0 条数据',
-  }))
+  // alerts 双通道合并：
+  // 1) silent_failure（次数维度，针对高频源）
+  // 2) stale_source（时间维度，对低频源免疫——这是修复 X 断流 57 天
+  //    却零告警的关键，原次数判据在数学上不可能对 X 触发）
+  const alerts: Alert[] = [
+    ...silentFailures.map((f) => ({
+      type: 'silent_failure',
+      source: f.source,
+      message: '连续 ' + f.consecutiveZeros + ' 次抓取 0 条数据',
+    })),
+    ...detectStaleSources(lastIngested).map((a) => ({
+      type: a.type,
+      source: a.source,
+      message: a.message,
+    })),
+  ]
 
   return {
     recentRuns,
