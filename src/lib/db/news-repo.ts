@@ -99,6 +99,24 @@ export interface ArchiveQuery {
   pageSize?: number
   q?: string
 }
+/** 获取各源最后一次真正入库数据的时间（用于新鲜度告警） */
+export async function getLastIngestedBySource(): Promise<
+  Array<{ source: string; lastIngestedAt: number | null }>
+> {
+  const db = getDb()
+  const rows = await db
+    .select({
+      source: rawItems.source,
+      lastIngestedAt: sql<string | null>`max(${rawItems.fetchedAt})`,
+    })
+    .from(rawItems)
+    .groupBy(rawItems.source)
+  return rows.map((r) => ({
+    source: r.source,
+    lastIngestedAt: r.lastIngestedAt ? Number(r.lastIngestedAt) : null,
+  }))
+}
+
 export async function getArchivedNews(
   opts: ArchiveQuery,
 ): Promise<{ items: NewsItem[]; total: number }> {
