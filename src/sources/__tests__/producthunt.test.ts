@@ -72,10 +72,22 @@ describe('ProductHuntSource', () => {
     expect(items[0].rawData.media).toHaveLength(1)
   })
 
-  it('没有 token 时返回空数组', async () => {
+  it('没有 token 时抛错（而非静默返回空）', async () => {
+    // 历史故障：此处曾静默返回 []，使 workflow 全绿而抓取断流 47 天。
+    // 凭据缺失是配置故障，必须让 run 红掉。
     delete process.env.PRODUCTHUNT_TOKEN
-    const items = await productHuntSource.fetch()
-    expect(items).toHaveLength(0)
+    await expect(productHuntSource.fetch()).rejects.toThrow(/缺少必需凭据/)
+  })
+
+  it('显式设置 SKIP_SOURCE_PRODUCTHUNT=1 时跳过并返回空数组', async () => {
+    delete process.env.PRODUCTHUNT_TOKEN
+    process.env.SKIP_SOURCE_PRODUCTHUNT = '1'
+    try {
+      const items = await productHuntSource.fetch()
+      expect(items).toHaveLength(0)
+    } finally {
+      delete process.env.SKIP_SOURCE_PRODUCTHUNT
+    }
   })
 
   it('没有缩略图和媒体时使用 null', async () => {

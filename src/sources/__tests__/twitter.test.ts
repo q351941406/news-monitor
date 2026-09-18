@@ -68,19 +68,44 @@ describe('TwitterSource', () => {
     }
   })
 
-  it('没有 token 时返回空数组', async () => {
+  it('没有 token 时抛错（而非静默返回空）', async () => {
+    // 历史故障：此处曾静默返回 []，使 workflow 全绿而抓取断流 57 天。
+    // 凭据缺失是配置故障，必须让 run 红掉。
     delete process.env.TWITTER_AUTH_TOKEN
     delete process.env.TWITTER_CT0
-    const items = await twitterSource.fetch()
-    expect(items).toHaveLength(0)
+    await expect(twitterSource.fetch()).rejects.toThrow(/缺少必需凭据/)
   })
 
-  it('execSync 失败时返回空数组', async () => {
+  it('显式设置 SKIP_SOURCE_TWITTER=1 时跳过并返回空数组', async () => {
+    // 逃生舱：确需跳过时须显式声明，让「跳过」成为有意识的决定
+    delete process.env.TWITTER_AUTH_TOKEN
+    delete process.env.TWITTER_CT0
+    process.env.SKIP_SOURCE_TWITTER = '1'
+    try {
+      const items = await twitterSource.fetch()
+      expect(items).toHaveLength(0)
+    } finally {
+      delete process.env.SKIP_SOURCE_TWITTER
+    }
+  })
+
+  it('execSync 失败时抛错（而非静默返回空）', async () => {
     vi.mocked(execSync).mockImplementation(() => {
       throw new Error('Command failed')
     })
-    const items = await twitterSource.fetch()
-    expect(items).toHaveLength(0)
+    await expect(twitterSource.fetch()).rejects.toThrow(/twitter-cli 执行失败/)
+  })
+
+  it('twitter-cli 未安装时错误信息包含排查提示', async () => {
+    vi.mocked(execSync).mockImplementation(() => {
+      throw new Error('Command failed: twitter feed\n/bin/sh: 1: twitter: not found')
+    })
+    await expect(twitterSource.fetch()).rejects.toThrow(/pip install twitter-cli/)
+  })
+
+  it('twitter-cli 返回空输出时抛错', async () => {
+    vi.mocked(execSync).mockReturnValue('')
+    await expect(twitterSource.fetch()).rejects.toThrow(/返回空输出/)
   })
 
   it('没有科技相关推文时返回空数组', async () => {
