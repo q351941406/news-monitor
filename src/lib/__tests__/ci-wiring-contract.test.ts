@@ -23,7 +23,12 @@ const PIPELINE_ACTION = path.join(ROOT, '.github/actions/scrape-pipeline/action.
 
 /** 读取某源对应的 caller workflow 内容 */
 function readSourceWorkflow(slug: string): string {
-  const p = path.join(WORKFLOWS_DIR, `scrape-${slug}.yml`)
+  // 显式白名单校验：slug 只允许小写字母/数字/下划线/连字符。
+  // 校验后再拼接路径，杜绝路径穿越（Semgrep path-traversal 规则）。
+  if (!/^[a-z0-9_-]+$/.test(slug)) {
+    throw new Error(`非法 slug（仅允许 [a-z0-9_-]）: ${slug}`)
+  }
+  const p = `${WORKFLOWS_DIR}/scrape-${slug}.yml`
   if (!fs.existsSync(p)) throw new Error(`找不到 workflow: ${p}`)
   return fs.readFileSync(p, 'utf-8')
 }
@@ -76,8 +81,12 @@ describe('CI 接线契约：源码依赖必须在 workflow 中被满足', () => 
       }
 
       const action = fs.readFileSync(PIPELINE_ACTION, 'utf-8')
+      // 不用动态 RegExp（避免 ReDoS）：先筛出安装类命令行，再做子串匹配
+      const installLines = action
+        .split('\n')
+        .filter((line) => line.includes('pip install') || line.includes('npm i'))
       const uninstalled = [...calledBins].filter(
-        (bin) => !new RegExp(`pip install[^\\n]*${bin}|npm i[^\\n]*${bin}`).test(action),
+        (bin) => !installLines.some((line) => line.includes(bin)),
       )
       expect(
         uninstalled,
