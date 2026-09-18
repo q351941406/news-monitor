@@ -1,5 +1,6 @@
 import { NewsSource, RawItem } from './types'
 import { fetchWithRetry } from '@/lib/retry'
+import { assertSourceCredentials, isSourceExplicitlySkipped } from './credentials'
 
 interface PHProduct {
   id: string
@@ -20,11 +21,11 @@ export const productHuntSource: NewsSource = {
   slug: 'producthunt',
 
   async fetch(): Promise<RawItem[]> {
-    const token = process.env.PRODUCTHUNT_TOKEN
-    if (!token) {
-      console.log('  ⚠️ PRODUCTHUNT_TOKEN not configured, skipping')
-      return []
-    }
+    // 凭据缺失 = 配置故障，直接抛错让 run 红掉（历史上此处静默返回 []，
+    // 导致 workflow 全绿而抓取断流 47 天）
+    if (isSourceExplicitlySkipped('producthunt')) return []
+    assertSourceCredentials('producthunt', 'Product Hunt')
+    const token = process.env.PRODUCTHUNT_TOKEN!
 
     const query = `{
       posts(first: 10, order: NEWEST) {
