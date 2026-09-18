@@ -1,0 +1,43 @@
+name: Data Freshness Check
+# 数据新鲜度巡检 —— 管道静默故障的唯一兜底
+#
+# 为什么需要：/api/admin/metrics 是 admin-only 的被动拉取接口，
+# 管道断了不会有人知道，除非碰巧登进去看。
+# 真实事故：X 断流 57 天、PH 断流 47 天，全程 workflow 绿色、零告警。
+#
+# 本巡检把「新鲜度」变成主动推送：任一源超期 → 非 0 退出 → workflow 红。
+concurrency:
+  group: freshness-check
+  cancel-in-progress: false
+on:
+  schedule:
+    # 每天 3 次：覆盖各源 cron 之后，尽早发现断流
+    - cron: '0 6,14,22 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Check data freshness
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx tsx scripts/check-freshness.ts
+      - name: Report failure to Sentry
+        if: failure()
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          npx --yes @sentry/cli send-event \
+            -m "🚨 数据新鲜度巡检失败：存在断流数据源（run ${{ github.run_id }}）" \
+            --log-level error \
+            --fingerprint "news-monitor-freshness-$(date +%F)"

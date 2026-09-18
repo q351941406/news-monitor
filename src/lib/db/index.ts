@@ -19,6 +19,7 @@ export {
   getNewsCounts,
   getArchivedNews,
   deleteItem,
+  getLastIngestedBySource,
 } from './news-repo'
 export { storeAIAnalysis, getUnprocessedItems } from './ai-repo'
 export { markAsRead, markAsUnread, markAllAsRead, resetAllRead } from './read-repo'
