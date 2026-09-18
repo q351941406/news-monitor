@@ -1,6 +1,7 @@
 import { NewsSource, RawItem } from './types'
 import { execSync } from 'child_process'
 import { execSyncWithRetry } from '@/lib/retry'
+import { assertSourceCredentials, isSourceExplicitlySkipped } from './credentials'
 
 interface Tweet {
   id: string
@@ -155,13 +156,12 @@ export const twitterSource: NewsSource = {
   slug: 'twitter',
 
   async fetch(): Promise<RawItem[]> {
-    const authToken = process.env.TWITTER_AUTH_TOKEN
-    const ct0 = process.env.TWITTER_CT0
-
-    if (!authToken || !ct0) {
-      console.log('  ⚠️ Twitter auth tokens not configured, skipping')
-      return []
-    }
+    // 凭据缺失 = 配置故障，直接抛错让 run 红掉（历史上此处静默返回 []，
+    // 导致 workflow 全绿而抓取断流 57 天）
+    if (isSourceExplicitlySkipped('twitter')) return []
+    assertSourceCredentials('twitter', 'X / Twitter')
+    const authToken = process.env.TWITTER_AUTH_TOKEN!
+    const ct0 = process.env.TWITTER_CT0!
 
     // 使用 twitter-cli 获取推荐时间线
     let yamlOutput = ''
@@ -190,13 +190,17 @@ export const twitterSource: NewsSource = {
         },
       )
     } catch (error) {
-      console.error('  ❌ twitter-cli failed:', error)
-      return []
+      // 失败即抛错：CLI 缺失 / cookie 失效 / 网络问题都属于「源不可用」，
+      // 不能伪装成「没有数据」（历史上此处静默返回 []，断流 57 天无人察觉）
+      const msg = error instanceof Error ? error.message : String(error)
+      const hint = /ENOENT|not found/i.test(msg)
+        ? '\n  → 找不到 twitter-cli。请确认 CI 已执行 pip install twitter-cli。'
+        : ''
+      throw new Error(`twitter-cli 执行失败: ${msg}${hint}`)
     }
 
-    if (!yamlOutput) {
-      console.log('  ⚠️ twitter-cli returned empty output')
-      return []
+    if (!yamlOutput || !yamlOutput.trim()) {
+      throw new Error('twitter-cli 返回空输出（预期 YAML 时间线）')
     }
 
     const allTweets = parseYamlTweets(yamlOutput)
