@@ -67,10 +67,24 @@ describe('端到端业务链路（twitter）', () => {
     delete process.env.TWITTER_CT0
   })
 
-  it('未配置 token 时安全跳过（返回空数组，不崩溃）', async () => {
+  it('未配置 token 时抛错（配置故障必须显式失败，而非静默返回空）', async () => {
+    // 历史故障：此处原先静默 return []，导致 workflow 全绿而抓取断流 57 天。
+    // 「不可用」必须与「没有数据」区分开，否则故障不可见。
     delete process.env.TWITTER_AUTH_TOKEN
     delete process.env.TWITTER_CT0
-    const items = await twitterSource.fetch()
-    expect(items).toEqual([])
+    delete process.env.SKIP_SOURCE_TWITTER
+    await expect(twitterSource.fetch()).rejects.toThrow(/缺少必需凭据/)
+  })
+
+  it('显式设置 SKIP_SOURCE_TWITTER=1 时才允许跳过（逃生舱）', async () => {
+    delete process.env.TWITTER_AUTH_TOKEN
+    delete process.env.TWITTER_CT0
+    process.env.SKIP_SOURCE_TWITTER = '1'
+    try {
+      const items = await twitterSource.fetch()
+      expect(items).toEqual([])
+    } finally {
+      delete process.env.SKIP_SOURCE_TWITTER
+    }
   })
 })
