@@ -66,11 +66,12 @@ X 每天只抓 1 次，窗口内**永远凑不齐 3 条**——告警在数学�
 
 ## 1. 已完成（无需重做，仅作背景）
 
-| PR  | commit    | 内容                                                                                     |
-| --- | --------- | ---------------------------------------------------------------------------------------- |
-| #24 | `5ff579a` | 恢复凭据注入 + `twitter-cli` 安装；生产实跑验证 PH `Fetched 10`、X `Parsed 41→Stored 12` |
-| #27 | `f0e0872` | ① 消灭软失败（凭据/CLI 缺失→抛错）② CI 接线契约测试 ③ 时间维度新鲜度告警                 |
-| #28 | `6c0b013` | 新鲜度告警接入 dashboard（双通道）                                                       |
+| PR  | commit    | 内容                                                                                                                               |
+| --- | --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| #24 | `5ff579a` | 恢复凭据注入 + `twitter-cli` 安装；生产实跑验证 PH `Fetched 10`、X `Parsed 41→Stored 12`                                           |
+| #27 | `f0e0872` | ① 消灭软失败（凭据/CLI 缺失→抛错）② CI 接线契约测试 ③ 时间维度新鲜度告警                                                           |
+| #28 | `6c0b013` | 新鲜度告警接入 dashboard（双通道）                                                                                                 |
+| #30 | `6b87ddb` | 消除三处「绿着断流」：① 抓取 0 条→报错（P1-1）② settings cron 改从 workflow 解析（P1-2）③ `twitter-cli` 输出改 `yaml` 解析（P1-4） |
 
 **新增文件（后续工作会用到）**：
 
@@ -78,6 +79,9 @@ X 每天只抓 1 次，窗口内**永远凑不齐 3 条**——告警在数学�
 - `src/lib/freshness.ts` — 时间维度新鲜度检测（`detectStaleSources` / `FRESHNESS_TOLERANCE_MS`）
 - `src/lib/__tests__/ci-wiring-contract.test.ts` — 契约测试（已反向验证能拦住 `a7795e9` 与 `2dce843`）
 - `.github/workflows/freshness-check.yml` + `scripts/check-freshness.ts` — 每日 3 次主动巡检
+- `src/lib/scrape-guard.ts` — 抓取非空断言（`assertNonEmptyFetch` / `shouldFailOnEmptyFetch`）
+- `src/lib/schedules.ts` — cron 从 workflow 解析（构建期快照 `BUILD_TIME_SCHEDULES`）
+- `src/sources/__tests__/fixtures/twitter-cli-0.8.5-*.yaml` — **真实 CLI 生成**的 0.8.5 输出 fixture
 
 **关键设计约定（新增代码请遵循）**：
 
@@ -89,6 +93,11 @@ X 每天只抓 1 次，窗口内**永远凑不齐 3 条**——告警在数学�
 ## 2. 遗留 TODO
 
 ### P1-1 【重要】补上「凭据齐全却 0 条」断言（防线缺口）
+
+> ✅ **已解决（#30）**。实现为 `src/lib/scrape-guard.ts::assertNonEmptyFetch`，
+> 判据分层：解析层（CLI 输出异常）/ 源层（执行失败）/ 兜底层（返回 0 条）。
+> 2026-09-20 生产实证：X 源 9/9–9/18 连续 10 天 `Fetched 0` 而 run 全绿，
+> 修复后恢复 `Fetched 19-20`。
 
 **问题**：已实现的 fail-fast 只覆盖「凭据缺失」。但**凭据齐全、API 正常返回 0 条**时，
 `scripts/scrape.ts` 仍记 `success`：
@@ -114,6 +123,9 @@ return { itemsCount: stored }
 ---
 
 ### P1-2 【Bug】settings 页 cron 文案与实际不符（会误导用户）
+
+> ✅ **已解决（#30）**。cron 改为从 `.github/workflows/*.yml` 解析，
+> 页面与契约测试共用 `getWorkflowSchedules()`（构建期快照），抄错即红。
 
 `src/app/settings/page.tsx` 的 `schedules` 数组**硬编码了错误的 cron**：
 
@@ -168,6 +180,9 @@ Vercel 侧已配置（`production,preview`，type=sensitive 读不到明文）�
 
 ### P1-4 【隐患】`parseYamlTweets` 是手写行解析器（定时炸弹）
 
+> ✅ **已解决（#30）**。改用 `yaml` 库 + 显式识别 `ok: false` 失败包装；
+> fixture 由真实 `twitter-cli` 0.8.5 生成（非手抄），并保留旧扁平格式兼容。
+
 **位置**：`src/sources/twitter.ts:53` `function parseYamlTweets()`
 
 **问题**：手写逐行解析，对齐的是 twitter-cli 的**旧扁平格式**（单测 fixture 也是旧格式）。
@@ -194,7 +209,7 @@ CLI 下次改缩进或字段名 → **静默变 0**，又是一次"绿着断"。
 
 ---
 
-### P1-5 【功能】接通知渠道（用户会提供 API）
+### P1-5 【功能】接通知渠道 —— ✅ 实际已存在，见下方说明
 
 **现状**：全仓**已无任何通知渠道代码**（Discord/Telegram 均被 `0b59cec` 移除）。
 当前唯一告警出口是 **workflow 变红 + Sentry**（`if: failure()` → `@sentry/cli send-event`）。
@@ -220,6 +235,56 @@ CLI 下次改缩进或字段名 → **静默变 0**，又是一次"绿着断"。
       -d "{\"content\": \"🚨 ${WORKFLOW_NAME} scrape failed\n${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}\"}" \
       || echo "webhook failed (non-fatal)"   # 注意：非致命，避免告警本身拖垮流程
 ```
+
+---
+
+### P1-6 【重要·本轮新发现】现有 Port 告警通道「成功也推送」→ 告警疲劳
+
+**2026-09-20 实测发现**：用户已有可用的通知链路（无需新建）：
+
+```
+githubWorkflowRun 实体更新
+  → Port automation `notify_deploy_result`
+  → POST https://notify.holomer.space/bark
+  → Bark (iOS)
+```
+
+白名单已含 `news-monitor`（2026-09-02 建），**所以 P1-5 的「接通知渠道」实际上已完成**。
+
+**但它的触发条件有问题**（`_workflow` 实体 `notify_deploy_result` 实测条件）：
+
+```jq
+.diff.after.properties.conclusion != null
+and ((.diff.after.identifier | startswith("q351941406/MultiAgentSystem"))
+     or (.diff.after.identifier | startswith("q351941406/news-monitor")))
+and (.diff.before.properties.conclusion != .diff.after.properties.conclusion
+     or .diff.before.properties.status != .diff.after.properties.status)
+```
+
+**只过滤「conclusion 是否变化」，不区分成功/失败** → 每成功一次也推一条。
+
+**实测推送量**（`githubWorkflowRun` 实体按日聚合）：
+
+| 日期      | news-monitor runs |
+| --------- | ----------------- |
+| 9/09–9/12 | 6/天              |
+| 9/13      | 31                |
+| 9/18      | 33                |
+| 9/19      | 15                |
+| 9/20      | 17                |
+
+→ **每天 6–17 条推送，绝大部分是「成功」**。
+
+**为什么这是真问题（而非「忍一忍」）**：告警疲劳会把用户推回原始事故 ——
+**用户 mute 通知 → 真故障再次静默**。这与本次复盘的核心教训（唯一告警渠道被删）同源。
+
+**建议改法**（需用户决策，改的是 Port 侧而非本仓库）：
+
+1. 只推失败：条件加 `and .diff.after.properties.conclusion == "failure"`
+2. 或维持全推但降噪：成功静默、失败推送、**恢复时推一条 ✅**（需 Port 侧存状态）
+3. 或分级：`failure` 立即推；`cancelled` / `success` 不推
+
+**注意**：该项在 Port 侧配置，本仓库 CI 无法校验 → 若采纳，应考虑把条件纳入文档或契约测试的观察范围。
 
 ---
 
