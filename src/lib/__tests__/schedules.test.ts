@@ -5,14 +5,12 @@
  * 曾出现的真实 Bug：页面写 X 源「每小时整点」，实际每天 1 次（差 24 倍）。
  */
 import { describe, it, expect } from 'vitest'
-import path from 'path'
 import {
   parseCronFromWorkflow,
   parseWorkflowName,
   getWorkflowSchedules,
   describeCron,
 } from '@/lib/schedules'
-const ROOT = process.cwd()
 describe('parseCronFromWorkflow', () => {
   it('提取 schedule 段内的 cron', () => {
     const yaml = [
@@ -48,7 +46,7 @@ describe('parseWorkflowName', () => {
   })
 })
 describe('getWorkflowSchedules —— 与真实 workflow 对齐', () => {
-  const schedules = getWorkflowSchedules(path.join(ROOT, '.github/workflows'))
+  const schedules = getWorkflowSchedules()
   it('解析出全部计划任务', () => {
     expect(schedules.map((s) => s.workflow).sort()).toEqual([
       'freshness-check.yml',

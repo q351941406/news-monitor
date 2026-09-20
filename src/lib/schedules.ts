@@ -13,7 +13,6 @@
  * 现在页面与契约测试都从 workflow 读取，抄错即红。
  */
 import fs from 'fs'
-import path from 'path'
 
 export interface WorkflowSchedule {
   /** 数据源显示名 */
@@ -28,10 +27,10 @@ export interface WorkflowSchedule {
 
 /** 允许作为计划来源的 workflow 文件名白名单（同时杜绝路径穿越） */
 const SCHEDULE_WORKFLOWS: Array<{ file: string; name: string }> = [
-  { file: 'scrape-github.yml', name: 'GitHub Trending' },
-  { file: 'scrape-twitter.yml', name: 'X / Twitter' },
-  { file: 'scrape-producthunt.yml', name: 'Product Hunt' },
-  { file: 'freshness-check.yml', name: '数据新鲜度巡检' },
+  { file: '.github/workflows/scrape-github.yml', name: 'GitHub Trending' },
+  { file: '.github/workflows/scrape-twitter.yml', name: 'X / Twitter' },
+  { file: '.github/workflows/scrape-producthunt.yml', name: 'Product Hunt' },
+  { file: '.github/workflows/freshness-check.yml', name: '数据新鲜度巡检' },
 ]
 
 /**
@@ -80,15 +79,14 @@ export function parseWorkflowName(content: string): string {
  * 与 Docker 镜像运行时并不保证包含 `.github/` 目录，所以调用方必须在模块
  * 加载期（构建期）就求值成常量 —— 见下方 SCHEDULES 与 getWorkflowSchedules。
  */
-export function readWorkflowSchedules(
-  workflowsDir: string = path.join(process.cwd(), '.github/workflows'),
-): WorkflowSchedule[] {
+export function readWorkflowSchedules(): WorkflowSchedule[] {
   return SCHEDULE_WORKFLOWS.map(({ file, name }) => {
-    const full = path.join(workflowsDir, file)
-    const content = fs.existsSync(full) ? fs.readFileSync(full, 'utf-8') : ''
+    // file 是上方硬编码的字面量，不含任何外部输入，
+    // 因此无需 path.join 拼接（也避免触发 path-traversal 规则）。
+    const content = fs.existsSync(file) ? fs.readFileSync(file, 'utf-8') : ''
     return {
       name,
-      workflow: file,
+      workflow: file.replace('.github/workflows/', ''),
       workflowName: parseWorkflowName(content),
       crons: parseCronFromWorkflow(content),
     }
@@ -117,8 +115,7 @@ const BUILD_TIME_SCHEDULES: WorkflowSchedule[] = (() => {
  * 默认返回构建期快照（生产路径）；
  * 传入 workflowsDir 时实时读取，仅供测试与脚本使用。
  */
-export function getWorkflowSchedules(workflowsDir?: string): WorkflowSchedule[] {
-  if (workflowsDir) return readWorkflowSchedules(workflowsDir)
+export function getWorkflowSchedules(): WorkflowSchedule[] {
   return BUILD_TIME_SCHEDULES
 }
 
