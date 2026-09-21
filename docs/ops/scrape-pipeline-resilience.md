@@ -6,7 +6,7 @@
 > - 更新日期：**2026-09-20**
 > - 验证基线：`main @ 40f16a3`
 > - 测试基线：单测 **209 passed** / 集成 **75 passed** / 合并覆盖率 **92.9%**（lines）
-> - 状态：**P1-1 / P1-2 / P1-4 已解决**；剩 P1-3（待用户决策）、P1-6（Port 侧配置）
+> - 状态：**P1-1 / P1-2 / P1-3 / P1-4 已解决**；剩 P1-6（Port 侧配置，已决定暂不处理）
 
 ## 文档导航
 
@@ -14,7 +14,7 @@
 | ---- | --------------------------------------------- | -------------------- |
 | 0    | **根因复盘**（三段独立失效叠加）              | 想理解「为什么」时   |
 | 1    | **已完成**（4 个 PR + 新增文件 + 设计约定）   | 动手前，避免重复劳动 |
-| 2    | **遗留 TODO**（P1-3 / P1-6 / P2 / P3）        | 这就是你要做的活     |
+| 2    | **遗留 TODO**（P1-6 / P2 / P3）               | 这就是你要做的活     |
 | 3    | **环境与验证**（含踩坑警示）                  | 动手前必读           |
 | 4    | **工作流约束**（分支保护、Semgrep、合并陷阱） | 提 PR 前必读         |
 | 5    | **建议接手顺序**                              | 不知从哪开始时       |
@@ -137,17 +137,16 @@ TODO 原文建议按「连续 N 次 0 条」判定，但**用生产日志实测�
 > P1-1 / P1-2 / P1-4 已在 #30 解决，不再列出（避免误导）。
 > 下面只剩真正待办项。
 
-### P1-3 【配置】`ADMIN_TOKEN` 在 GitHub 侧不存在 —— ⚠️ 需用户决策
+### P1-3 ~~【配置】`ADMIN_TOKEN` 在 GitHub 侧不存在~~ —— ✅ 已解决（2026-09-21）
 
 **现状**：三个 scrape workflow 都写 `ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}`，
 但 **GitHub secrets 里没有这个 secret**（`gh secret list` 可验证）→ 解析为空字符串 →
 `revalidateCacheAfterRun` 判定"未配置"→ 静默跳过。
 
-> **2026-09-21 更新**：用户报告「任意输入值都能点解锁并标记已读」，
-> 排查确认那是**前端假成功 bug**（与后端无关），已修复；`ADMIN_TOKEN` 值也已按
-> 用户要求更换。完整复盘 + 轮换步骤见 [`docs/ops/admin-auth.md`](./admin-auth.md)。
-> **本项（在 GitHub 侧补 secret）仍未完成** —— 修完前端后用户已能看到真实登录失败原因，
-> 但 scrape workflow 的缓存失效依旧被静默跳过。
+> **✅ 已解决（2026-09-21）**：用户报告「任意输入值都能点解锁并标记已读」，
+> 排查确认那是**前端假成功 bug**（与后端无关），已修复；`ADMIN_TOKEN` 值已按用户
+> 要求更换，并**已在 GitHub secrets 与 Vercel 两处配置**（本项原缺口即在此补齐）。
+> 完整复盘、生产实测与轮换步骤见 [`docs/ops/admin-auth.md`](./admin-auth.md)。
 
 > ⚠️ **别混淆**：secrets 里有个名字很像的 `ADMIN_GITHUB_TOKEN`，
 > 那是**另一个东西**（已属孤儿 secret，见 P2-2）。`ADMIN_TOKEN` 确实不存在。
@@ -288,14 +287,15 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 ---
 
-### P2-2 【清理】孤儿 secrets
+### P2-2 ~~【清理】孤儿 secrets~~ —— ✅ 已完成（2026-09-21）
 
-以下 GitHub secrets **存在但代码/workflow 零引用**（已逐个 grep 验证）：
+以下 GitHub secrets 已删除（删除前逐个 grep 确认代码/workflow 零引用）：
 
 - `RSSHUB_URL`、`ADMIN_GITHUB_TOKEN`
 - `ANTHROPIC_API_KEY`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`（AI 已迁移到 OpenAI 兼容协议的 `AI_*`）
 
-**建议**：确认无历史用途后清理。清理前务必再 grep 一次（含 git 历史）。
+保留的 secrets：`ADMIN_TOKEN`、`AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL`、
+`DATABASE_URL`、`PRODUCTHUNT_TOKEN`、`SENTRY_*`、`TWITTER_AUTH_TOKEN`、`TWITTER_CT0`。
 
 ---
 
@@ -310,6 +310,8 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 | `fix/readme-truncate`    | 0     | 15     | **可直接删** |
 | `fix/sentry-errors`      | 0     | 23     | **可直接删** |
 | `feat/e2e-playwright`    | **2** | —      | 见下         |
+
+**状态（2026-09-21）**：4 个 0-ahead 分支仍留在远端未删（删除远端分支未在本次授权范围内）。
 
 **`feat/e2e-playwright` 对应 PR #17（OPEN，2026-08-16 开，已挂 5 周）**。
 其 commit 是 `fix(ci): pin upload-artifact 到完整 commit SHA（修复 Semgrep 阻断）`。
@@ -333,7 +335,8 @@ gh pr view 17          # 看它当前到底卡在哪
 这些测试永远在"凭据齐全"的假设下运行，**测不出接线断裂**——
 这正是事故潜伏的原因之一：CI 全绿 + 生产零数据，测试通过反而制造了"已覆盖"的假象。
 
-**建议**：加注释说明「接线一致性由 `ci-wiring-contract.test.ts` 把关」，避免后人误以为已覆盖。
+**✅ 已完成（2026-09-21）**：4 个文件均已加注释，说明「凭据写死是刻意的，
+接线一致性由 `ci-wiring-contract.test.ts` 把关」，避免后人误以为已覆盖。
 
 ---
 
@@ -507,13 +510,14 @@ CI 的 `integration` job 里有一步 `Coverage gate (unit ∪ integration ≥ 8
 | 顺序 | 项                          | 理由                                                                              |
 | ---- | --------------------------- | --------------------------------------------------------------------------------- |
 | 1    | **P1-6**（Port 告警降噪）   | ⏸️ 用户已决定暂不处理（2026-09-21）。理由见该小节「决策记录」                     |
-| 2    | **P1-3**（ADMIN_TOKEN）     | 需用户决策，可并行发起                                                            |
+| 2    | ~~P1-3（ADMIN_TOKEN）~~     | ✅ 已解决（2026-09-21）：已写入 GitHub secrets 与 Vercel                          |
 | 3    | **P2-3**（清分支 + PR #17） | 纯清理，零风险，摘掉挂 5 周的 PR                                                  |
 | 4    | P2-1 / P2-2 / P2-4          | 有空再清理                                                                        |
 | 5    | ~~P3-2（Port 扩展）~~       | ✅ 已完成（见 P3-2 小节）；遗留 workflowRun 关系不自动维护，⏸️ 用户已决定暂不处理 |
 
 **代码项已全部完成**（P1-1 / P1-2 / P1-4 已合并）。
-剩下：**P1-3** 要用户拍板；**P1-6** 与 Port 遗留缺口均已由用户决定**暂不处理**。
+**P1-3 也已于 2026-09-21 解决**（前端假成功 bug 一并修掉，详见 `admin-auth.md`）。
+剩下：**P1-6**（Port 告警降噪）与 Port 遗留缺口，均已由用户决定**暂不处理**。
 
 ---
 

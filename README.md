@@ -68,11 +68,10 @@
 **不触碰数据库**，因此不消耗 Neon compute 额度。
 详见 [`docs/ops/admin-auth.md`](docs/ops/admin-auth.md)。
 
-> ⚠️ **GitHub Actions secrets 里没有 `ADMIN_TOKEN`**（2026-09-21 实测确认）。
-> 三个 scrape workflow 虽写 `ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}`，但解析为空字符串 →
-> `revalidateCacheAfterRun` 判定「未配置」→ **静默跳过缓存失效**。
-> 影响有限（缓存 TTL 仅 60 秒，最多多显示 1 分钟旧数据），但属已知配置缺口。
-> 详见 `docs/ops/scrape-pipeline-resilience.md` 的 P1-3。
+> ✅ **`ADMIN_TOKEN` 已在 GitHub secrets 与 Vercel 环境变量两处配置**（2026-09-21 完成）。
+> 此前 GitHub 侧缺失会导致 `revalidateCacheAfterRun` 判定「未配置」→ 静默跳过缓存失效
+> （此项即 `docs/ops/scrape-pipeline-resilience.md` 的 P1-3，现已解决）。
+> 轮换步骤与注意事项见 [`docs/ops/admin-auth.md`](docs/ops/admin-auth.md)。
 
 > ⚠️ **安全说明**：真实 token 不写入本仓库任何被追踪的文件（仓库是公开的，且 gitleaks 会在 CI 拦截）。
 > 运行时由 Vercel / GitHub 平台环境变量提供。轮换步骤见 `docs/ops/admin-auth.md`。
