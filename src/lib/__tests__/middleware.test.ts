@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import fs from 'fs'
+import path from 'path'
 import { NextRequest } from 'next/server'
 import { middleware, config } from '../../middleware'
 import { adminAuthLimiter } from '../rate-limit'
@@ -142,6 +144,28 @@ describe('middleware —— 管理员接口边缘拦截', () => {
       headers: { 'x-admin-token': 'bad' },
     })
     expect((await middleware(another)).status).toBe(429)
+  })
+
+  it('config.matcher 必须是字面量数组（Next.js 静态解析，禁展开运算符）', () => {
+    // 真实构建失败过：middleware 的 config 由 Next.js 在构建期静态解析，
+    // 写成 `matcher: [...SOME_CONST]` 会直接报
+    //   Unsupported spread operator in the Array Expression at "config.matcher"
+    // 该错误只在 next build 时暴露（沙盒因内存无法跑 build），代价是白等一轮 CI。
+    // 这里读源码断言，把这条约束前移到单测 —— 构建期才发现的错误不该再发生第二次。
+    const src = fs.readFileSync(path.join(process.cwd(), 'src/middleware.ts'), 'utf-8')
+    expect(src).not.toMatch(/matcher:\s*\[\.\.\./)
+    // 同时确认 matcher 里没有变量引用（只允许字符串字面量）
+    const matcherBlock = src.match(/matcher:\s*\[([^\]]*)\]/)?.[1] ?? ''
+    expect(matcherBlock, '未找到 matcher 定义').not.toBe('')
+    const entries = matcherBlock
+      .split(',')
+      .map((e) => e.trim())
+      .filter(Boolean)
+    expect(entries.length).toBeGreaterThan(0)
+    for (const e of entries) {
+      // 只允许 '字符串字面量'；出现变量名/展开表达式都会不匹配
+      expect(e, `matcher 项必须是字符串字面量，实际为: ${e}`).toMatch(/^'[^']*'$/)
+    }
   })
 
   it('matcher 覆盖全部管理员写路径', () => {

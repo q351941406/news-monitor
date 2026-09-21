@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { extractProvidedToken, verifyAdminToken } from '@/lib/admin-token-verify'
 import { adminAuthLimiter } from '@/lib/rate-limit'
-import { ADMIN_PROTECTED_MATCHER, requiresAdminToken } from '@/lib/admin-paths'
+import { requiresAdminToken } from '@/lib/admin-paths'
 
 /**
  * 管理员接口的**边缘前置拦截**：限流 + token 校验。
@@ -25,9 +25,18 @@ import { ADMIN_PROTECTED_MATCHER, requiresAdminToken } from '@/lib/admin-paths'
  * 昂贵的 token 摘要计算；先生效封禁可以直接短路返回。
  */
 
-/** Next.js 要求的 matcher 配置；路径定义在 admin-paths.ts 以免测试与实现漂移 */
+/**
+ * Next.js 要求的 matcher 配置。
+ *
+ * ⚠️ 必须是**字面量数组**：Next.js 在构建期静态解析 `config` 导出，
+ * 不支持展开运算符（`[...ARR]`）或任何变量引用 —— 实测会直接构建失败：
+ *   `Unsupported spread operator in the Array Expression at "config.matcher"`
+ * 因此这里刻意重复路径字面量。middleware.test.ts 有一条测试直接断言
+ * 本文件不含展开运算符与变量引用 —— 该错误已在真实构建中发生过一次，
+ * 代价是白等一轮 CI。
+ */
 export const config = {
-  matcher: [...ADMIN_PROTECTED_MATCHER],
+  matcher: ['/api/news/:path*', '/api/archive/:path*', '/api/admin/:path*'],
 }
 
 export async function middleware(request: NextRequest) {
