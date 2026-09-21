@@ -23,29 +23,30 @@ GitHub 明确限制：**`GITHUB_TOKEN` 无法修改分支保护设置**（该 AP
 GitHub 仓库 → Settings → Branches → Branch protection rules → **Add rule**，
 `Branch name pattern` 填 `main`：
 
-| 保护项 | 建议值 | 说明 |
-| ------ | ------ | ---- |
-| Require a pull request before merging | ✅（1 approval） | 强制走 PR 流程 |
-| Require status checks to pass | ✅ | 见下方 contexts 列表 |
-| Require conversation resolution | 可选 | |
-| Require signed commits | 可选 | |
-| Do not allow bypassing the above settings | ✅ | 防止 admin 绕过 |
-| Restrict who can push to matching branches | ✅（仅维护者） | 禁止直接 push main |
-| Allow force pushes | ❌ | |
-| Allow deletions | ❌ | |
+| 保护项                                     | 建议值           | 说明                 |
+| ------------------------------------------ | ---------------- | -------------------- |
+| Require a pull request before merging      | ✅（1 approval） | 强制走 PR 流程       |
+| Require status checks to pass              | ✅               | 见下方 contexts 列表 |
+| Require conversation resolution            | 可选             |                      |
+| Require signed commits                     | 可选             |                      |
+| Do not allow bypassing the above settings  | ✅               | 防止 admin 绕过      |
+| Restrict who can push to matching branches | ✅（仅维护者）   | 禁止直接 push main   |
+| Allow force pushes                         | ❌               |                      |
+| Allow deletions                            | ❌               |                      |
 
 ## required status checks（contexts）
 
 CI 中在 push + PR 都会运行、且应作为合并门禁的 job：
 
-| context | 来源 workflow | 内容 |
-| ------- | ------------- | ---- |
-| `unit` | `test.yml` | lint + typecheck + 单测 + `db:check` |
-| `integration` | `test.yml` | 集成测试 + 覆盖率门槛（≥80%） |
-| `semgrep` | `security.yml` | SAST 静态安全扫描 |
-| `gitleaks` | `gitleaks.yml` | 密钥泄露扫描 |
+| context             | 来源 workflow  | 内容                                            |
+| ------------------- | -------------- | ----------------------------------------------- |
+| `unit`              | `test.yml`     | lint + typecheck + 单测 + `db:check`            |
+| `integration`       | `test.yml`     | 集成测试 + 覆盖率门槛（≥80%）                   |
+| `Semgrep SAST Scan` | `security.yml` | SAST 静态安全扫描（job `semgrep` 带 name 覆盖） |
+| `Secret Scanning`   | `gitleaks.yml` | 密钥泄露扫描（job `gitleaks` 带 name 覆盖）     |
 
 > 不纳入的 job：
+>
 > - `npm-audit` —— 报告模式（`|| true`）不阻断，不能作为门禁；
 > - `dependency-review` —— 仅 PR 触发，作为 required 会导致 push 场景缺少该 check。
 
@@ -61,8 +62,8 @@ gh api repos/{owner}/{repo}/branches/main/protection \
   -F "required_status_checks[strict]=true" \
   -f 'required_status_checks[contexts][]=unit' \
   -f 'required_status_checks[contexts][]=integration' \
-  -f 'required_status_checks[contexts][]=semgrep' \
-  -f 'required_status_checks[contexts][]=gitleaks' \
+  -f 'required_status_checks[contexts][]=Semgrep SAST Scan' \
+  -f 'required_status_checks[contexts][]=Secret Scanning' \
   -F 'enforce_admins=true' \
   -F 'restrictions=null' \
   -F 'required_linear_history=false' \

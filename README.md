@@ -23,8 +23,8 @@
 ## 功能
 
 - **GitHub Trending** - 每天自动抓取热门仓库
-- **Product Hunt** - 每小时监控新产品发布
-- **X / Twitter** - 每小时追踪科技/AI 相关推文
+- **Product Hunt** - 每 6 小时监控新产品发布
+- **X / Twitter** - 每天追踪科技/AI 相关推文
 - **AI 智能分析** - 自动生成摘要和重点
 - **AI 主题聚合** - 队列式增量聚合（新数据优先+最旧补足），带历史主题上下文归并，同名主题稳定复用
 - **AI 用量监控** - 每次模型调用的 token 数/耗时/成败自动埋点，运维仪表盘实时展示
@@ -57,11 +57,16 @@
 **访客看到的**：完整新闻内容 + 无任何操作按钮（已读/全部已读/撤销全部隐藏）。
 **管理员**：点页面右上角「🔒 管理员登录」→ 输入 token → 解锁操作按钮，token 存浏览器 localStorage，同一浏览器免重复登录。
 
-**Token 存储位置**（三处，值一致）：
+**Token 存储位置**（两处，值一致）：
 
-- Vercel 环境变量：`ADMIN_TOKEN`（production + preview）
-- GitHub Actions secrets：`ADMIN_TOKEN`（供 CI 测试）
+- Vercel 环境变量：`ADMIN_TOKEN`（production + preview）—— 网站鉴权用
 - 本地开发：`.env.local` 中 `ADMIN_TOKEN=xxx`
+
+> ⚠️ **GitHub Actions secrets 里没有 `ADMIN_TOKEN`**（2026-09-21 实测确认）。
+> 三个 scrape workflow 虽写 `ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}`，但解析为空字符串 →
+> `revalidateCacheAfterRun` 判定「未配置」→ **静默跳过缓存失效**。
+> 影响有限（缓存 TTL 仅 60 秒，最多多显示 1 分钟旧数据），但属已知配置缺口。
+> 详见 `docs/ops/scrape-pipeline-resilience.md` 的 P1-3。
 
 > ⚠️ **安全说明**：真实 token 不写入本仓库（gitleaks 会在 CI 拦截），由维护者通过 Vercel / GitHub 平台环境变量管理；需要重置时用 `openssl rand -hex 24` 重新生成并同步到两处即可。
 > 实现代码：`src/lib/admin-auth.ts`（后端校验）、`src/lib/admin-token.ts`（前端管理）。
@@ -226,11 +231,14 @@ curl "http://localhost:3000/api/health?deep=1"   # readiness：真实查询 DB
 
 ## 定时规则
 
-| 数据源          | 频率                  | 说明     |
-| --------------- | --------------------- | -------- |
-| GitHub Trending | 每天 21:00 (北京时间) | 每天一次 |
-| Twitter         | 每小时                | 高频更新 |
-| Product Hunt    | 每小时                | 高频更新 |
+| 数据源          | 频率                  | 说明                  |
+| --------------- | --------------------- | --------------------- |
+| GitHub Trending | 每天 21:00 (北京时间) | `0 13 * * *`（UTC）   |
+| X / Twitter     | 每天 11:30 (北京时间) | `30 3 * * *`（UTC）   |
+| Product Hunt    | 每 6 小时             | `30 */6 * * *`（UTC） |
+
+> ⚠️ 上表以 `.github/workflows/*.yml` 为**唯一事实源**。设置页（`/settings`）会在构建期
+> 解析这些 workflow 并展示，`src/lib/__tests__/schedules.test.ts` 固化了这条契约 —— 抄错即红。
 
 ## 📦 数据库迁移
 
@@ -292,7 +300,8 @@ CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
 | 本地快速门槛  | lines 30% 等    | `vitest.config.mjs`，`npm run test:coverage` 开发期自查用  |
 | **CI 硬门槛** | **四指标 ≥80%** | `scripts/merge-coverage.ts` 合并 unit ∪ integration 后检查 |
 
-> CI 红线：`merge-coverage.ts` 对 **lines/statements/functions/branches 全部要求 ≥80%**，不足则退出码非 0 阻断合并。当前实测：lines 92.6% / statements 92.3% / branches 82.6%（合并 unit ∪ integration）。
+> CI 红线：`merge-coverage.ts` 对 **lines/statements/functions/branches 全部要求 ≥80%**，不足则退出码非 0 阻断合并。当前实测（2026-09-21）：lines 92.9% / statements 92.2% / functions 90.3% / branches 81.9%
+> （合并 unit ∪ integration）。
 > 集成测试层（真实 PostgreSQL）当前 lines 60.7%，三大数据源 github 88.6% / producthunt 87.5% / twitter 79.8%，端到端链路用例已覆盖数据源→存储→聚合→展示。
 
 跑覆盖率 + 门槛检查：
@@ -307,8 +316,8 @@ npm run test:coverage:check     # unit + integration + merge，低于 80% 则退
 ### 测试
 
 ```bash
-npm test                  # 单元测试（130 用例：含 NewsCard/SourceTabs 组件测试）
-npm run test:integration  # 集成测试（73 用例，需要本地 Postgres）
+npm test                  # 单元测试（209 用例：含 NewsCard/SourceTabs 组件测试）
+npm run test:integration  # 集成测试（75 用例，需要本地 Postgres）
 npm run test:all          # 全部
 npm run test:coverage     # 覆盖率
 ```
@@ -343,7 +352,7 @@ GitHub Dependabot 每**周一**自动检查 `npm` / `GitHub Actions` / `Docker b
 | 数据源       | Cron (UTC)     | 错峰原因                                |
 | ------------ | -------------- | --------------------------------------- |
 | GitHub       | `0 13 * * *`   | 每日一次，无冲突                        |
-| Twitter      | `5 */6 * * *`  | 每 6h 的 :05 分                         |
+| Twitter      | `30 3 * * *`   | 每日一次（与 GitHub/PH 错开）           |
 | Product Hunt | `30 */6 * * *` | 每 6h 的 :30 分（避开 PH 自身整点压力） |
 
 ### 端到端验证
