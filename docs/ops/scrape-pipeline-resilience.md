@@ -172,7 +172,7 @@ Vercel 侧已配置（`production,preview`，type=sensitive 读不到明文）�
 
 ---
 
-### P1-6 【重要】现有 Port 告警通道「成功也推送」→ 告警疲劳 —— ⚠️ 改的是 Port 侧
+### P1-6 【重要】现有 Port 告警通道「成功也推送」→ 告警疲劳 —— ⏸️ 用户已决定暂不处理（2026-09-21）
 
 **这一项取代了原 P1-5「接通知渠道」（该需求实际已完成）。**
 
@@ -197,17 +197,16 @@ and (.diff.before.properties.conclusion != .diff.after.properties.conclusion
      or .diff.before.properties.status != .diff.after.properties.status)
 ```
 
-**实测推送量**（`githubWorkflowRun` 实体按日聚合）：
+**实测推送量（2026-09-21 复核，比首次估算更精确）**：
 
-| 日期      | news-monitor runs |
-| --------- | ----------------- |
-| 9/09–9/12 | 6 / 天            |
-| 9/13      | 31                |
-| 9/18      | 33                |
-| 9/19      | 15                |
-| 9/20      | 17                |
+| 范围                      | 近 7 天 | 折算/月   |
+| ------------------------- | ------- | --------- |
+| news-monitor              | 107 条  | ~460      |
+| MultiAgentSystem          | 245 条  | ~1050     |
+| **合计**                  | **352** | **~1513** |
+| 其中 `conclusion=failure` | **25**  | ~108      |
 
-→ **每天 6–17 条推送，绝大部分是「成功」**。
+→ **93% 的推送是噪音**（352 条里只有 25 条是真失败）。
 
 **为什么这是真问题（而非「忍一忍」）**：告警疲劳会把用户推回原始事故 ——
 **用户 mute 通知 → 真故障再次静默**。这与本次复盘的核心教训（唯一告警渠道被删）同源。
@@ -217,6 +216,22 @@ and (.diff.before.properties.conclusion != .diff.after.properties.conclusion
 1. **只推失败**：条件加 `and .diff.after.properties.conclusion == "failure"`
 2. **降噪 + 恢复通知**：成功静默、失败推送、**恢复时推一条 ✅**（需 Port 侧存状态）
 3. **分级**：`failure` 立即推；`cancelled` / `success` 不推
+
+**⚠️ 另一条硬约束：额度**
+
+Port 定价页（2026-09 查）的 automation runs 额度：
+
+| 版本     | runs/月 | 价格        |
+| -------- | ------- | ----------- |
+| Free     | 400–500 | $0          |
+| Basic    | 500     | $30/seat/月 |
+| Standard | 2K      | $40/seat/月 |
+
+按上面 ~1513 runs/月 的估算，**免费版额度可能已被现有 automation 吃掉数倍**。
+（无法从 API 读取实际用量 —— `/v1/organization/usage` 等端点均 404；**只能去 Port 后台
+Billing/Usage 页确认**。）
+
+→ 所以「降噪」不只是体验问题，**也可能是额度问题**。降噪后 runs 可从 ~1513 降到 ~108/月。
 
 **注意**：该项在 Port 侧配置，**本仓库 CI 无法校验**。若采纳，建议把条件抄一份进本文档以备追溯。
 
@@ -233,6 +248,21 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   "https://api.us.port.io/v1/blueprints/_workflow/entities/notify_deploy_result" \
   | jq '.entity.properties'
 ```
+
+**⏸️ 决策记录（2026-09-21）：用户决定暂不处理。**
+
+原因与约束（接手者别擅自改）：
+
+1. **该 automation 是 MAS 与 news-monitor 共用的** —— 改条件等于同时改 MAS 的通知行为。
+   用户明确要求「不要影响 Port 里其他项目」，因此**不能单方面调整**。
+2. 用户已确认诉求：「**成功不需要通知，异常才通知**」—— 方向明确，但待他决定
+   是只改 news-monitor 还是两个项目一起改。
+3. **改动方式已验证可行**（若将来要做）：
+   - `PUT /v1/workflows/notify_deploy_result` 返回 422 → 端点可用、可改、可回滚
+   - 备份位置：`/tmp/port-snapshot/workflow-notify_deploy_result-BEFORE.json`
+     （**沙盒临时目录，重启即失** —— 真要改前请重新备份并落到仓库）
+   - 最小改法：在 JQ condition 追加
+     `and .diff.after.properties.conclusion == "failure"`
 
 > **区域注意**：该 org 在 **US region**（`api.us.port.io`）。用 EU（`api.port.io`）会返回 404
 > `user not found`。JWT 里的 `iss`/`aud` 可确认。
@@ -328,8 +358,71 @@ gh pr view 17          # 看它当前到底卡在哪
    正确做法：freshness-check 这类**基于 cron 主动检查**的 workflow 直接报警。
 2. **Port 的配置本身也要进 Git**（IaC / Terraform provider / `port.yml`），
    否则又是一份漂移的配置 —— 正是本事故链路 1 的病根。
+   （本次手工创建的实体尚未纳入 IaC，属于已知取舍。）
 
-**优先级低，用户没让做，别自作主张动。**
+**✅ 已完成（2026-09-21）** —— 用户批准后，已把 news-monitor 建成 Port 上的观察对象：
+
+| 项                                                     | 状态                                                                  |
+| ------------------------------------------------------ | --------------------------------------------------------------------- |
+| `service` 实体 `news-monitor`                          | ✅ 已建（关联 `github_repository`）                                   |
+| repo 元数据（url/language/last_push/readme/gitignore） | ✅ 已补（exporter 原本没写，全为 null）                               |
+| `deployment` → `service` 关系                          | ✅ 28/28（**exporter 自动写的**）                                     |
+| `githubPullRequest` → `service` 关系                   | ✅ 31/31（**exporter 自动写的**）                                     |
+| `githubWorkflowRun` → `service` 关系                   | ⚠️ 260/260 已手工补，**但新 run 不会自动关联**（见下）                |
+| 聚合属性                                               | ✅ runs30d=259 / runs7d=105 / deploys=28 / mergedPR30d=12             |
+| 6 个 scorecard                                         | ✅ 已评分（`dora_lead_time` **Gold**、`dora_deploy_freq` **Silver**） |
+
+**MAS 未受任何影响**（4 个 service 的 `updatedAt` 仍为 8/31 与 9/13，endpoint 原样）。
+
+### ⚠️ 遗留缺口：workflowRun 的 service 关系不自动维护 —— ⏸️ 暂不处理（2026-09-21）
+
+**现象**：`GITHUB-OCEAN-EXPORTER` 会自动写 PR 和 deployment 的 `service` 关系，
+**但不写 workflowRun 的**。结果是：
+
+- 手工补的 260 条 → 聚合正确（runs30d=259）
+- **但每天新增 6~17 条 run 会是 `service: null`** → 聚合值逐渐失真（偏低）
+
+**这不是本项目的问题，是 Ocean 集成的行为**（MAS 的 run 同样全为 null）。
+
+**⏸️ 用户已决定暂不处理**（2026-09-21）。影响有限：只是 Port 上的观察数字会逐渐偏低，
+**不影响任何生产系统**。
+
+**候选解法**（将来若要修，按推荐度）：
+
+1. **GitHub Actions 定时同步脚本**（**推荐**）：复用 `freshness-check.yml` 的模式，
+   每天跑一次读 Port API 补齐缺失关系。理由：
+   - **零 automation 额度消耗**（Port automation 每次触发都计入 runs 配额，见 P1-6）
+   - 逻辑留在 Git（**符合「GitHub 是唯一事实源」原则**），可 review、可 revert
+2. **Port automation**（官方推荐模式，见 docs.port.io「Automatically set relations
+   between entities with automation」）：`EVENT_TRIGGER on githubWorkflowRun` +
+   `UPSERT_ENTITY` 补 `service`。可参照本 org 已有的 `set_parent_team_relations` 模板。
+   **缺点**：每天新增 ~15 条 run → 持续消耗额度；且逻辑落在 Port 侧（漂移点）。
+3. 在 Ocean 的 mapping 里加 `service` 关系（需改集成配置，影响面较大）。
+
+**手工补跑的做法**（若急需刷新数字）：
+
+```bash
+# 1) 取 token（US region）
+TOKEN=$(curl -s -X POST "https://api.us.port.io/v1/auth/access_token" \
+  -H 'Content-Type: application/json' \
+  -d '{"clientId":"...","clientSecret":"..."}' | jq -r .accessToken)
+
+# 2) 列出未关联的 news-monitor run（identifier 含 "/"，需 URL 编码）
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://api.us.port.io/v1/blueprints/githubWorkflowRun/entities" \
+  | jq -r '.entities[] | select(.identifier|test("news-monitor")) \
+           | select(.relations.service == null) | .identifier'
+
+# 3) 逐个 PATCH（identifier 要 encodeURIComponent）
+curl -s -X PATCH -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"relations":{"service":"news-monitor"}}' \
+  "https://api.us.port.io/v1/blueprints/githubWorkflowRun/entities/<encoded-id>"
+```
+
+> 实测：260 条 PATCH 并发 8 约 1 分钟跑完，聚合在下一个 ~15 分钟周期刷新。
+
+> 注意：聚合/计算属性按 **~15 分钟周期**批量重算 —— 补完关系后要等一个周期才生效，
+> 别误判为失败。
 
 ---
 
@@ -405,15 +498,16 @@ CI 的 `integration` job 里有一步 `Coverage gate (unit ∪ integration ≥ 8
 
 ## 5. 建议的接手顺序
 
-| 顺序 | 项                          | 理由                                                                                   |
-| ---- | --------------------------- | -------------------------------------------------------------------------------------- |
-| 1    | **P1-6**（Port 告警降噪）   | 唯一「让告警恢复可信」的动作；不改代码，改一个条件。**先做这个，后续工作才有告警兜底** |
-| 2    | **P1-3**（ADMIN_TOKEN）     | 需用户决策，可并行发起                                                                 |
-| 3    | **P2-3**（清分支 + PR #17） | 纯清理，零风险，摘掉挂 5 周的 PR                                                       |
-| 4    | P2-1 / P2-2 / P2-4          | 有空再清理                                                                             |
-| 5    | P3-2（Port 扩展）           | 用户没让做，**别自作主张**                                                             |
+| 顺序 | 项                          | 理由                                                                              |
+| ---- | --------------------------- | --------------------------------------------------------------------------------- |
+| 1    | **P1-6**（Port 告警降噪）   | ⏸️ 用户已决定暂不处理（2026-09-21）。理由见该小节「决策记录」                     |
+| 2    | **P1-3**（ADMIN_TOKEN）     | 需用户决策，可并行发起                                                            |
+| 3    | **P2-3**（清分支 + PR #17） | 纯清理，零风险，摘掉挂 5 周的 PR                                                  |
+| 4    | P2-1 / P2-2 / P2-4          | 有空再清理                                                                        |
+| 5    | ~~P3-2（Port 扩展）~~       | ✅ 已完成（见 P3-2 小节）；遗留 workflowRun 关系不自动维护，⏸️ 用户已决定暂不处理 |
 
-**当前 P1 代码项已全部完成** —— 剩下的 P1-3 要用户拍板，P1-6 要动 Port 侧配置。
+**代码项已全部完成**（P1-1 / P1-2 / P1-4 已合并）。
+剩下：**P1-3** 要用户拍板；**P1-6** 与 Port 遗留缺口均已由用户决定**暂不处理**。
 
 ---
 
