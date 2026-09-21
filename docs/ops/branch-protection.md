@@ -26,7 +26,7 @@ GitHub 仓库 → Settings → Branches → Branch protection rules → **Add ru
 | 保护项                                     | 建议值           | 说明                 |
 | ------------------------------------------ | ---------------- | -------------------- |
 | Require a pull request before merging      | ✅（1 approval） | 强制走 PR 流程       |
-| Require status checks to pass              | ✅               | 见下方 contexts 列表 |
+| Require status checks to pass              | ✅（6 项）       | 见下方 contexts 列表 |
 | Require conversation resolution            | 可选             |                      |
 | Require signed commits                     | 可选             |                      |
 | Do not allow bypassing the above settings  | ✅               | 防止 admin 绕过      |
@@ -38,17 +38,28 @@ GitHub 仓库 → Settings → Branches → Branch protection rules → **Add ru
 
 CI 中在 push + PR 都会运行、且应作为合并门禁的 job：
 
-| context             | 来源 workflow  | 内容                                            |
-| ------------------- | -------------- | ----------------------------------------------- |
-| `unit`              | `test.yml`     | lint + typecheck + 单测 + `db:check`            |
-| `integration`       | `test.yml`     | 集成测试 + 覆盖率门槛（≥80%）                   |
-| `Semgrep SAST Scan` | `security.yml` | SAST 静态安全扫描（job `semgrep` 带 name 覆盖） |
-| `Secret Scanning`   | `gitleaks.yml` | 密钥泄露扫描（job `gitleaks` 带 name 覆盖）     |
+| context             | 来源 workflow  | 内容                                             |
+| ------------------- | -------------- | ------------------------------------------------ |
+| `unit`              | `test.yml`     | lint + typecheck + 单测 + `db:check`             |
+| `integration`       | `test.yml`     | 集成测试 + 覆盖率门槛（≥80%）                    |
+| **`build`**         | `test.yml`     | 生产构建（构建期失败早发现）                     |
+| **`e2e`**           | `test.yml`     | Playwright 真实浏览器 E2E（生产构建 + Chromium） |
+| `Semgrep SAST Scan` | `security.yml` | SAST 静态安全扫描（job `semgrep` 带 name 覆盖）  |
+| `Secret Scanning`   | `gitleaks.yml` | 密钥泄露扫描（job `gitleaks` 带 name 覆盖）      |
 
-> 不纳入的 job：
+> **2026-09-21 更新**：补入 `build` 与 `e2e`（此前缺失）。这两项补上之前，
+> **PR 可以构建失败或 UI 运行时崩溃却正常合并** —— 这正是 NEWS-MONITOR-3/4
+> 两起生产事故的成因（CI 全绿上线崩溃）。`e2e` 由 PR #38 引入。
 >
-> - `npm-audit` —— 报告模式（`|| true`）不阻断，不能作为门禁；
-> - `dependency-review` —— 仅 PR 触发，作为 required 会导致 push 场景缺少该 check。
+> 实证验证（PR #40，临时 PR）：加入后观察到 `mergeState` 由 **BLOCKED → CLEAN**，
+> 确认门禁真实拦截；非「永久绿的假门禁」。
+
+> 不纳入的 job（**刻意排除，勿再加**）：
+>
+> - `npm-audit` —— 报告模式（`|| true`）**永不失败**，设为 required 会变成永久绿的
+>   假门禁（正是本项目反复出现的「静默失效」反模式）；
+> - `dependency-review` —— 仅 PR 触发，且 `continue-on-error: true`。
+>   作为 required 会导致 push 场景缺少该 check；且它本身不阻断。
 
 ## 一键配置（gh CLI）
 
@@ -62,6 +73,8 @@ gh api repos/{owner}/{repo}/branches/main/protection \
   -F "required_status_checks[strict]=true" \
   -f 'required_status_checks[contexts][]=unit' \
   -f 'required_status_checks[contexts][]=integration' \
+  -f 'required_status_checks[contexts][]=build' \
+  -f 'required_status_checks[contexts][]=e2e' \
   -f 'required_status_checks[contexts][]=Semgrep SAST Scan' \
   -f 'required_status_checks[contexts][]=Secret Scanning' \
   -F 'enforce_admins=true' \
@@ -73,8 +86,21 @@ gh api repos/{owner}/{repo}/branches/main/protection \
 
 > 注：`gh api` 使用当前 `gh auth` 登录的 token，需具备 `repo` scope 且为管理员；
 > 用浏览器 UI 手动配置效果等价。
+>
+> ⚠️ **踩坑**：该 API 会要求 `required_pull_request_reviews` 与 `restrictions` 一起提交。
+> 用 `-F 'restrictions='` 传空串会被拒（`"" is not an object`），
+> 必须改用 JSON body 显式传 `null`。
 
 ## 验证
 
-配置完成后回到 Settings → Branches，确认 main 分支规则已列出上述 4 个 contexts；
-并在任一 PR 中确认这 4 个 check 全部通过后才允许 merge。
+配置完成后回到 Settings → Branches，确认 main 分支规则已列出上述 **6 个** contexts。
+
+**务必用真实 PR 实证，不要只看配置页面**（配置存在 ≠ 门禁有效）：
+
+```bash
+gh api repos/{owner}/{repo}/branches/main/protection --jq '.required_status_checks.contexts'
+gh pr view <N> --json mergeStateStatus    # 期望：检查未跑完时为 BLOCKED，全绿后 CLEAN
+```
+
+2026-09-21 实测：加入 `build` / `e2e` 后，PR #40 的 `mergeState` 由 **BLOCKED → CLEAN**，
+证明门禁真实拦截。
