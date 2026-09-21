@@ -10,7 +10,7 @@ import { isAdminAuthorized, unauthorized } from '@/lib/admin-auth'
  * 返回：最近运行日志、每日统计、各源汇总、异常告警
  */
 export async function GET(request: NextRequest) {
-  if (!isAdminAuthorized(request)) {
+  if (!(await isAdminAuthorized(request))) {
     return unauthorized()
   }
   try {

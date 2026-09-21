@@ -140,12 +140,15 @@ export default function ArchiveView({
     setTokenInput('')
     setTokenError(false)
     // 校验 token：无效时后端 403，回退访客态
-    const res = await fetch('/api/archive', {
+    //
+    // 曾存在的 bug：这里用裸 `fetch` 而非 `adminFetch`，**没有携带
+    // x-admin-token header** → 后端必然 403 → 在归档页**永远无法登录成功**。
+    // 统一走 adminFetch（它会附加 header），校验才真正有意义。
+    const res = await adminFetch('/api/archive', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'restore', itemId: '__validate__' }),
     })
-    if (res.status === 403) {
+    if (!res.ok) {
       clearAdminToken()
       setIsAdmin(false)
       setTokenError(true)

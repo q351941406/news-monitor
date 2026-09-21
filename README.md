@@ -13,6 +13,7 @@
 | [`docs/ops/uptime-monitoring.md`](docs/ops/uptime-monitoring.md) | Uptime 宕机监控（UptimeRobot、告警邮箱）      |
 | [`docs/ops/neon-environments.md`](docs/ops/neon-environments.md) | Neon 环境隔离（Preview 分支库）               |
 | [`docs/ops/branch-protection.md`](docs/ops/branch-protection.md) | main 分支保护手动配置（required checks）      |
+| [`docs/ops/admin-auth.md`](docs/ops/admin-auth.md)               | 管理员鉴权、防暴力破解、token 轮换            |
 | [`docs/adr/`](docs/adr/)                                         | 架构决策记录（ADR）                           |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md)                             | 系统架构详解                                  |
 | [`CONTEXT.md`](CONTEXT.md)                                       | 项目上下文 / 领域知识                         |
@@ -60,7 +61,12 @@
 **Token 存储位置**（两处，值一致）：
 
 - Vercel 环境变量：`ADMIN_TOKEN`（production + preview）—— 网站鉴权用
-- 本地开发：`.env.local` 中 `ADMIN_TOKEN=xxx`
+- 本地开发：`.env.local` 中 `ADMIN_TOKEN=xxx`（已 gitignore）
+
+**防暴力破解**：失败尝试在 Edge middleware 做滑动窗口限流
+（5 次失败 / 15 分钟窗口 → 封禁 15 分钟，按 IP 隔离），
+**不触碰数据库**，因此不消耗 Neon compute 额度。
+详见 [`docs/ops/admin-auth.md`](docs/ops/admin-auth.md)。
 
 > ⚠️ **GitHub Actions secrets 里没有 `ADMIN_TOKEN`**（2026-09-21 实测确认）。
 > 三个 scrape workflow 虽写 `ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}`，但解析为空字符串 →
@@ -68,8 +74,9 @@
 > 影响有限（缓存 TTL 仅 60 秒，最多多显示 1 分钟旧数据），但属已知配置缺口。
 > 详见 `docs/ops/scrape-pipeline-resilience.md` 的 P1-3。
 
-> ⚠️ **安全说明**：真实 token 不写入本仓库（gitleaks 会在 CI 拦截），由维护者通过 Vercel / GitHub 平台环境变量管理；需要重置时用 `openssl rand -hex 24` 重新生成并同步到两处即可。
-> 实现代码：`src/lib/admin-auth.ts`（后端校验）、`src/lib/admin-token.ts`（前端管理）。
+> ⚠️ **安全说明**：真实 token 不写入本仓库任何被追踪的文件（仓库是公开的，且 gitleaks 会在 CI 拦截）。
+> 运行时由 Vercel / GitHub 平台环境变量提供。轮换步骤见 `docs/ops/admin-auth.md`。
+> 实现代码：`src/lib/admin-auth.ts`（后端最终防线）、`src/lib/admin-token-verify.ts`（Edge/Node 共用的单一校验实现）、`src/middleware.ts`（限流 + 前置拦截）、`src/lib/rate-limit.ts`（限流器）、`src/lib/admin-token.ts`（前端管理）。
 
 ## 架构
 

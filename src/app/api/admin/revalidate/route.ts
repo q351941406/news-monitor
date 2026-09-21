@@ -12,7 +12,7 @@ import { invalidateNewsCounts } from '@/lib/cache'
  * 仅管理员可访问（x-admin-token header 校验，fail-closed）
  */
 export async function POST(request: NextRequest) {
-  if (!isAdminAuthorized(request)) {
+  if (!(await isAdminAuthorized(request))) {
     return unauthorized()
   }
   try {
