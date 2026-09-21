@@ -42,7 +42,9 @@ const MOCK_PH_RESPONSE = {
 
 describe('ProductHuntSource', () => {
   beforeEach(() => {
-    // 设置 token
+    // ⚠️ 本测试在"凭据齐全"的假设下运行：写死 test-token 是为了测**解析逻辑**，
+    // 需要凭据才能跑到那段代码。代价是它**测不出接线断裂**（生产凭据未注入）。
+    // 接线一致性由 src/lib/__tests__/ci-wiring-contract.test.ts 把关，勿误以为已覆盖。
     process.env.PRODUCTHUNT_TOKEN = 'test-token'
     // Mock global fetch
     vi.stubGlobal(
@@ -72,10 +74,22 @@ describe('ProductHuntSource', () => {
     expect(items[0].rawData.media).toHaveLength(1)
   })
 
-  it('没有 token 时返回空数组', async () => {
+  it('没有 token 时抛错（而非静默返回空）', async () => {
+    // 历史故障：此处曾静默返回 []，使 workflow 全绿而抓取断流 47 天。
+    // 凭据缺失是配置故障，必须让 run 红掉。
     delete process.env.PRODUCTHUNT_TOKEN
-    const items = await productHuntSource.fetch()
-    expect(items).toHaveLength(0)
+    await expect(productHuntSource.fetch()).rejects.toThrow(/缺少必需凭据/)
+  })
+
+  it('显式设置 SKIP_SOURCE_PRODUCTHUNT=1 时跳过并返回空数组', async () => {
+    delete process.env.PRODUCTHUNT_TOKEN
+    process.env.SKIP_SOURCE_PRODUCTHUNT = '1'
+    try {
+      const items = await productHuntSource.fetch()
+      expect(items).toHaveLength(0)
+    } finally {
+      delete process.env.SKIP_SOURCE_PRODUCTHUNT
+    }
   })
 
   it('没有缩略图和媒体时使用 null', async () => {

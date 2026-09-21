@@ -13,6 +13,7 @@
 | [`docs/ops/uptime-monitoring.md`](docs/ops/uptime-monitoring.md) | Uptime 宕机监控（UptimeRobot、告警邮箱）      |
 | [`docs/ops/neon-environments.md`](docs/ops/neon-environments.md) | Neon 环境隔离（Preview 分支库）               |
 | [`docs/ops/branch-protection.md`](docs/ops/branch-protection.md) | main 分支保护手动配置（required checks）      |
+| [`docs/ops/admin-auth.md`](docs/ops/admin-auth.md)               | 管理员鉴权、防暴力破解、token 轮换            |
 | [`docs/adr/`](docs/adr/)                                         | 架构决策记录（ADR）                           |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md)                             | 系统架构详解                                  |
 | [`CONTEXT.md`](CONTEXT.md)                                       | 项目上下文 / 领域知识                         |
@@ -23,8 +24,8 @@
 ## 功能
 
 - **GitHub Trending** - 每天自动抓取热门仓库
-- **Product Hunt** - 每小时监控新产品发布
-- **X / Twitter** - 每小时追踪科技/AI 相关推文
+- **Product Hunt** - 每 6 小时监控新产品发布
+- **X / Twitter** - 每天追踪科技/AI 相关推文
 - **AI 智能分析** - 自动生成摘要和重点
 - **AI 主题聚合** - 队列式增量聚合（新数据优先+最旧补足），带历史主题上下文归并，同名主题稳定复用
 - **AI 用量监控** - 每次模型调用的 token 数/耗时/成败自动埋点，运维仪表盘实时展示
@@ -57,14 +58,24 @@
 **访客看到的**：完整新闻内容 + 无任何操作按钮（已读/全部已读/撤销全部隐藏）。
 **管理员**：点页面右上角「🔒 管理员登录」→ 输入 token → 解锁操作按钮，token 存浏览器 localStorage，同一浏览器免重复登录。
 
-**Token 存储位置**（三处，值一致）：
+**Token 存储位置**（两处，值一致）：
 
-- Vercel 环境变量：`ADMIN_TOKEN`（production + preview）
-- GitHub Actions secrets：`ADMIN_TOKEN`（供 CI 测试）
-- 本地开发：`.env.local` 中 `ADMIN_TOKEN=xxx`
+- Vercel 环境变量：`ADMIN_TOKEN`（production + preview）—— 网站鉴权用
+- 本地开发：`.env.local` 中 `ADMIN_TOKEN=xxx`（已 gitignore）
 
-> ⚠️ **安全说明**：真实 token 不写入本仓库（gitleaks 会在 CI 拦截），由维护者通过 Vercel / GitHub 平台环境变量管理；需要重置时用 `openssl rand -hex 24` 重新生成并同步到两处即可。
-> 实现代码：`src/lib/admin-auth.ts`（后端校验）、`src/lib/admin-token.ts`（前端管理）。
+**防暴力破解**：失败尝试在 Edge middleware 做滑动窗口限流
+（5 次失败 / 15 分钟窗口 → 封禁 15 分钟，按 IP 隔离），
+**不触碰数据库**，因此不消耗 Neon compute 额度。
+详见 [`docs/ops/admin-auth.md`](docs/ops/admin-auth.md)。
+
+> ✅ **`ADMIN_TOKEN` 已在 GitHub secrets 与 Vercel 环境变量两处配置**（2026-09-21 完成）。
+> 此前 GitHub 侧缺失会导致 `revalidateCacheAfterRun` 判定「未配置」→ 静默跳过缓存失效
+> （此项即 `docs/ops/scrape-pipeline-resilience.md` 的 P1-3，现已解决）。
+> 轮换步骤与注意事项见 [`docs/ops/admin-auth.md`](docs/ops/admin-auth.md)。
+
+> ⚠️ **安全说明**：真实 token 不写入本仓库任何被追踪的文件（仓库是公开的，且 gitleaks 会在 CI 拦截）。
+> 运行时由 Vercel / GitHub 平台环境变量提供。轮换步骤见 `docs/ops/admin-auth.md`。
+> 实现代码：`src/lib/admin-auth.ts`（后端最终防线）、`src/lib/admin-token-verify.ts`（Edge/Node 共用的单一校验实现）、`src/middleware.ts`（限流 + 前置拦截）、`src/lib/rate-limit.ts`（限流器）、`src/lib/admin-token.ts`（前端管理）。
 
 ## 架构
 
@@ -126,9 +137,9 @@ docker compose up -d
 # 3. 查看日志
 docker compose logs -f app
 
-# 4. 验证服务
+# 4. 验证服务（默认 liveness，不查数据库）
 curl http://localhost:3000/api/health
-# → {"status":"ok","db":"up","uptime":12,"timestamp":"..."}
+# → {"status":"ok","db":"unchecked","uptime":12,"timestamp":"..."}
 
 # 5. 初始化数据库（首次启动）
 docker compose exec app npm run db:migrate:ci
@@ -149,12 +160,23 @@ npm run topic-aggregate -- --source=github
 
 ## 健康检查
 
-应用暴露 `GET /api/health` 端点：
+应用暴露 `GET /api/health` 端点，**默认只做进程存活检查（liveness），不触碰数据库**：
+
+- **200 OK** — `{ status: 'ok', db: 'unchecked', uptime, timestamp }`
+
+加 `?deep=1` 时执行数据库连通性检查（readiness）：
 
 - **200 OK** — `{ status: 'ok', db: 'up', uptime, timestamp }`
 - **503 Service Unavailable** — `{ status: 'degraded', db: 'down', error, ... }`
 
-供 Docker / Kubernetes / Vercel / 外部探活使用。无缓存（`force-dynamic`），每次请求真实探测 DB 连接。
+```bash
+curl http://localhost:3000/api/health            # liveness：不碰 DB
+curl "http://localhost:3000/api/health?deep=1"   # readiness：真实查询 DB
+```
+
+供 Docker / Kubernetes / Vercel / 外部探活使用。无缓存（`force-dynamic`），每次请求真实探测。
+
+> **为什么默认不查 DB**：高频探活若每次都 `SELECT 1`，会让 Neon 这类 scale-to-zero 数据库的 compute 无法休眠（挂起阈值为「连续 5 分钟无活动」）。外部探活（如 UptimeRobot，5 分钟间隔）会持续重置挂起计时器，导致 compute 近乎 7×24 常驻并耗尽免费 CU-hours 额度。详见 `docs/ops/uptime-monitoring.md`。
 
 ## 环境变量
 
@@ -215,11 +237,14 @@ npm run topic-aggregate -- --source=github
 
 ## 定时规则
 
-| 数据源          | 频率                  | 说明     |
-| --------------- | --------------------- | -------- |
-| GitHub Trending | 每天 21:00 (北京时间) | 每天一次 |
-| Twitter         | 每小时                | 高频更新 |
-| Product Hunt    | 每小时                | 高频更新 |
+| 数据源          | 频率                  | 说明                  |
+| --------------- | --------------------- | --------------------- |
+| GitHub Trending | 每天 21:00 (北京时间) | `0 13 * * *`（UTC）   |
+| X / Twitter     | 每天 11:30 (北京时间) | `30 3 * * *`（UTC）   |
+| Product Hunt    | 每 6 小时             | `30 */6 * * *`（UTC） |
+
+> ⚠️ 上表以 `.github/workflows/*.yml` 为**唯一事实源**。设置页（`/settings`）会在构建期
+> 解析这些 workflow 并展示，`src/lib/__tests__/schedules.test.ts` 固化了这条契约 —— 抄错即红。
 
 ## 📦 数据库迁移
 
@@ -281,7 +306,8 @@ CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
 | 本地快速门槛  | lines 30% 等    | `vitest.config.mjs`，`npm run test:coverage` 开发期自查用  |
 | **CI 硬门槛** | **四指标 ≥80%** | `scripts/merge-coverage.ts` 合并 unit ∪ integration 后检查 |
 
-> CI 红线：`merge-coverage.ts` 对 **lines/statements/functions/branches 全部要求 ≥80%**，不足则退出码非 0 阻断合并。当前实测：lines 92.6% / statements 92.3% / branches 82.6%（合并 unit ∪ integration）。
+> CI 红线：`merge-coverage.ts` 对 **lines/statements/functions/branches 全部要求 ≥80%**，不足则退出码非 0 阻断合并。当前实测（2026-09-21）：lines 92.9% / statements 92.2% / functions 90.3% / branches 81.9%
+> （合并 unit ∪ integration）。
 > 集成测试层（真实 PostgreSQL）当前 lines 60.7%，三大数据源 github 88.6% / producthunt 87.5% / twitter 79.8%，端到端链路用例已覆盖数据源→存储→聚合→展示。
 
 跑覆盖率 + 门槛检查：
@@ -296,8 +322,8 @@ npm run test:coverage:check     # unit + integration + merge，低于 80% 则退
 ### 测试
 
 ```bash
-npm test                  # 单元测试（含 NewsCard/SourceTabs 组件测试）
-npm run test:integration  # 集成测试（需要本地 Postgres）
+npm test                  # 单元测试（276 用例：含 NewsCard/Header/SourceTabs 组件测试）
+npm run test:integration  # 集成测试（75 用例，需要本地 Postgres）
 npm run test:e2e          # E2E 测试（Playwright 真实浏览器，需先 build + 本地 Postgres）
 npm run test:e2e:ui       # E2E 交互式 UI 模式
 npm run test:all          # 全部
@@ -338,17 +364,21 @@ GitHub Dependabot 每**周一**自动检查 `npm` / `GitHub Actions` / `Docker b
 | 数据源       | Cron (UTC)     | 错峰原因                                |
 | ------------ | -------------- | --------------------------------------- |
 | GitHub       | `0 13 * * *`   | 每日一次，无冲突                        |
-| Twitter      | `5 */6 * * *`  | 每 6h 的 :05 分                         |
+| Twitter      | `30 3 * * *`   | 每日一次（与 GitHub/PH 错开）           |
 | Product Hunt | `30 */6 * * *` | 每 6h 的 :30 分（避开 PH 自身整点压力） |
 
 ### 端到端验证
 
 ```bash
 curl http://localhost:3000/api/health
+# → {"status":"ok","db":"unchecked","uptime":12,"timestamp":"..."}
+
+# 需要验证数据库连通性时（readiness）
+curl "http://localhost:3000/api/health?deep=1"
 # → {"status":"ok","db":"up","uptime":12,"timestamp":"..."}
 ```
 
-返回 200 = 健康，503 = 数据库连接异常（用于容器编排 / Vercel 探活）。
+默认探活返回 200 = 进程存活；`?deep=1` 返回 200 = 数据库连通、503 = 数据库连接异常。
 
 ## License
 

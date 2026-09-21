@@ -10,6 +10,7 @@ import { sources, getSource } from '../src/sources'
 import { storeRawItems } from '@/lib/db'
 import { withRunLog } from '@/lib/run-logger'
 import { revalidateCacheAfterRun } from './revalidate-cache'
+import { assertNonEmptyFetch } from '@/lib/scrape-guard'
 const log = logger.child({ script: 'scrape' })
 async function main() {
   const args = process.argv.slice(2)
@@ -31,15 +32,20 @@ async function main() {
     const result = await withRunLog({ source: source.slug, stage: 'scrape' }, async () => {
       const items = await source.fetch()
       console.log(`  ✅ Fetched ${items.length} items`)
+      // 源返回 0 条 = 源不可用，必须让 run 红掉。
+      // 校验 fetched 而非 stored：stored 为 0 可能只是「抓到的都已入库」（合法），
+      // 而 fetched 为 0 在实测中恒为故障（X 源曾连续 10 天如此、workflow 全绿）。
+      assertNonEmptyFetch(source.slug, source.name, items.length)
       const stored = await storeRawItems(items)
       console.log(`  📦 Stored ${stored} new items`)
-      return { itemsCount: stored }
+      return { itemsCount: stored, fetchedCount: items.length }
     })
     // 输出 JSON 结果供 GitHub Actions 使用
     console.log(
       JSON.stringify({
         source: source.slug,
         total: result.itemsCount,
+        fetched: result.fetchedCount,
         timestamp: Date.now(),
       }),
     )

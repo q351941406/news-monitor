@@ -9,6 +9,7 @@ import {
   getMetrics,
 } from '../run-log-repo'
 import { runLogs } from '../../schema'
+import { storeRawItems } from '../news-repo'
 
 describe('RunLogRepo', () => {
   beforeAll(async () => {
@@ -143,6 +144,29 @@ describe('run-log-repo - 分支补测', () => {
     await logRun({ source: 'producthunt', stage: 'scrape', status: 'success', itemsCount: 0 })
     const metrics = await getMetrics()
     expect(metrics.alerts.find((a) => a.source === 'producthunt')).toBeUndefined()
+  })
+
+  it('getMetrics: 低频源断流超容忍窗口触发 stale_source 告警', async () => {
+    // 回归守护：原实现只用「连续 3 次 0 条」判定，而它读 getRecentRuns(30)
+    // 全局窗口（实测仅覆盖 ~1.7 天）。X 每天只抓 1 次，在窗口内永远凑不齐
+    // 3 条同源记录 —— 告警在数学上不可能触发，导致 X 断流 57 天零告警。
+    // 本测试确保时间维度的 stale_source 通道存在且工作。
+    const stale = Date.now() - 60 * 60 * 1000 * 100 // 100 小时前，远超 48h 阈值
+    await storeRawItems([
+      {
+        id: 'twitter:stale-proof',
+        source: 'twitter',
+        title: 'stale proof',
+        url: 'https://x.com/i/status/1',
+        rawData: {},
+        fetchedAt: stale,
+      },
+    ])
+
+    const metrics = await getMetrics()
+    const alert = metrics.alerts.find((a) => a.type === 'stale_source' && a.source === 'twitter')
+    expect(alert, 'twitter 100h 无新数据必须产生 stale_source 告警').toBeDefined()
+    expect(alert!.message).toContain('无新数据')
   })
 
   it('logRun: 缺省字段使用默认值', async () => {

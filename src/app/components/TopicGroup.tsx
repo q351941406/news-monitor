@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
-import { ChevronDown, ChevronRight, ExternalLink, Check } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
 import MarkdownContent from './MarkdownContent'
 /** 列表轻量条目（不含原文/AI 详情） */
 interface NewsItem {
@@ -210,6 +210,30 @@ export default function TopicGroup({
                           {item.summary || item.title}
                         </p>
                       </div>
+                      {canOperate &&
+                        (!item.isRead ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onMarkRead(item.id)
+                            }}
+                            className="flex-shrink-0 px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50 rounded-full hover:bg-red-100 transition-colors"
+                            aria-label="标记为已读"
+                          >
+                            已读
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onMarkUnread(item.id)
+                            }}
+                            className="flex-shrink-0 px-2.5 py-1 text-xs font-medium text-stone-500 bg-stone-100 rounded-full hover:bg-stone-200 transition-colors"
+                            aria-label="标记为未读"
+                          >
+                            未读
+                          </button>
+                        ))}
                       <div className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
                         {isItemExpanded ? (
                           <ChevronDown className="w-4 h-4 text-stone-400" />
@@ -279,30 +303,6 @@ export default function TopicGroup({
                                 <ExternalLink className="w-3.5 h-3.5" />
                                 <span>原文</span>
                               </a>
-                              {canOperate &&
-                                (!item.isRead ? (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      onMarkRead(item.id)
-                                    }}
-                                    className="flex items-center gap-1 text-xs text-stone-500 hover:text-green-600 transition-colors ml-auto"
-                                  >
-                                    <Check className="w-3.5 h-3.5" />
-                                    <span>已读</span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      onMarkUnread(item.id)
-                                    }}
-                                    className="flex items-center gap-1 text-xs text-stone-500 hover:text-amber-600 transition-colors ml-auto"
-                                  >
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                    <span>未读</span>
-                                  </button>
-                                ))}
                             </div>
                           </>
                         )}

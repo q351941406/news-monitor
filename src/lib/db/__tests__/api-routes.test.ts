@@ -21,11 +21,21 @@ describe('API Routes', () => {
     await dropTestSchema()
   })
 
-  it('GET /api/health 返回 ok', async () => {
-    const res = await healthGET()
+  it('GET /api/health 返回 ok（默认 liveness，不查库）', async () => {
+    const res = await healthGET(new NextRequest('http://localhost/api/health'))
     const json = await res.json()
     expect(res.status).toBe(200)
     expect(json.status).toBe('ok')
+    // 默认探活不触碰数据库，避免唤醒 Neon compute 耗尽免费额度
+    expect(json.db).toBe('unchecked')
+  })
+
+  it('GET /api/health?deep=1 真实探测 DB，返回 db:up', async () => {
+    const res = await healthGET(new NextRequest('http://localhost/api/health?deep=1'))
+    const json = await res.json()
+    expect(res.status).toBe(200)
+    expect(json.status).toBe('ok')
+    expect(json.db).toBe('up')
   })
 
   it('GET /api/news?source=github 返回该源条目', async () => {

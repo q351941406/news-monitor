@@ -1,0 +1,107 @@
+ok: true
+schema_version: '1'
+data:
+- id: '1234567890'
+  text: 'Excited about the new AI model from OpenAI! #llm #ai'
+  author:
+    id: u1234567890
+    name: AI Enthusiast
+    screenName: ai_fan
+    profileImageUrl: https://pbs.twimg.com/p/x.jpg
+    verified: false
+  metrics:
+    likes: 4200
+    retweets: 310
+    replies: 1
+    quotes: 0
+    views: 999
+    bookmarks: 2
+  createdAt: Sat Sep 20 08:00:00 +0000 2026
+  createdAtLocal: 2026-09-20 08:00
+  createdAtISO: '2026-09-20T08:00:00+00:00'
+  media:
+  - type: photo
+    url: https://pbs.twimg.com/media/test1.jpg
+    width: null
+    height: null
+  urls: []
+  isRetweet: false
+  retweetedBy: null
+  lang: en
+  score: 1.5
+- id: '2345678901'
+  text: Just shipped a new React component library on GitHub
+  author:
+    id: u2345678901
+    name: Dev Person
+    screenName: dev_person
+    profileImageUrl: https://pbs.twimg.com/p/x.jpg
+    verified: false
+  metrics:
+    likes: 150
+    retweets: 30
+    replies: 1
+    quotes: 0
+    views: 999
+    bookmarks: 2
+  createdAt: Sat Sep 20 08:00:00 +0000 2026
+  createdAtLocal: 2026-09-20 08:00
+  createdAtISO: '2026-09-20T08:00:00+00:00'
+  media: []
+  urls: []
+  isRetweet: false
+  retweetedBy: null
+  lang: en
+  score: 1.5
+- id: '3456789012'
+  text: I had a great lunch today, weather is nice
+  author:
+    id: u3456789012
+    name: Normal User
+    screenName: normal_user
+    profileImageUrl: https://pbs.twimg.com/p/x.jpg
+    verified: false
+  metrics:
+    likes: 5
+    retweets: 1
+    replies: 1
+    quotes: 0
+    views: 999
+    bookmarks: 2
+  createdAt: Sat Sep 20 08:00:00 +0000 2026
+  createdAtLocal: 2026-09-20 08:00
+  createdAtISO: '2026-09-20T08:00:00+00:00'
+  media: []
+  urls: []
+  isRetweet: false
+  retweetedBy: null
+  lang: en
+  score: 1.5
+- id: '4567890123'
+  text: New Rust framework for building CLIs is amazing
+  author:
+    id: u4567890123
+    name: Rust Fan
+    screenName: rust_fan
+    profileImageUrl: https://pbs.twimg.com/p/x.jpg
+    verified: false
+  metrics:
+    likes: 300
+    retweets: 80
+    replies: 1
+    quotes: 0
+    views: 999
+    bookmarks: 2
+  createdAt: Sat Sep 20 08:00:00 +0000 2026
+  createdAtLocal: 2026-09-20 08:00
+  createdAtISO: '2026-09-20T08:00:00+00:00'
+  media:
+  - type: video
+    url: https://pbs.twimg.com/media/test2.mp4
+    width: null
+    height: null
+  urls: []
+  isRetweet: false
+  retweetedBy: null
+  lang: en
+  score: 1.5

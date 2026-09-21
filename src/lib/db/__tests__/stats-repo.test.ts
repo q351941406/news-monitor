@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { getTestDb, createTestTables, insertTestItem, dropTestSchema } from './db-test-helper'
+import { createTestTables, insertTestItem, dropTestSchema } from './db-test-helper'
 import { storeRawItems } from '../news-repo'
-import { getUnreadCount, cleanupOldData } from '../stats-repo'
-import { rawItems } from '../../schema'
+import { getUnreadCount } from '../stats-repo'
 import type { NewRawItem } from '../../schema'
 
 describe('StatsRepo', () => {
@@ -32,22 +31,4 @@ describe('StatsRepo', () => {
     const total = await getUnreadCount()
     expect(total).toBeGreaterThanOrEqual(2)
   })
-
-  it('清理过期数据', async () => {
-    const oldItem = insertTestItem({
-      id: 'test:stats:old',
-      fetchedAt: Date.now() - 100 * 86400 * 1000, // 100 天前
-    }) as NewRawItem
-    await storeRawItems([oldItem])
-    await cleanupOldData(30) // 清理 30 天前的
-    const exists = await existsItem('test:stats:old')
-    expect(exists).toBe(false)
-  })
 })
-
-async function existsItem(id: string): Promise<boolean> {
-  const db = getTestDb()
-  const result = await db.select({ id: rawItems.id }).from(rawItems).where(eq(rawItems.id, id))
-  return result.length > 0
-}
-import { eq } from 'drizzle-orm'

@@ -149,6 +149,9 @@ describe('端到端业务链路（github + producthunt）', () => {
   })
 
   it('Product Hunt 链路：mock GraphQL → 存储 → 可查询', async () => {
+    // ⚠️ 凭据写死是刻意的：测解析/存储链路需要凭据才能跑进目标代码分支。
+    // 代价是**测不出接线断裂**（生产凭据未注入）——接线一致性由
+    // src/lib/__tests__/ci-wiring-contract.test.ts 把关，勿误以为已覆盖。
     process.env.PRODUCTHUNT_TOKEN = 'test-token'
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
