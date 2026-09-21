@@ -143,6 +143,12 @@ TODO 原文建议按「连续 N 次 0 条」判定，但**用生产日志实测�
 但 **GitHub secrets 里没有这个 secret**（`gh secret list` 可验证）→ 解析为空字符串 →
 `revalidateCacheAfterRun` 判定"未配置"→ 静默跳过。
 
+> **2026-09-21 更新**：用户报告「任意输入值都能点解锁并标记已读」，
+> 排查确认那是**前端假成功 bug**（与后端无关），已修复；`ADMIN_TOKEN` 值也已按
+> 用户要求更换。完整复盘 + 轮换步骤见 [`docs/ops/admin-auth.md`](./admin-auth.md)。
+> **本项（在 GitHub 侧补 secret）仍未完成** —— 修完前端后用户已能看到真实登录失败原因，
+> 但 scrape workflow 的缓存失效依旧被静默跳过。
+
 > ⚠️ **别混淆**：secrets 里有个名字很像的 `ADMIN_GITHUB_TOKEN`，
 > 那是**另一个东西**（已属孤儿 secret，见 P2-2）。`ADMIN_TOKEN` 确实不存在。
 

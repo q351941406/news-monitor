@@ -52,17 +52,47 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
   useEffect(() => {
     setIsAdmin(!!getAdminToken())
   }, [])
-  const handleLogin = (token: string) => {
-    setAdminToken(token)
-    setIsAdmin(true)
-    // 触发一次受保护请求验证 token；无效时由后端返回 403，页面保持访客态
-    adminFetch('/api/admin/metrics').catch(() => {})
+  /**
+   * 管理员登录。
+   *
+   * 曾存在的 bug：这里**无条件** `setIsAdmin(true)`，校验请求的结果被丢弃
+   * （`fetch` 对 403 是 resolve 而非 reject，`.catch()` 永不触发）。结果是
+   * 输入任意字符串都"登录成功"，操作按钮全部出现，而后端 403 被前端忽略，
+   * 叠加乐观更新制造出"已标记已读"的假象 —— 刷新即还原。
+   *
+   * 现在：先校验、后置位。返回 boolean 供 Header 显示错误提示。
+   */
+  const handleLogin = async (token: string): Promise<boolean> => {
+    setAdminToken(token) // 先存，adminFetch 才能带上 header
+    try {
+      const res = await adminFetch('/api/admin/metrics')
+      if (!res.ok) {
+        clearAdminToken()
+        setIsAdmin(false)
+        return false
+      }
+      setIsAdmin(true)
+      return true
+    } catch {
+      clearAdminToken()
+      setIsAdmin(false)
+      return false
+    }
   }
   const handleLogout = () => {
     clearAdminToken()
     setIsAdmin(false)
     window.location.reload()
   }
+
+  /**
+   * 写操作返回 403 时调用：token 已失效（如轮换）或无效。
+   * 立刻回退访客态，避免继续显示可操作按钮造成"能点但实际失败"的错觉。
+   */
+  const handleAuthLost = useCallback(() => {
+    clearAdminToken()
+    setIsAdmin(false)
+  }, [])
   /**
    * 初始数据来自服务端 props；仅当 showRead 过滤条件变化时才重新请求。
    */
@@ -139,10 +169,15 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
   )
   const handleMarkRead = async (itemId: string) => {
     try {
-      await adminFetch('/api/news', {
+      const res = await adminFetch('/api/news', {
         method: 'POST',
         body: JSON.stringify({ action: 'read', itemId }),
       })
+      // 鉴权失败/服务端错误时不得做乐观更新，否则会制造"已读"假象
+      if (!res.ok) {
+        if (res.status === 403) handleAuthLost()
+        return
+      }
       setGroupItems((prev) => {
         const updated = { ...prev }
         for (const gid of Object.keys(updated)) {
@@ -179,10 +214,14 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
   }
   const handleMarkUnread = async (itemId: string) => {
     try {
-      await adminFetch('/api/news', {
+      const res = await adminFetch('/api/news', {
         method: 'POST',
         body: JSON.stringify({ action: 'unread', itemId }),
       })
+      if (!res.ok) {
+        if (res.status === 403) handleAuthLost()
+        return
+      }
       setGroupItems((prev) => {
         const updated = { ...prev }
         for (const gid of Object.keys(updated)) {
@@ -218,10 +257,14 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
   /** 整组标记已读：后端单条 UPDATE，替代原前端逐条请求 */
   const handleMarkGroupRead = async (topicId: string) => {
     try {
-      await adminFetch('/api/news', {
+      const res = await adminFetch('/api/news', {
         method: 'POST',
         body: JSON.stringify({ action: 'readGroup', topicId }),
       })
+      if (!res.ok) {
+        if (res.status === 403) handleAuthLost()
+        return
+      }
       // 更新该组 items 缓存与元信息
       const groupUnread = groupItems[topicId]?.filter((i) => !i.isRead).length ?? 0
       const groupSource = groupItems[topicId]?.[0]?.source
@@ -256,10 +299,14 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
   }
   const handleMarkAllRead = async () => {
     try {
-      await adminFetch('/api/news', {
+      const res = await adminFetch('/api/news', {
         method: 'POST',
         body: JSON.stringify({ action: 'readAll' }),
       })
+      if (!res.ok) {
+        if (res.status === 403) handleAuthLost()
+        return
+      }
       setGroupItems((prev) => {
         const updated = { ...prev }
         for (const gid of Object.keys(updated)) {
@@ -287,10 +334,14 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
   }
   const handleResetAllRead = async () => {
     try {
-      await adminFetch('/api/news', {
+      const res = await adminFetch('/api/news', {
         method: 'POST',
         body: JSON.stringify({ action: 'resetAll' }),
       })
+      if (!res.ok) {
+        if (res.status === 403) handleAuthLost()
+        return
+      }
       setGroupItems((prev) => {
         const updated = { ...prev }
         for (const gid of Object.keys(updated)) {

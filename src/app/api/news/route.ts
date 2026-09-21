@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 
 // POST — 写操作（标记已读等），仅管理员可操作
 export async function POST(request: NextRequest) {
-  if (!isAdminAuthorized(request)) {
+  if (!(await isAdminAuthorized(request))) {
     return unauthorized()
   }
   const body = await request.json()

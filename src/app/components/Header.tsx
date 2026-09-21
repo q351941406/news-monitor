@@ -19,7 +19,7 @@ interface HeaderProps {
   onShowReadChange: (show: boolean) => void
   onMarkAllRead: () => void
   onResetAllRead: () => void
-  onLogin: (token: string) => void
+  onLogin: (token: string) => Promise<boolean>
   onLogout: () => void
 }
 export default function Header({
@@ -37,11 +37,27 @@ export default function Header({
   const [showTokenInput, setShowTokenInput] = useState(false)
   const [error, setError] = useState(false)
 
-  const handleLogin = () => {
-    if (!tokenInput.trim()) return
-    onLogin(tokenInput.trim())
-    setTokenInput('')
-    setShowTokenInput(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  /**
+   * 登录：等待父组件完成校验后再决定是否收起输入框。
+   *
+   * 曾存在的 bug：`error` state 声明了却从未被置为 true（`setError` 只在
+   * input onChange 里被设为 false），导致「Token 错误，请重试」是死代码，
+   * 用户永远看不到失败原因。现在由 onLogin 的返回值驱动。
+   */
+  const handleLogin = async () => {
+    if (!tokenInput.trim() || submitting) return
+    setSubmitting(true)
+    const ok = await onLogin(tokenInput.trim())
+    setSubmitting(false)
+    if (ok) {
+      setTokenInput('')
+      setShowTokenInput(false)
+      setError(false)
+    } else {
+      setError(true)
+    }
   }
 
   return (
@@ -159,12 +175,17 @@ export default function Header({
               />
               <button
                 onClick={handleLogin}
-                className="px-4 py-2 text-sm font-medium text-white bg-stone-900 rounded-lg hover:bg-stone-700 transition-colors"
+                disabled={submitting}
+                className="px-4 py-2 text-sm font-medium text-white bg-stone-900 rounded-lg hover:bg-stone-700 transition-colors disabled:opacity-50"
               >
-                解锁
+                {submitting ? '校验中...' : '解锁'}
               </button>
             </div>
-            {error && <p className="mt-2 text-xs text-red-600">Token 错误，请重试</p>}
+            {error && (
+              <p className="mt-2 text-xs text-red-600">
+                Token 错误，请重试（连续多次失败会被临时限制访问）
+              </p>
+            )}
           </div>
         )}
         {/* Mobile Menu */}

@@ -42,7 +42,9 @@ const MOCK_PH_RESPONSE = {
 
 describe('ProductHuntSource', () => {
   beforeEach(() => {
-    // 设置 token
+    // ⚠️ 本测试在"凭据齐全"的假设下运行：写死 test-token 是为了测**解析逻辑**，
+    // 需要凭据才能跑到那段代码。代价是它**测不出接线断裂**（生产凭据未注入）。
+    // 接线一致性由 src/lib/__tests__/ci-wiring-contract.test.ts 把关，勿误以为已覆盖。
     process.env.PRODUCTHUNT_TOKEN = 'test-token'
     // Mock global fetch
     vi.stubGlobal(
