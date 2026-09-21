@@ -321,9 +321,10 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 - 已确认与 #35 新增的 middleware **共存无冲突**
 - 原 PR #17 及其分支已关闭/删除，远端现仅剩 `main`
 
-> ⚠️ **仍待处理**：`e2e` 与 `build` 这两个 job **都不是 required check**
-> （分支保护变更需仓库设置权限）。意味着 **PR 仍可构建失败却正常合并** ——
-> 这正是这两道防线要防的那类事故。建议补入分支保护。
+> ✅ **已补齐（2026-09-21）**：`e2e` 与 `build` 均已纳入 required checks（现共 6 项），
+> 并用临时 PR 实证门禁真实拦截（`mergeState` BLOCKED → CLEAN）。
+> 此前这两个 job 缺失导致 **PR 可构建失败或 UI 运行时崩溃却正常合并** ——
+> 正是这两道防线要防的事故。详见 `branch-protection.md`。
 
 ---
 
@@ -494,7 +495,7 @@ CI 的 `integration` job 里有一步 `Coverage gate (unit ∪ integration ≥ 8
 
 ## 4. 工作流约束（提 PR 前必读）
 
-- **分支保护**：`main` 要求 4 项 check（`unit` / `integration` / `Semgrep SAST Scan` / `Secret Scanning`），
+- **分支保护**：`main` 要求 **6 项** check（`unit` / `integration` / `build` / `e2e` / `Semgrep SAST Scan` / `Secret Scanning`），
   且 `enforce_admins=true` —— **不能直接 push main**，必须走 PR。
 - **合并方式**：`gh pr merge <N> --squash --delete-branch`
 - **陷阱**：`--delete-branch` 会删 base 分支；若有 stacked PR 以它为 base，那些 PR 会**被自动关闭**。
@@ -502,8 +503,10 @@ CI 的 `integration` job 里有一步 `Coverage gate (unit ∪ integration ≥ 8
 - **本地 remote ref 残留**：合并后 `git remote prune origin` 清一下。
 - **Semgrep 会拦**：新增代码若含「动态 RegExp」或「路径拼接未校验」会被 blocking。
   **优先重构代码而非加 ignore 注释**（本次已用此原则处理过 2 个 finding，见 3.2 表）。
-- **`build` job 不是 required check**（本次发现的缺口）：
-  意味着 **PR 可以构建失败却正常合并**。建议加上（但注意 required checks 变更需仓库设置权限）。
+- ~~**`build` job 不是 required check**~~ —— ✅ **已解决（2026-09-21）**：
+  `build` 与 `e2e` 均已补入 required checks（6 项）。
+  此前 PR 可构建失败或 UI 运行时崩溃却正常合并，正是 NEWS-MONITOR-3/4 的成因。
+  已用临时 PR 实证门禁真实拦截（`mergeState` BLOCKED → CLEAN）。详见 `branch-protection.md`。
 
 ---
 
