@@ -128,7 +128,11 @@ export const githubSource: NewsSource = {
       repos.map(async (repo) => {
         const readme = await fetchReadme(repo.author, repo.name)
         return {
-          id: `github:${repo.fullname}`,
+          // id 归一化为小写：GitHub 仓库名大小写不敏感，但 trending 页的 href
+          // 保留仓库原始写法（生产 293 条中 116 条含大写）。原样拼接时，仓库
+          // 改名或改大小写会产生第二条 id 不同的同一仓库记录，被 AI 当作新内容
+          // 重复聚合、重复展示。title / rawData 仍保留 GitHub 上的真实写法。
+          id: `github:${repo.fullname.toLowerCase()}`,
           source: 'github',
           title: repo.fullname,
           url: repo.url,

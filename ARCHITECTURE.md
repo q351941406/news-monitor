@@ -49,6 +49,10 @@ src/app/ → API routes → 前端组件
 - topic-repo.ts: 主题聚合
 - stats-repo.ts: 统计清理
 
+去重分两级（见 ADR-0006）：L1 是 `raw_items.id` 主键（GitHub 侧归一化为小写），
+L2 是 producthunt 的 (标题, 标语) 内容指纹部分唯一索引，拦下同一产品的多次 relaunch。
+两者都靠 `storeRawItems` 的 `ON CONFLICT DO NOTHING` 生效，故去重与「已读/未读」无关。
+
 ### src/lib/ai-service.ts
 
 AIService 接口 + 生产实现，可 mock。
@@ -93,3 +97,5 @@ AIService 接口 + 生产实现，可 mock。
 - 0002: 拆分 db.ts
 - 0003: 创建 AIService 接缝
 - 0004: 净化 Source 接口
+- 0005: 基于队列的主题聚合
+- 0006: 内容身份与两级去重

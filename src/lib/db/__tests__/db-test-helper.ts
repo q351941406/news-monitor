@@ -56,7 +56,7 @@ export async function createTestTables() {
     options: schemaOptions(),
   })
   try {
-    // 应用 drizzle/*.sql 全部迁移（0000→0005），与生产迁移完全一致
+    // 应用 drizzle/*.sql 全部迁移（0000→0006），与生产迁移完全一致
     // recordApplied=false：每个 worker 是新 schema，无需追踪表
     // rewriteSchema：drizzle-kit 生成的迁移硬编码 "public". 前缀，
     //   测试 schema 下必须重写指向本 worker 的 schema，否则外键错指 public
