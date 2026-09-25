@@ -255,6 +255,8 @@ curl "http://localhost:3000/api/health?deep=1"   # readiness：真实查询 DB
 npm run db:generate
 # 检查 schema 与 migration 文件是否一致（CI 必跑）
 npm run db:check
+# 检查迁移是否含未声明的破坏性 DDL（CI 必跑）
+npm run db:check:safety
 # 应用 migration 到目标 DB
 npm run db:migrate
 # 开发期快速同步（跳过 migration 文件）
@@ -273,7 +275,17 @@ Vercel 构建时自动执行幂等迁移（`buildCommand: "npm run build && npm 
 > ⚠️ **迁移必须向前兼容**（additive / expand-contract）：先加列、后删列，禁止在单次迁移中
 > 破坏性地 drop 列或改类型，否则部署切换窗口内旧代码会读到不兼容的 schema。
 
-CI 在每次 PR 中运行 `db:check` 防止 schema 漂移。
+CI 在每次 PR 中运行 `db:check` 防止 schema 漂移，并运行**迁移安全门禁**
+（`npm run db:check:safety`）拦截破坏性 DDL。命中即 PR 失败，除非该迁移文件显式声明
+并写下计划：`-- breaking: <理由与 expand-contract 计划>`。
+
+> 门禁只作用于**本次改动引入的迁移文件**，历史迁移不受影响。选择「显式声明放行」
+> 而非「一律禁止」，是因为破坏性变更有合法场景（contract 阶段）—— 需要的是让人
+> 停下来确认，不是禁止。设计与取舍见 [ADR-0007](docs/adr/0007-migration-deploy-strategy.md)。
+
+> **为什么不把迁移拆成独立的 workflow？** 拆开后 Vercel 部署不再等待迁移，会出现
+> 「代码已上线、schema 未跟上」的窗口，安全性反而下降。当前 `build && migrate` 的
+> 串联是 fail-closed 的，属于有意设计。
 
 > **测试环境复用同一套迁移**：集成测试通过 `scripts/migrate-core.ts` 执行 `drizzle/*.sql`
 > 全部迁移建表（测试 schema 内），保证测试环境 = 生产迁移后状态，杜绝 DDL 双源漂移。
