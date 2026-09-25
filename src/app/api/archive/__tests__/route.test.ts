@@ -5,7 +5,6 @@ import { NextRequest } from 'next/server'
 const mocks = vi.hoisted(() => ({
   getArchivedNews: vi.fn(),
   markAsUnread: vi.fn(),
-  deleteItem: vi.fn(),
   isAdminAuthorized: vi.fn(),
   unauthorized: vi.fn(),
 }))
@@ -13,7 +12,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/db', () => ({
   getArchivedNews: mocks.getArchivedNews,
   markAsUnread: mocks.markAsUnread,
-  deleteItem: mocks.deleteItem,
 }))
 vi.mock('@/lib/admin-auth', () => ({
   isAdminAuthorized: mocks.isAdminAuthorized,
@@ -111,16 +109,14 @@ describe('POST /api/archive', () => {
     expect(res.status).toBe(400)
     expect(mocks.markAsUnread).not.toHaveBeenCalled()
   })
-  it('delete：彻底删除并返回 success', async () => {
-    const res = await POST(postRequest({ action: 'delete', itemId: 'test:2' }))
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ success: true })
-    expect(mocks.deleteItem).toHaveBeenCalledWith('test:2')
-  })
-  it('delete 但 itemId 非 string 时返回 400', async () => {
-    const res = await POST(postRequest({ action: 'delete', itemId: 42 }))
-    expect(res.status).toBe(400)
-    expect(mocks.deleteItem).not.toHaveBeenCalled()
+  // 回归保护：Web 端只提供「已读 / 未读」两态，删除能力已被移除。
+  // 若将来有人重新引入 delete 分支，这条会立刻变红。
+  it('delete action 不再被接受（web 端不提供删除能力）', async () => {
+    for (const itemId of ['test:2', 42]) {
+      const res = await POST(postRequest({ action: 'delete', itemId }))
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: 'Invalid action' })
+    }
   })
   it('未知 action 返回 400', async () => {
     const res = await POST(postRequest({ action: 'explode' }))

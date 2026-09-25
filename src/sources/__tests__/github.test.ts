@@ -160,6 +160,47 @@ describe('GitHubSource', () => {
     expect(items).toHaveLength(15)
     expect(items[14].id).toBe('github:owner/repo14')
   })
+
+  it('仓库名含大写时 id 归一化为小写，title 与 url 保留 GitHub 原始写法', async () => {
+    // GitHub 仓库名大小写不敏感，但 trending 页 href 保留仓库原始写法
+    // （生产 293 条 github 记录中 116 条含大写）。id 若原样拼接，仓库改名或
+    // 改大小写就会产生第二条同一仓库记录，被 AI 当作新内容重复聚合与展示。
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('github.com/trending')) {
+          return Promise.resolve({
+            ok: true,
+            text: () =>
+              Promise.resolve(`<html><body>
+<article class="Box-row">
+  <h2 class="h3 lh-condensed">
+    <a href="/ChromeDevTools/chrome-devtools-mcp" class="Link">ChromeDevTools / chrome-devtools-mcp</a>
+  </h2>
+  <p class="col-9 color-fg-muted my-1 tmp-pr-4">MCP server for Chrome</p>
+  <div class="f6 color-fg-muted mt-2">
+    <span itemprop="programmingLanguage">TypeScript</span>
+    <a href="/ChromeDevTools/chrome-devtools-mcp/stargazers" class="Link">1,234</a>
+    <span>56 stars today</span>
+  </div>
+</article>
+</body></html>`),
+          })
+        }
+        return Promise.resolve({ ok: true, text: () => Promise.resolve('# README') })
+      }),
+    )
+    const items = await githubSource.fetch()
+    expect(items).toHaveLength(1)
+    // 身份归一化：同一仓库无论大小写如何书写，都落到同一个 id
+    expect(items[0].id).toBe('github:chromedevtools/chrome-devtools-mcp')
+    // 展示信息不归一化：保留 GitHub 上的真实写法
+    expect(items[0].title).toBe('ChromeDevTools/chrome-devtools-mcp')
+    expect(items[0].url).toBe('https://github.com/ChromeDevTools/chrome-devtools-mcp')
+    expect((items[0].rawData as { fullname: string }).fullname).toBe(
+      'ChromeDevTools/chrome-devtools-mcp',
+    )
+  })
 })
 
 describe('parseTrendingHtml - 降级分支', () => {

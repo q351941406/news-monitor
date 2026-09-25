@@ -3,7 +3,7 @@
  *
  * 基于 Next.js unstable_cache 的轻量缓存：
  * - /api/news/counts 等高频读接口用 tag 缓存，TTL 60s
- * - 写操作（标记已读/未读/删除）完成后调 invalidateNewsCounts() 主动失效
+ * - 写操作（标记已读/未读）完成后调 invalidateNewsCounts() 主动失效
  * - 定时任务（scrape/topic-aggregate）通过 /api/admin/revalidate 触发失效
  */
 import { unstable_cache, revalidateTag } from 'next/cache'
