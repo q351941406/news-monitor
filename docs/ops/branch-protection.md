@@ -18,6 +18,26 @@ GitHub 明确限制：**`GITHUB_TOKEN` 无法修改分支保护设置**（该 AP
 分支保护的 contexts（job 名）在 CI 稳定后极少变动，手动配置一次的维护成本可忽略；
 而常驻一个 admin 权限的 PAT 反而扩大攻击面，得不偿失。
 
+## 三分支模型（2026-09-25 起）
+
+本仓库用三个长期分支对应三个环境，逐级 promote：
+
+```
+feature ──PR──▶ main ──PR──▶ preview ──PR──▶ production
+                 │            │                 │
+               集成        预发布验收          生产
+```
+
+| 分支         | 角色       | `strict` | 说明                                                  |
+| ------------ | ---------- | -------- | ----------------------------------------------------- |
+| `main`       | 集成       | ✅       | feature PR 必须基于最新 main，防止基于旧代码合并      |
+| `preview`    | 预发布验收 | ❌       | promote 是单向的，启用 strict 会让下一次 promote 死锁 |
+| `production` | 生产       | ❌       | 同上                                                  |
+
+三个分支都要求同一组 required status checks（含 `promote-guard`，它拦住跳级上线）。
+
+设计与代价见 [ADR-0008](../adr/0008-three-branch-environment-model.md)。
+
 ## 需要启用的保护项
 
 GitHub 仓库 → Settings → Branches → Branch protection rules → **Add rule**，
@@ -46,6 +66,7 @@ CI 中在 push + PR 都会运行、且应作为合并门禁的 job：
 | **`e2e`**           | `test.yml`     | Playwright 真实浏览器 E2E（生产构建 + Chromium） |
 | `Semgrep SAST Scan` | `security.yml` | SAST 静态安全扫描（job `semgrep` 带 name 覆盖）  |
 | `Secret Scanning`   | `gitleaks.yml` | 密钥泄露扫描（job `gitleaks` 带 name 覆盖）      |
+| `promote-guard`     | `test.yml`     | 三分支 promote 流向守卫（禁止跳级上线）          |
 
 > **2026-09-21 更新**：补入 `build` 与 `e2e`（此前缺失）。这两项补上之前，
 > **PR 可以构建失败或 UI 运行时崩溃却正常合并** —— 这正是 NEWS-MONITOR-3/4

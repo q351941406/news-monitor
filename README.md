@@ -103,6 +103,35 @@ Vercel 展示 → news.myaicode.qzz.io（三级懒加载）
 | 第三层 | 主题聚合 | 队列式增量聚合：AI 带历史主题上下文归并，同名主题稳定复用 |
 | 第四层 | 整体洞察 | 可选，未来扩展                                            |
 
+## 分支与环境
+
+三个长期分支对应三个环境，逐级 promote：
+
+```
+feature ──PR──▶ main ──PR──▶ preview ──PR──▶ production
+```
+
+| 分支         | 角色       | 环境                            | 数据库         |
+| ------------ | ---------- | ------------------------------- | -------------- |
+| `main`       | 集成       | Vercel preview 部署（分支 URL） | Neon `preview` |
+| `preview`    | 预发布验收 | Vercel preview 部署（分支 URL） | Neon `preview` |
+| `production` | 生产       | `news.myaicode.qzz.io`          | Neon `main`    |
+
+**promote 命令**（只创建 PR，验收后自行合并）：
+
+```bash
+bash scripts/promote.sh preview     # main → preview
+bash scripts/promote.sh production  # preview → production
+```
+
+`preview` 只接受来自 `main` 的 PR，`production` 只接受来自 `preview` 的 PR ——
+`promote-guard` 这个 CI job 会拦下跳级上线。对 `main` 则允许任意 feature 分支（GitHub Flow）。
+
+> promote PR 请用 **merge commit** 合并（`gh pr merge <n> --merge`），不要 squash ——
+> 保留原始提交历史，才能回答「生产上跑的代码来自哪个 main 提交」。
+> 完整设计与代价（含 hotfix 回灌、分支漂移等已知成本）见
+> [ADR-0008](docs/adr/0008-three-branch-environment-model.md)。
+
 ## 本地开发
 
 ### 方式 A：原生 Node.js

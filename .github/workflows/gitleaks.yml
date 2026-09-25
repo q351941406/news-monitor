@@ -6,9 +6,9 @@ name: Gitleaks
 
 on:
   push:
-    branches: [main]
+    branches: [main, preview, production]
   pull_request:
-    branches: [main]
+    branches: [main, preview, production]
   workflow_dispatch:
 
 concurrency:

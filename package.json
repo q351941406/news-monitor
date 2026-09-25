@@ -32,7 +32,9 @@
     "test:coverage:merge": "npx tsx scripts/merge-coverage.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "start:e2e": "bash scripts/start-e2e.sh"
+    "start:e2e": "bash scripts/start-e2e.sh",
+    "promote:preview": "bash scripts/promote.sh preview",
+    "promote:production": "bash scripts/promote.sh production"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.7",

@@ -2,9 +2,9 @@ name: Run Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, preview, production]
   pull_request:
-    branches: [main]
+    branches: [main, preview, production]
   workflow_dispatch:
 
 concurrency:
@@ -14,6 +14,42 @@ concurrency:
 permissions:
   contents: read
 jobs:
+  # promote 流向守卫：三分支模型的关键 gate。
+  # 允许 feature → main（GitHub Flow），但 preview / production 只能按
+  # main → preview → production 逐级 promote，禁止跳级或从 feature 直推生产。
+  promote-guard:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce promote flow
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          echo "PR: $HEAD → $BASE"
+          case "$BASE" in
+            main)
+              echo "✅ 目标 main：允许任意 feature 分支（GitHub Flow）"
+              ;;
+            preview)
+              if [ "$HEAD" != "main" ]; then
+                echo "::error::只允许从 main promote 到 preview（当前 $HEAD → preview）"
+                exit 1
+              fi
+              echo "✅ 目标 preview：来源 main，合法"
+              ;;
+            production)
+              if [ "$HEAD" != "preview" ]; then
+                echo "::error::只允许从 preview promote 到 production（当前 $HEAD → production）。禁止跳级上线。"
+                exit 1
+              fi
+              echo "✅ 目标 production：来源 preview，合法"
+              ;;
+            *)
+              echo "::error::未知目标分支 $BASE"
+              exit 1
+              ;;
+          esac
   build:
     runs-on: ubuntu-latest
     steps:

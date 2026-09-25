@@ -7,9 +7,9 @@
 name: Security
 on:
   push:
-    branches: [main]
+    branches: [main, preview, production]
   pull_request:
-    branches: [main]
+    branches: [main, preview, production]
   schedule:
     # 每周一 02:00 UTC 全量扫描
     - cron: '0 2 * * 1'
@@ -23,14 +23,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write  # 上传 SARIF 到 GitHub Security tab
-      actions: read  # Semgrep action 上报 telemetry 需要
+      security-events: write # 上传 SARIF 到 GitHub Security tab
+      actions: read # Semgrep action 上报 telemetry 需要
     container:
       image: semgrep/semgrep
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          fetch-depth: 0  # baseline 对比需要完整 git 历史
+          fetch-depth: 0 # baseline 对比需要完整 git 历史
           # PR 场景默认 checkout merge commit（refs/pull/N/merge，2 个 parent），
           # 会导致 Semgrep 的 --baseline-commit diff-aware 失效、退化为全量扫描，
           # 进而报告存量 finding、误阻断 PR。这里改为 checkout PR head 提交
@@ -91,7 +91,7 @@ jobs:
           fi
       - name: Upload SARIF to GitHub Security tab
         if: always()
-        continue-on-error: true  # GHAS 未启用时静默跳过
+        continue-on-error: true # GHAS 未启用时静默跳过
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: semgrep.sarif
