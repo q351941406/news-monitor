@@ -81,8 +81,13 @@ jobs:
         if: failure()
         env:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          # 经 env 中转，不在 run 里直接插值：inputs.source 是 workflow_dispatch 的
+          # 用户输入，直接拼进 shell 脚本等于把注入面交给调用者
+          # （Semgrep run-shell-injection / Blocking 拦下的就是这个）
+          RUN_ID: ${{ github.run_id }}
+          INPUT_SOURCE: ${{ inputs.source || 'all' }}
         run: |
           npx --yes @sentry/cli send-event \
-            -m "🚨 Enrich Content failed (run #${{ github.run_id }}, source=${{ inputs.source || 'all' }})" \
+            -m "🚨 Enrich Content failed (run #$RUN_ID, source=$INPUT_SOURCE)" \
             --log-level error \
             --fingerprint "news-monitor-enrich-$(date +%F)"
