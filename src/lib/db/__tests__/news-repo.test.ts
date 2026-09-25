@@ -1,13 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { createTestTables, insertTestItem, dropTestSchema } from './db-test-helper'
-import {
-  storeRawItems,
-  existsItem,
-  getNews,
-  getArchivedNews,
-  getNewsCounts,
-  deleteItem,
-} from '../news-repo'
+import { storeRawItems, existsItem, getNews, getArchivedNews, getNewsCounts } from '../news-repo'
 import type { NewRawItem } from '../../schema'
 
 describe('NewsRepo', () => {
@@ -210,12 +203,5 @@ describe('NewsRepo', () => {
     const byDays = await getArchivedNews({ days: 3, page: 1, pageSize: 10 })
     const recent = byDays.items.filter((n) => n.id === 'test:news:ar1' || n.id === 'test:news:ar2')
     expect(recent.length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('deleteItem：物理删除条目', async () => {
-    await storeRawItems([insertTestItem({ id: 'test:news:del1' }) as NewRawItem])
-    await deleteItem('test:news:del1')
-    const exists = await existsItem('test:news:del1')
-    expect(exists).toBe(false)
   })
 })

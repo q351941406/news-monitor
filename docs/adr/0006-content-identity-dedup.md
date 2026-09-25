@@ -66,3 +66,12 @@
 - 风险：拦下的条目走 `onConflictDoNothing`，不推进 `fetched_at`。若某源连续多日
   全部被拦，`check-freshness` 的时间维度巡检可能报「长期无新内容」。属既有设计的
   已知权衡（见 `src/lib/scrape-guard.ts` 注释），实际概率极低。
+
+## 配套约束：Web 端不提供删除能力
+
+归档页只保留「恢复为未读」，`POST /api/archive` 不再接受 `delete` action，
+`deleteItem` 已从 db 层移除（`src/app/api/archive/__tests__/route.test.ts` 里有回归
+保护断言，重新引入会立刻变红）。Web 端的读状态只有「已读 / 未读」两态。
+
+这条约束直接简化了本 ADR：`raw_items` 只增不减，抓取侧无需考虑「被删掉的内容又被
+抓回来」，去重只需处理插入侧，**因而不需要 tombstone / 软删除表**。

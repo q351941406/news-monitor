@@ -159,8 +159,3 @@ export async function getArchivedNews(
     .limit(pageSize)
   return { items: results as NewsItem[], total }
 }
-/** 彻底删除一条原始条目（级联删除 ai_analysis / topic_items 关联） */
-export async function deleteItem(itemId: string): Promise<void> {
-  const db = getDb()
-  await db.delete(rawItems).where(eq(rawItems.id, itemId))
-}

@@ -158,7 +158,7 @@ TODO 原文建议按「连续 N 次 0 条」判定，但**用生产日志实测�
 
 - `GET /api/admin/metrics`（运维仪表盘）
 - `POST /api/admin/revalidate`
-- 标记已读/删除等写操作（`POST /api/news`、`POST /api/archive`）
+- 标记已读/未读等写操作（`POST /api/news`、`POST /api/archive`）
 
 **用户明确表示"不知道 ADMIN_TOKEN 是什么"** → 意味着**他从没进过 dashboard**，
 这本身就解释了为什么 57 天无人发现故障。

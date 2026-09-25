@@ -11,7 +11,6 @@ import {
   Home,
   RotateCcw,
   Search,
-  Trash2,
   Loader2,
 } from 'lucide-react'
 import { getAdminToken, setAdminToken, clearAdminToken, adminFetch } from '../../lib/admin-token'
@@ -172,21 +171,6 @@ export default function ArchiveView({
       setNotice('操作失败：无管理员权限或 token 失效')
     }
   }
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('确认彻底删除这条内容？此操作不可恢复。')) return
-    const res = await adminFetch('/api/archive', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'delete', itemId: id }),
-    })
-    if (res.ok) {
-      setNotice('已彻底删除')
-      setItems((prev) => prev.filter((i) => i.id !== id))
-      setTotal((t) => t - 1)
-    } else {
-      setNotice('操作失败：无管理员权限或 token 失效')
-    }
-  }
-
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const fmtTime = (ts: number) =>
     new Date(ts).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -395,13 +379,6 @@ export default function ArchiveView({
                       >
                         <RotateCcw className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => handleDelete(item.id)}
-                        title="彻底删除"
-                        className="p-2 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
                     </div>
                   )}
                   <span className="text-stone-300 text-sm shrink-0">
@@ -429,7 +406,7 @@ export default function ArchiveView({
                       <p className="text-xs text-stone-400 break-all">ID: {item.id}</p>
                     </div>
                     {!isAdmin && (
-                      <p className="mt-3 text-xs text-stone-400">仅管理员可恢复 / 删除归档内容</p>
+                      <p className="mt-3 text-xs text-stone-400">仅管理员可恢复为未读</p>
                     )}
                   </div>
                 )}
