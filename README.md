@@ -103,6 +103,22 @@ Vercel 展示 → news.myaicode.qzz.io（三级懒加载）
 | 第三层 | 主题聚合 | 队列式增量聚合：AI 带历史主题上下文归并，同名主题稳定复用 |
 | 第四层 | 整体洞察 | 可选，未来扩展                                            |
 
+## 分支与发布
+
+只有 `main` 一个长期分支，环境由**部署目标**决定，不由分支决定：
+
+```
+feature ──PR──▶ [Vercel preview + Neon preview 库] ──验收──▶ main ──▶ 生产
+```
+
+- **验收**：每个 PR 自动部署到 preview，且数据库隔离（Neon `preview` 分支），可放心操作
+- **上线**：合并 `main` 即触发生产部署（构建时自动应用迁移）
+- **回滚**：Vercel Instant Rollback，秒级，且不重新构建
+
+完整流程（验收步骤、回滚、高风险改动的 Promote to Production）见
+[docs/ops/release-flow.md](docs/ops/release-flow.md)；**为什么不用 staging / preview 分支**
+见 [ADR-0008](docs/adr/0008-single-main-branch.md)。
+
 ## 本地开发
 
 ### 方式 A：原生 Node.js
