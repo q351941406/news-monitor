@@ -12,6 +12,8 @@ import { eq, isNull, and } from 'drizzle-orm'
 import { rawItems, aiAnalysis } from '../src/lib/schema'
 import { createAIService } from '../src/lib/ai-service'
 import { withRunLog } from '@/lib/run-logger'
+import { sources } from '../src/sources'
+import { drainBatches } from './drain'
 const log = logger.child({ script: 'ai-process' })
 // 数据库连接
 function getDb() {
@@ -46,7 +48,7 @@ export function shouldFailRun(total: number, successCount: number): boolean {
 }
 
 // 批处理函数
-async function processBatch(source: string) {
+async function processBatch(source: string): Promise<number> {
   console.log(`\n[${new Date().toISOString()}] Processing ${source}...`)
   // 1. 查询未处理数据
   const allItems = await getUnprocessedItems(source, 50)
@@ -55,7 +57,7 @@ async function processBatch(source: string) {
     console.log('  No items to process')
     // 仍然记录日志（0 条也是正常执行）
     await withRunLog({ source, stage: 'ai-process' }, async () => ({ itemsCount: 0 }))
-    return
+    return 0
   }
   const aiService = createAIService()
   const db = getDb()
@@ -105,7 +107,7 @@ async function processBatch(source: string) {
       )
     }
     await withRunLog({ source, stage: 'ai-process' }, async () => ({ itemsCount: successCount }))
-    return
+    return successCount
   }
   // 其他 source：批量模式（内部分批、重试）
   const results = await aiService.generateBatchSummary(allItems)
@@ -116,7 +118,7 @@ async function processBatch(source: string) {
       throw new Error(`AI 批量摘要未产出任何结果（待处理 ${allItems.length} 条）`)
     }
     await withRunLog({ source, stage: 'ai-process' }, async () => ({ itemsCount: 0 }))
-    return
+    return 0
   }
   console.log(`  AI returned ${results.length} results`)
   let successCount = 0
@@ -145,22 +147,53 @@ async function processBatch(source: string) {
   console.log(`  ✅ Stored ${successCount}/${results.length} results`)
   // 记录运行日志
   await withRunLog({ source, stage: 'ai-process' }, async () => ({ itemsCount: successCount }))
+  return successCount
 }
+/**
+ * 全部数据源。--source=all 时按此顺序处理。
+ * 从 sources 适配器派生而非硬编码：新增数据源时自动覆盖，不会漏。
+ * （src/sources 各模块的 throw 都在 fetch() 内部，导入无副作用）
+ */
+export const ALL_SOURCES = sources.map((s) => s.slug)
+
+/** 单次运行最多消费多少轮（每轮 50 条）。防止单次运行失控，超限留待下轮 */
+const MAX_ROUNDS = 20
+
+/**
+ * 循环消费某个源的未分析条目，直到清空或达轮次上限。
+ *
+ * 为什么需要循环：拆分抓取与富化后（ADR-0009），单次运行要消化的积压从
+ * 「一轮抓取的十几条」变成「一天累积的数十条」，而 processBatch 单批只取 50 条，
+ * 不循环就永远追不上积压。
+ */
+async function drainSource(source: string): Promise<number> {
+  const result = await drainBatches(() => processBatch(source), MAX_ROUNDS)
+  if (result.hitLimit) {
+    log.warn(`⚠️ ${source}: 达到单次运行上限 ${MAX_ROUNDS} 轮仍有积压，留待下轮继续`)
+  }
+  return result.total
+}
+
 // 主函数
 async function main() {
   const args = process.argv.slice(2)
   const sourceArg = args.find((a) => a.startsWith('--source='))
-  const source = sourceArg?.split('=')[1]
-  if (!source) {
-    log.error('Usage: npx tsx scripts/ai-process.ts --source=<slug>')
-    log.error('Available sources: github, producthunt, twitter')
+  const raw = sourceArg?.split('=')[1]
+  if (!raw) {
+    log.error('Usage: npx tsx scripts/ai-process.ts --source=<slug|all>')
+    log.error('Available sources: github, producthunt, twitter, all')
     process.exit(1)
   }
   if (!process.env.AI_API_KEY) {
     log.error('❌ AI_API_KEY not configured')
     process.exit(1)
   }
-  await processBatch(source)
+  const targets = raw === 'all' ? ALL_SOURCES : [raw]
+  for (const source of targets) {
+    const total = await drainSource(source)
+    console.log(`
+[${source}] 本次运行共处理 ${total} 条`)
+  }
 }
 // 仅当作为 CLI 直接执行时才运行 main（被测试 import 时跳过）
 // require.main === module：tsx 运行脚本时成立，vitest import 时失败

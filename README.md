@@ -258,6 +258,12 @@ curl "http://localhost:3000/api/health?deep=1"   # readiness：真实查询 DB
 | GitHub Trending | 每天 21:00 (北京时间) | `0 13 * * *`（UTC）   |
 | X / Twitter     | 每天 11:30 (北京时间) | `30 3 * * *`（UTC）   |
 | Product Hunt    | 每 6 小时             | `30 */6 * * *`（UTC） |
+| 内容富化        | 每天 03:00 (北京时间) | `0 19 * * *`（UTC）   |
+
+> **抓取与富化是分开的两件事**（[ADR-0009](docs/adr/0009-split-scrape-and-enrich.md)）：
+> `scrape-*.yml` 只把原始内容写进 `raw_items`；`enrich.yml` 每天一次统一生成 AI 摘要与主题聚合。
+> 因此新抓到的内容**不会立刻出现在首页**（首页由主题组驱动），最长约 18 小时 —— 这是刻意的
+> 取舍：AI 调用频率可控、失败归因清晰、可单独重跑富化而不重复抓取。
 
 > ⚠️ 上表以 `.github/workflows/*.yml` 为**唯一事实源**。设置页（`/settings`）会在构建期
 > 解析这些 workflow 并展示，`src/lib/__tests__/schedules.test.ts` 固化了这条契约 —— 抄错即红。

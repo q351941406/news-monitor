@@ -49,11 +49,28 @@ describe('getWorkflowSchedules —— 与真实 workflow 对齐', () => {
   const schedules = getWorkflowSchedules()
   it('解析出全部计划任务', () => {
     expect(schedules.map((s) => s.workflow).sort()).toEqual([
+      'enrich.yml',
       'freshness-check.yml',
       'scrape-github.yml',
       'scrape-producthunt.yml',
       'scrape-twitter.yml',
     ])
+  })
+
+  it('回归防线：富化调度在所有抓取之后（否则当天抓到的内容要等满一天才被处理）', () => {
+    // 抓取侧最晚的是 PH 的 18:30，富化排在 19:00 —— 这个相对顺序是有意的
+    const enrich = schedules.find((s) => s.workflow === 'enrich.yml')!
+    expect(enrich.crons).toEqual(['0 19 * * *'])
+    expect(describeCron(enrich.crons[0])).toBe('每天 UTC 19:00')
+
+    const scrapeHours = schedules
+      .filter((s) => s.workflow.startsWith('scrape-'))
+      .flatMap((s) => s.crons)
+      .map((c) => parseInt(c.split(' ')[1], 10))
+      .filter((h) => Number.isFinite(h))
+    expect(Math.min(...scrapeHours)).toBeGreaterThanOrEqual(0)
+    // 富化时刻必须晚于所有抓取时刻（同一天内）
+    expect(19).toBeGreaterThan(Math.max(...scrapeHours))
   })
   it('回归防线：X 源的真实 cron 是每天 1 次，不是每小时', () => {
     // 曾把页面文案写成「每小时整点」(0 * * * *)，实际 30 3 * * *，差 24 倍

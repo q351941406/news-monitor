@@ -1,4 +1,9 @@
 import { logger } from '@/lib/logger'
+import { sources } from '../src/sources'
+import { drainBatches } from './drain'
+
+/** 全部数据源（从适配器派生，新增源自动覆盖） */
+export const ALL_SOURCES = sources.map((s) => s.slug)
 /**
  * 主题聚合脚本 - 将 AI 分析结果按主题分组
  * 用法: npx tsx scripts/topic-aggregate.ts --source=github
@@ -127,31 +132,39 @@ async function aggregateOneBatch(
 async function aggregateTopics(source: string) {
   console.log(`
 [${new Date().toISOString()}] Aggregating topics for ${source}...`)
-  const result = await withRunLog({ source, stage: 'topic-aggregate' }, async () => {
-    // 一次运行只处理一批：getAggregationBatch 每批最多 50 条，无多轮循环
+  return withRunLog({ source, stage: 'topic-aggregate' }, async () => {
     const aiService = createAIService()
-    const consumed = await aggregateOneBatch(source, aiService)
-    console.log(`  ✅ Total: ${consumed} items aggregated in this run`)
-    return { itemsCount: consumed }
+    // 循环消费直到无待聚合或达轮次上限（拆分后单次要消化一天累积的积压，见 ADR-0009）
+    const result = await drainBatches(() => aggregateOneBatch(source, aiService), MAX_ROUNDS)
+    if (result.hitLimit) {
+      log.warn(`⚠️ ${source}: 达到单次运行上限 ${MAX_ROUNDS} 轮仍有积压，留待下轮继续`)
+    }
+    console.log(`  ✅ Total: ${result.total} items aggregated in ${result.rounds} round(s)`)
+    return { itemsCount: result.total }
   })
-  return result
 }
+
+/** 单次运行每个源最多消费多少轮（每轮 50 条），防止单次运行失控 */
+const MAX_ROUNDS = 20
 
 // 主函数
 async function main() {
   const args = process.argv.slice(2)
   const sourceArg = args.find((a) => a.startsWith('--source='))
-  const source = sourceArg?.split('=')[1]
-  if (!source) {
-    log.error('Usage: npx tsx scripts/topic-aggregate.ts --source=<slug>')
-    log.error('Available sources: github, producthunt, twitter')
+  const raw = sourceArg?.split('=')[1]
+  if (!raw) {
+    log.error('Usage: npx tsx scripts/topic-aggregate.ts --source=<slug|all>')
+    log.error('Available sources: github, producthunt, twitter, all')
     process.exit(1)
   }
   if (!process.env.AI_API_KEY) {
     log.error('❌ AI_API_KEY not configured')
     process.exit(1)
   }
-  await aggregateTopics(source)
+  const targets = raw === 'all' ? ALL_SOURCES : [raw]
+  for (const source of targets) {
+    await aggregateTopics(source)
+  }
   await revalidateCacheAfterRun('topic-aggregate')
 }
 // 仅当作为 CLI 直接执行时才运行 main（被测试 import 时跳过）
