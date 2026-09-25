@@ -30,6 +30,7 @@ const SCHEDULE_WORKFLOWS: Array<{ file: string; name: string }> = [
   { file: '.github/workflows/scrape-github.yml', name: 'GitHub Trending' },
   { file: '.github/workflows/scrape-twitter.yml', name: 'X / Twitter' },
   { file: '.github/workflows/scrape-producthunt.yml', name: 'Product Hunt' },
+  { file: '.github/workflows/enrich.yml', name: '内容富化（摘要 + 主题聚合）' },
   { file: '.github/workflows/freshness-check.yml', name: '数据新鲜度巡检' },
 ]
 

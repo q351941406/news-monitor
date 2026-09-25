@@ -1,5 +1,5 @@
 name: 'Scrape Pipeline'
-description: 'Run scrape + AI process + topic aggregate for a news source'
+description: 'Scrape a news source into raw_items（摘要与聚合已拆到 enrich.yml，见 ADR-0009）'
 
 inputs:
   source:
@@ -60,26 +60,6 @@ runs:
         TWITTER_AUTH_TOKEN: ${{ env.TWITTER_AUTH_TOKEN }}
         TWITTER_CT0: ${{ env.TWITTER_CT0 }}
       run: npx tsx scripts/scrape.ts --source="$INPUT_SOURCE"
-      shell: bash
-
-    - name: Run AI processing
-      env:
-        INPUT_SOURCE: ${{ inputs.source }}
-        DATABASE_URL: ${{ env.DATABASE_URL }}
-        AI_API_KEY: ${{ env.AI_API_KEY }}
-        AI_BASE_URL: ${{ env.AI_BASE_URL }}
-        AI_MODEL: ${{ env.AI_MODEL }}
-      run: npx tsx scripts/ai-process.ts --source="$INPUT_SOURCE"
-      shell: bash
-
-    - name: Aggregate topics
-      env:
-        INPUT_SOURCE: ${{ inputs.source }}
-        DATABASE_URL: ${{ env.DATABASE_URL }}
-        AI_API_KEY: ${{ env.AI_API_KEY }}
-        AI_BASE_URL: ${{ env.AI_BASE_URL }}
-        AI_MODEL: ${{ env.AI_MODEL }}
-      run: npx tsx scripts/topic-aggregate.ts --source="$INPUT_SOURCE"
       shell: bash
 
     - name: Report

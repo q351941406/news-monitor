@@ -1,0 +1,88 @@
+name: Enrich Content
+
+# 摘要 + 主题聚合，与抓取解耦（ADR-0009）。
+#
+# 抓取只负责把原始内容写进 raw_items；本 workflow 统一消费「未分析 / 未聚合」的积压。
+# 拆开的理由：
+#   1. 外部依赖不同 —— 抓取依赖站点（改版/限流），富化依赖 LLM（慢/贵/易超时）
+#   2. 失败归因不同 —— 耦合时 AI 失败会让 run 报「抓取失败」，是误导性告警
+#   3. 频率需求不同 —— 内容不需要实时可见，AI 调用次数可以远少于抓取次数
+on:
+  schedule:
+    # UTC 19:00（北京 03:00）—— 在 PH 当天最后一次抓取（18:30）之后，
+    # 一次覆盖三个源当天的全部抓取结果
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Source slug'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - github
+          - producthunt
+          - twitter
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # 刻意不做 cancel-in-progress：富化跑到一半被取消会留下半消费的队列状态，
+  # 而 AI 调用成本已经付出。宁可等它跑完。
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    # AI 处理比抓取慢得多（逐条摘要 + 多轮聚合），给足预算
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run db:migrate:ci
+
+      # 注意：富化不需要任何数据源凭据（PRODUCTHUNT_TOKEN / TWITTER_*）。
+      # 它只读 raw_items、只依赖 AI —— 这正是拆分带来的好处之一。
+      - name: Generate AI summaries
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          INPUT_SOURCE: ${{ inputs.source || 'all' }}
+        run: npx tsx scripts/ai-process.ts --source="$INPUT_SOURCE"
+
+      - name: Aggregate topics
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          REVALIDATE_URL: https://news.myaicode.qzz.io/api/admin/revalidate
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          INPUT_SOURCE: ${{ inputs.source || 'all' }}
+        run: npx tsx scripts/topic-aggregate.ts --source="$INPUT_SOURCE"
+
+      - name: Report failure to Sentry
+        if: failure()
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          npx --yes @sentry/cli send-event \
+            -m "🚨 Enrich Content failed (run #${{ github.run_id }}, source=${{ inputs.source || 'all' }})" \
+            --log-level error \
+            --fingerprint "news-monitor-enrich-$(date +%F)"
