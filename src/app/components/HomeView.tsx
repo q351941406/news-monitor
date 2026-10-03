@@ -404,9 +404,9 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
         onLogin={handleLogin}
         onLogout={handleLogout}
       />
-      <main className="max-w-6xl mx-auto px-4 py-6">
+      <main className="mx-auto max-w-6xl px-4 py-5 sm:py-6">
         {/* Source Tabs */}
-        <div className="mb-6">
+        <div className="mb-5 sm:mb-6">
           <SourceTabs
             sources={sources}
             activeSource={activeSource}
@@ -448,7 +448,7 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
         )}
       </main>
       {/* Footer */}
-      <footer className="max-w-6xl mx-auto px-4 py-8 text-center text-sm text-stone-400">
+      <footer className="mx-auto max-w-6xl px-4 pb-safe pt-8 text-center text-sm text-stone-400">
         <p>数据由 GitHub Actions 每小时自动抓取 · AI 摘要聚合</p>
       </footer>
     </div>

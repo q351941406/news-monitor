@@ -88,20 +88,26 @@ export default async function TopicPage({ params }: Props) {
       {/* 顶部导航（无 JS 依赖，爬虫可读） */}
       <header className="bg-white/80 backdrop-blur-md border-b border-stone-200">
         <div className="max-w-6xl mx-auto px-4 flex items-center justify-between h-16">
-          <Link href="/" className="font-serif text-2xl font-bold text-stone-900 tracking-tight">
+          <Link
+            href="/"
+            className="truncate font-serif text-xl font-bold tracking-tight text-stone-900 sm:text-2xl"
+          >
             News Monitor
           </Link>
-          <nav className="text-sm text-stone-500">
-            <Link href="/" className="hover:text-stone-900 transition-colors">
+          <nav className="shrink-0 text-sm text-stone-500">
+            <Link
+              href="/"
+              className="inline-flex min-h-11 items-center transition-colors hover:text-stone-900 sm:min-h-0"
+            >
               返回首页
             </Link>
           </nav>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-safe sm:py-8">
         {/* 面包屑 */}
-        <nav aria-label="面包屑" className="text-sm text-stone-500 mb-6">
+        <nav aria-label="面包屑" className="mb-6 text-sm text-stone-500">
           <Link href="/" className="hover:text-stone-900">
             首页
           </Link>
@@ -119,7 +125,7 @@ export default async function TopicPage({ params }: Props) {
               {group.items.length} 条
             </span>
           </div>
-          <h1 className="font-serif text-3xl md:text-4xl font-bold text-stone-900 tracking-tight">
+          <h1 className="break-words font-serif text-2xl font-bold tracking-tight text-stone-900 sm:text-3xl md:text-4xl">
             {group.topic}
           </h1>
           {group.summary && (
@@ -139,9 +145,9 @@ export default async function TopicPage({ params }: Props) {
             group.items.map((item) => (
               <article
                 key={item.id}
-                className="bg-white rounded-xl border border-stone-200 p-5 hover:border-stone-300 transition-colors"
+                className="rounded-xl border border-stone-200 bg-white p-4 transition-colors hover:border-stone-300 sm:p-5"
               >
-                <h2 className="font-medium text-lg text-stone-900 leading-snug">
+                <h2 className="break-words font-medium text-base leading-snug text-stone-900 sm:text-lg">
                   <a
                     href={item.url}
                     target="_blank"
@@ -156,7 +162,7 @@ export default async function TopicPage({ params }: Props) {
                     {item.summary}
                   </p>
                 )}
-                <div className="mt-3 flex items-center gap-3 text-xs text-stone-400">
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-stone-400">
                   <span>{SOURCE_LABEL[item.source] ?? item.source}</span>
                   <time dateTime={new Date(item.fetchedAt).toISOString()}>
                     {new Date(item.fetchedAt).toLocaleDateString('zh-CN')}
@@ -175,7 +181,7 @@ export default async function TopicPage({ params }: Props) {
           )}
         </section>
 
-        <footer className="mt-12 text-center text-sm text-stone-400">
+        <footer className="mt-12 pb-safe text-center text-sm text-stone-400">
           <p>数据由 GitHub Actions 每小时自动抓取 · AI 摘要聚合 · News Monitor</p>
         </footer>
       </main>

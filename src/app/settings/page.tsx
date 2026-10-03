@@ -32,7 +32,7 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-stone-50">
       <header className="bg-white border-b border-stone-200">
         <div className="max-w-4xl mx-auto px-4 py-6">
-          <h1 className="font-serif text-3xl font-bold text-stone-900">设置</h1>
+          <h1 className="font-serif text-2xl font-bold text-stone-900 sm:text-3xl">设置</h1>
           <p className="mt-2 text-stone-500">定时任务配置</p>
         </div>
       </header>
@@ -44,27 +44,29 @@ export default function SettingsPage() {
             return (
               <div
                 key={schedule.workflow}
-                className="bg-white rounded-xl border border-stone-200 p-6"
+                className="rounded-xl border border-stone-200 bg-white p-4 sm:p-6"
               >
-                <div className="flex items-start gap-4">
-                  <div className="flex-shrink-0 w-10 h-10 bg-stone-100 rounded-lg flex items-center justify-center">
-                    <Icon className="w-5 h-5 text-stone-600" />
+                <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-100">
+                    <Icon className="h-5 w-5 text-stone-600" aria-hidden />
                   </div>
-                  <div className="flex-1">
-                    <h2 className="text-lg font-semibold text-stone-900">{schedule.name}</h2>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="break-words text-base font-semibold text-stone-900 sm:text-lg">
+                      {schedule.name}
+                    </h2>
                     <p className="mt-1 text-sm text-stone-500">
                       {schedule.crons.map((c) => describeCron(c)).join('；')}
                     </p>
-                    <div className="mt-4 flex flex-wrap items-center gap-4">
+                    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
                       {schedule.crons.map((cron) => (
                         <div key={cron} className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-stone-400" />
-                          <code className="px-2 py-1 bg-stone-100 rounded text-sm font-mono text-stone-700">
+                          <Clock className="h-4 w-4 shrink-0 text-stone-400" aria-hidden />
+                          <code className="break-all rounded bg-stone-100 px-2 py-1 font-mono text-xs text-stone-700 sm:text-sm">
                             {cron}
                           </code>
                         </div>
                       ))}
-                      <span className="text-xs text-stone-400">{schedule.workflow}</span>
+                      <span className="break-all text-xs text-stone-400">{schedule.workflow}</span>
                     </div>
                   </div>
                 </div>
@@ -73,24 +75,29 @@ export default function SettingsPage() {
           })}
         </div>
 
-        <div className="mt-8 bg-white rounded-xl border border-stone-200 p-6">
-          <h2 className="text-lg font-semibold text-stone-900 mb-1">Cron 表达式说明</h2>
+        <div className="mt-8 rounded-xl border border-stone-200 bg-white p-4 sm:p-6">
+          <h2 className="mb-1 text-base font-semibold text-stone-900 sm:text-lg">
+            Cron 表达式说明
+          </h2>
           <p className="text-xs text-stone-400 mb-4">
             以上时间均为 UTC。本页信息直接读取自
             <code className="mx-1 px-1 bg-stone-100 rounded font-mono">.github/workflows/</code>
             ，与定时任务始终一致。
           </p>
-          <div className="font-mono text-sm text-stone-600 space-y-2">
+          <div className="space-y-2 font-mono text-xs text-stone-600 sm:text-sm">
             {CRON_REFERENCE.map((item) => (
-              <p key={item.expr}>
-                <code>{item.expr}</code> = {item.desc}
+              <p key={item.expr} className="break-words">
+                <code className="break-all">{item.expr}</code> = {item.desc}
               </p>
             ))}
           </div>
         </div>
 
         <div className="mt-8 text-center">
-          <Link href="/" className="text-sm text-stone-500 hover:text-stone-700 transition-colors">
+          <Link
+            href="/"
+            className="inline-flex min-h-11 items-center text-sm text-stone-500 transition-colors hover:text-stone-700"
+          >
             ← 返回首页
           </Link>
         </div>

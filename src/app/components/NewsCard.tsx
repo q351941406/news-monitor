@@ -88,22 +88,29 @@ export default function NewsCard({
         item.isRead ? 'card-read' : 'card-unread hover:shadow-md'
       }`}
     >
-      <div className="p-4">
-        {/* 标签和指标 */}
-        <div className="flex items-center gap-2 mb-2">
+      <div className="p-3.5 sm:p-4">
+        {/* 标签和指标：窄屏允许换行，避免时间戳把指标挤出屏幕 */}
+        <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
           <span
-            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${source.color}`}
+            className={`inline-flex shrink-0 items-center rounded px-2 py-0.5 text-xs font-medium ${source.color}`}
           >
             {source.label}
           </span>
-          {getMetrics() && <span className="text-xs text-stone-500">{getMetrics()}</span>}
-          <span className="text-xs text-stone-400 ml-auto">
+          {getMetrics() && (
+            <span className="shrink-0 text-xs tabular-nums text-stone-500">{getMetrics()}</span>
+          )}
+          <time
+            dateTime={new Date(item.fetchedAt).toISOString()}
+            // 时间串依赖运行环境时区，SSR 与客户端可能不一致
+            suppressHydrationWarning
+            className="ml-auto shrink-0 text-xs tabular-nums text-stone-400"
+          >
             {new Date(item.fetchedAt).toLocaleString('zh-CN')}
-          </span>
+          </time>
         </div>
 
         {/* 标题 */}
-        <h3 className="font-serif text-lg font-semibold leading-tight text-stone-900 mb-2">
+        <h3 className="mb-2 break-words font-serif text-base font-semibold leading-tight text-stone-900 sm:text-lg">
           <a
             href={item.url}
             target="_blank"
@@ -117,8 +124,8 @@ export default function NewsCard({
 
         {/* AI 摘要 */}
         {(item.summary || item.details) && (
-          <div className="relative mb-3 pl-4 border-l-2 border-amber-400">
-            <div className="bg-gradient-to-r from-amber-50 to-transparent rounded-r-lg p-3">
+          <div className="relative mb-3 pl-3 border-l-2 border-amber-400 sm:pl-4">
+            <div className="rounded-r-lg bg-gradient-to-r from-amber-50 to-transparent p-3">
               <div className="flex items-center gap-2 mb-2">
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700">
                   AI
@@ -139,8 +146,9 @@ export default function NewsCard({
         )}
 
         {/* 原文内容 */}
+        {/* 移动端不使用内部滚动区：嵌套滚动会和页面竖向滑动手势冲突 */}
         {description && (
-          <div className="mb-3 overflow-y-auto max-h-[300px] prose prose-sm prose-stone max-w-none">
+          <div className="prose prose-sm prose-stone mb-3 max-w-none sm:max-h-[300px] sm:overflow-y-auto">
             <MarkdownContent content={cleanText(description)} />
           </div>
         )}
@@ -168,14 +176,14 @@ export default function NewsCard({
         )}
 
         {/* 底部操作 */}
-        <div className="flex items-center gap-2 pt-3 border-t border-stone-100">
+        <div className="flex items-center gap-2 border-t border-stone-100 pt-2">
           <a
             href={item.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 text-sm text-stone-500 hover:text-stone-700 transition-colors"
+            className="relative -ml-1.5 inline-flex items-center gap-1 rounded px-1.5 py-1.5 text-sm text-stone-500 transition-colors before:absolute before:-inset-2 before:content-[''] hover:text-stone-700"
           >
-            <ExternalLink className="w-4 h-4" />
+            <ExternalLink className="w-4 h-4" aria-hidden />
             <span>原文</span>
           </a>
           {canOperate &&
@@ -185,9 +193,9 @@ export default function NewsCard({
                   e.stopPropagation()
                   onMarkRead(item.id)
                 }}
-                className="flex items-center gap-1 text-sm text-stone-500 hover:text-green-600 transition-colors ml-auto"
+                className="relative ml-auto inline-flex items-center gap-1 rounded px-1.5 py-1.5 text-sm text-stone-500 transition-colors before:absolute before:-inset-2 before:content-[''] hover:text-green-600"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4" aria-hidden />
                 <span>已读</span>
               </button>
             ) : (
@@ -196,9 +204,9 @@ export default function NewsCard({
                   e.stopPropagation()
                   onMarkUnread(item.id)
                 }}
-                className="flex items-center gap-1 text-sm text-stone-500 hover:text-amber-600 transition-colors ml-auto"
+                className="relative ml-auto inline-flex items-center gap-1 rounded px-1.5 py-1.5 text-sm text-stone-500 transition-colors before:absolute before:-inset-2 before:content-[''] hover:text-amber-600"
               >
-                <ExternalLink className="w-4 h-4" />
+                <ExternalLink className="w-4 h-4" aria-hidden />
                 <span>未读</span>
               </button>
             ))}
@@ -210,19 +218,24 @@ export default function NewsCard({
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
           onClick={() => setShowImage(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="图片预览"
         >
-          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+          <div className="relative max-h-[85dvh] max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
+            {/* 关闭按钮原来挂在面板外侧 -top-10，窄屏下会被视口裁掉，等于无法关闭 */}
             <button
               onClick={() => setShowImage(false)}
-              className="absolute -top-10 right-0 text-white hover:text-stone-300"
+              aria-label="关闭图片预览"
+              className="absolute -right-1 -top-11 flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/10"
             >
-              <X className="w-8 h-8" />
+              <X className="w-7 h-7" aria-hidden />
             </button>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={previewImage}
               alt=""
-              className="max-w-[90vw] max-h-[90vh] object-contain rounded"
+              className="max-h-[85dvh] max-w-[90vw] rounded object-contain"
             />
           </div>
         </div>
