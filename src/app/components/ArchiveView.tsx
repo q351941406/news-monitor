@@ -5,6 +5,8 @@ import {
   Archive,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   ExternalLink,
   Lock,
   LogOut,
@@ -181,24 +183,27 @@ export default function ArchiveView({
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-stone-200">
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
-            <Link href="/" className="font-serif text-2xl font-bold text-stone-900 tracking-tight">
+            <Link
+              href="/"
+              className="truncate font-serif text-xl font-bold tracking-tight text-stone-900 sm:text-2xl"
+            >
               News Monitor
             </Link>
-            <div className="flex items-center gap-3">
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
               <Link
                 href="/"
-                className="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-900 transition-colors"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm text-stone-500 transition-colors hover:text-stone-900 sm:min-h-0"
               >
-                <Home className="w-4 h-4" /> 首页
+                <Home className="w-4 h-4" aria-hidden /> 首页
               </Link>
               {isAdmin ? (
                 <>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
+                  <span className="hidden items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 sm:inline-flex">
                     管理员
                   </span>
                   <button
                     onClick={handleLogout}
-                    className="inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 transition-colors"
+                    className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-xs text-stone-400 transition-colors hover:text-stone-600 sm:min-h-0"
                     title="退出管理员模式"
                   >
                     <LogOut className="w-3.5 h-3.5" /> 退出
@@ -207,9 +212,9 @@ export default function ArchiveView({
               ) : (
                 <button
                   onClick={() => setShowLogin(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-stone-500 hover:text-stone-800 transition-colors"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-stone-500 transition-colors hover:text-stone-800 sm:min-h-0"
                 >
-                  <Lock className="w-4 h-4" /> 管理员登录
+                  <Lock className="w-4 h-4" aria-hidden /> 管理员登录
                 </button>
               )}
             </div>
@@ -223,8 +228,11 @@ export default function ArchiveView({
           onClick={() => setShowLogin(false)}
         >
           <div
-            className="bg-white rounded-2xl p-6 w-80 shadow-xl"
+            className="max-h-[85dvh] w-[calc(100vw-2rem)] max-w-sm overflow-y-auto rounded-2xl bg-white p-5 shadow-xl sm:p-6"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="管理员登录"
           >
             <h2 className="text-lg font-semibold text-stone-900 mb-1">管理员登录</h2>
             <p className="text-sm text-stone-400 mb-4">输入管理员 Token 以解锁恢复 / 删除操作</p>
@@ -238,19 +246,20 @@ export default function ArchiveView({
               onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
               placeholder="管理员 Token"
               autoFocus
-              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-400 mb-3"
+              aria-label="管理员 Token"
+              className="mb-3 w-full rounded-lg border border-stone-300 px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-stone-400 sm:text-sm"
             />
             {tokenError && <p className="text-xs text-red-600 mb-2">Token 无效，请重试</p>}
             <div className="flex gap-2">
               <button
                 onClick={() => setShowLogin(false)}
-                className="flex-1 px-4 py-2 text-sm text-stone-600 bg-stone-100 rounded-lg hover:bg-stone-200 transition-colors"
+                className="min-h-11 flex-1 rounded-lg bg-stone-100 px-4 py-2 text-sm text-stone-600 transition-colors hover:bg-stone-200"
               >
                 取消
               </button>
               <button
                 onClick={handleLogin}
-                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-stone-900 rounded-lg hover:bg-stone-700 transition-colors"
+                className="min-h-11 flex-1 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-stone-700"
               >
                 解锁
               </button>
@@ -260,24 +269,24 @@ export default function ArchiveView({
       )}
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* 页头 */}
-        <div className="flex items-center gap-3 mb-6">
-          <Archive className="w-6 h-6 text-stone-500" />
-          <h1 className="font-serif text-3xl font-bold text-stone-900 tracking-tight">历史归档</h1>
-          <span className="text-sm text-stone-400">共 {total} 条已读内容</span>
+        <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 sm:mb-6">
+          <Archive className="h-6 w-6 shrink-0 text-stone-500" />
+          <h1 className="font-serif text-2xl font-bold tracking-tight text-stone-900 sm:text-3xl">
+            历史归档
+          </h1>
+          <span className="text-sm tabular-nums text-stone-400">共 {total} 条已读内容</span>
         </div>
 
         {/* 筛选栏 */}
-        <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           {/* 来源 */}
-          <div className="inline-flex rounded-lg border border-stone-200 bg-white p-1">
+          <div className="scrollbar-hide -mx-1 flex overflow-x-auto px-1 sm:mx-0 sm:inline-flex sm:rounded-lg sm:border sm:border-stone-200 sm:bg-white sm:p-1">
             {SOURCES.map((s) => (
               <button
                 key={s.id}
                 onClick={() => applyFilter(s.id, days)}
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  source === s.id
-                    ? 'bg-stone-900 text-white'
-                    : 'text-stone-600 hover:text-stone-900'
+                className={`min-h-10 shrink-0 rounded-md px-3 py-2 text-sm whitespace-nowrap transition-colors sm:min-h-0 sm:py-1.5 ${
+                  source === s.id ? 'bg-stone-900 text-white' : 'text-stone-600 hover:bg-stone-900'
                 }`}
               >
                 {s.label}
@@ -285,12 +294,12 @@ export default function ArchiveView({
             ))}
           </div>
           {/* 时间 */}
-          <div className="inline-flex rounded-lg border border-stone-200 bg-white p-1">
+          <div className="scrollbar-hide -mx-1 flex overflow-x-auto px-1 sm:mx-0 sm:inline-flex sm:rounded-lg sm:border sm:border-stone-200 sm:bg-white sm:p-1">
             {TIME_FILTERS.map((t) => (
               <button
                 key={t.days ?? 'all'}
                 onClick={() => applyFilter(source, t.days)}
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                className={`min-h-10 shrink-0 rounded-md px-3 py-2 text-sm whitespace-nowrap transition-colors sm:min-h-0 sm:py-1.5 ${
                   days === t.days
                     ? 'bg-stone-900 text-white'
                     : 'text-stone-600 hover:text-stone-900'
@@ -301,20 +310,21 @@ export default function ArchiveView({
             ))}
           </div>
           {/* 搜索 */}
-          <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-            <div className="relative flex-1">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:min-w-[200px]">
+            <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && applySearch()}
                 placeholder="搜索标题 / 关键词…"
-                className="w-full pl-9 pr-3 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-stone-400"
+                aria-label="搜索归档内容"
+                className="min-h-11 w-full rounded-lg border border-stone-200 py-2 pl-9 pr-3 text-base focus:outline-none focus:ring-2 focus:ring-stone-400 sm:min-h-0 sm:text-sm"
               />
             </div>
             <button
               onClick={applySearch}
-              className="px-4 py-2 text-sm font-medium text-stone-700 bg-stone-100 rounded-lg hover:bg-stone-200 transition-colors"
+              className="min-h-11 shrink-0 rounded-lg bg-stone-100 px-4 py-2 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-200"
             >
               搜索
             </button>
@@ -324,7 +334,11 @@ export default function ArchiveView({
         {notice && (
           <div className="mb-4 px-4 py-2 text-sm text-stone-700 bg-stone-100 rounded-lg flex justify-between items-center">
             <span>{notice}</span>
-            <button onClick={() => setNotice(null)} className="text-stone-400 hover:text-stone-600">
+            <button
+              onClick={() => setNotice(null)}
+              aria-label="关闭提示"
+              className="-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-stone-200 hover:text-stone-600"
+            >
               ✕
             </button>
           </div>
@@ -358,7 +372,7 @@ export default function ArchiveView({
                     {SOURCE_LABEL[item.source] ?? item.source}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-semibold text-stone-900 leading-snug">
+                    <h3 className="break-words text-sm font-semibold leading-snug text-stone-900">
                       {item.title || '(无标题)'}
                     </h3>
                     {item.summary && (
@@ -375,14 +389,22 @@ export default function ArchiveView({
                       <button
                         onClick={() => handleRestore(item.id)}
                         title="恢复到未读"
-                        className="p-2 text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                        aria-label="恢复到未读"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600 active:bg-emerald-100"
                       >
-                        <RotateCcw className="w-4 h-4" />
+                        <RotateCcw className="w-4 h-4" aria-hidden />
                       </button>
                     </div>
                   )}
-                  <span className="text-stone-300 text-sm shrink-0">
-                    {expandedId === item.id ? '▴' : '▾'}
+                  <span
+                    className="flex h-8 w-6 shrink-0 items-center justify-center text-stone-300"
+                    aria-hidden
+                  >
+                    {expandedId === item.id ? (
+                      <ChevronUp className="w-4 h-4" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4" />
+                    )}
                   </span>
                 </div>
                 {/* 第 2 级：展开详情 */}
@@ -417,23 +439,23 @@ export default function ArchiveView({
 
         {/* 分页 */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-4 mt-8">
+          <div className="mt-8 flex items-center justify-between gap-3 sm:justify-center sm:gap-4">
             <button
               onClick={() => goPage(page - 1)}
               disabled={page <= 1}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-stone-600 disabled:text-stone-300 hover:text-stone-900 transition-colors"
+              className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 transition-colors hover:text-stone-900 disabled:text-stone-300 sm:min-h-0 sm:border-0 sm:py-1.5"
             >
-              <ChevronLeft className="w-4 h-4" /> 上一页
+              <ChevronLeft className="w-4 h-4" aria-hidden /> 上一页
             </button>
-            <span className="text-sm text-stone-500">
+            <span className="text-sm tabular-nums text-stone-500">
               {page} / {totalPages}
             </span>
             <button
               onClick={() => goPage(page + 1)}
               disabled={page >= totalPages}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-stone-600 disabled:text-stone-300 hover:text-stone-900 transition-colors"
+              className="inline-flex min-h-11 items-center gap-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-600 transition-colors hover:text-stone-900 disabled:text-stone-300 sm:min-h-0 sm:border-0 sm:py-1.5"
             >
-              下一页 <ChevronRight className="w-4 h-4" />
+              下一页 <ChevronRight className="w-4 h-4" aria-hidden />
             </button>
           </div>
         )}

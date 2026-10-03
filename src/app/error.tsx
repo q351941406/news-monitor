@@ -25,7 +25,7 @@ export default function Error({
         <p className="text-stone-500 text-sm mb-6">可能是暂时的网络或服务波动，稍后重试即可。</p>
         <button
           onClick={reset}
-          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-stone-900 rounded-lg hover:bg-stone-700 transition-colors"
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-stone-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-stone-700"
         >
           重新加载
         </button>

@@ -4,23 +4,47 @@
 
 @layer base {
   :root {
-    --color-primary: #DC2626;
-    --color-primary-light: #EF4444;
-    --color-cta: #1E40AF;
-    --color-bg: #FAFAF9;
-    --color-text: #1C1917;
-    --color-text-muted: #57534E;
-    --color-border: #D6D3D1;
+    --color-primary: #dc2626;
+    --color-primary-light: #ef4444;
+    --color-cta: #1e40af;
+    --color-bg: #fafaf9;
+    --color-text: #1c1917;
+    --color-text-muted: #57534e;
+    --color-border: #d6d3d1;
+  }
+
+  html {
+    /* 移动端点按默认的半透明灰色方块，在密集的资讯列表上极其刺眼 */
+    -webkit-tap-highlight-color: transparent;
+    /* iOS 横屏会自动放大正文，导致窄屏横向溢出；锁成 100% */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {
     font-family: var(--font-roboto), system-ui, sans-serif;
     color: var(--color-text);
     background-color: var(--color-bg);
+    /* 长 URL / 无空格的长英文标题（仓库名、外链）不再撑破 375px 窄屏 */
+    overflow-wrap: break-word;
   }
 
-  h1, h2, h3, h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     font-family: var(--font-newsreader), Georgia, serif;
+  }
+
+  /* 移动端滚到底后的橡皮筋回弹会带动整页，形成"越界"手感 */
+  body {
+    overscroll-behavior-y: contain;
+  }
+
+  /* 键盘聚焦才有可见焦点环，鼠标点击不打扰（移动端无 hover，focus-visible 不触发） */
+  :focus-visible {
+    outline: 2px solid var(--color-primary-light);
+    outline-offset: 2px;
   }
 }
 
@@ -34,9 +58,40 @@
   }
 }
 
+@layer utilities {
+  /*
+   * Tailwind 没有内置 scrollbar-hide。此前来源标签栏写了 `scrollbar-hide`
+   * 却从未定义过它，结果 iOS/Android 上横向滚动区下方留了一条 6px 灰条，
+   * 在本来就紧张的移动端竖向空间里白占一行。
+   */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* iOS 刘海 / 灵动岛 / 底部 home indicator 安全区（需配合 viewportFit: 'cover'） */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .pb-safe {
+    padding-bottom: calc(env(safe-area-inset-bottom) + var(--tw-py-8, 0px));
+  }
+
+  .px-safe {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -44,10 +99,10 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #D6D3D1;
+  background: #d6d3d1;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #A8A29E;
+  background: #a8a29e;
 }

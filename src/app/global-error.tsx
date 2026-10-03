@@ -30,17 +30,17 @@ export default function GlobalError({
             justifyContent: 'center',
             minHeight: '100vh',
             fontFamily: 'system-ui, sans-serif',
-            padding: '2rem',
+            padding: '1.5rem',
             textAlign: 'center',
           }}
         >
-          <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>页面出错了</h1>
-          <p style={{ color: '#666', marginBottom: '2rem' }}>
-            我们已记录此错误，请稍后重试。
-          </p>
+          <h1 style={{ fontSize: '1.6rem', marginBottom: '1rem' }}>页面出错了</h1>
+          <p style={{ color: '#666', marginBottom: '2rem' }}>我们已记录此错误，请稍后重试。</p>
           <button
             onClick={reset}
             style={{
+              // 移动端按钮触控区域不低于 44px
+              minHeight: '44px',
               padding: '0.6rem 1.5rem',
               borderRadius: '8px',
               border: 'none',
