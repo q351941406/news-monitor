@@ -44,3 +44,45 @@ test.describe('首页', () => {
     expect(pageErrors).toEqual([])
   })
 })
+
+/**
+ * 交互不得牵动页面滚动位置
+ *
+ * 曾存在的 bug：SourceTabs 用 `el.scrollIntoView({ block: 'nearest' })`
+ * 把选中标签滚入可视区，而该 API 会滚动**所有**可滚动祖先（含 <html>），
+ * 且 effect 把父组件每次渲染都新建的 `sources` 数组列为依赖 —— 于是展开
+ * 任意主题组都会触发它，页面被「平滑滚回顶部」，用户点的那一行瞬间飞出视口。
+ *
+ * 这类「API 副作用」jsdom 测不到（它没有布局、也没有真实滚动），必须由真实
+ * Chromium 兜底。这里在页面脚本执行前替换 scrollIntoView 做记录：修复后整个
+ * 组件不应再调用它，故该断言与「库里有数据」无关，空库下同样有效。
+ */
+test.describe('页面滚动稳定性', () => {
+  test('切换来源筛选不得调用 scrollIntoView（该 API 会连带滚动整个页面）', async ({ page }) => {
+    await page.addInitScript(() => {
+      const w = window as unknown as { __sivCalls?: unknown[] }
+      w.__sivCalls = []
+      const original = Element.prototype.scrollIntoView
+      Element.prototype.scrollIntoView = function patched(this: Element, ...args: unknown[]) {
+        w.__sivCalls?.push({ tag: this.tagName, args: JSON.stringify(args) })
+        return original?.apply(this, args as [boolean | ScrollIntoViewOptions])
+      }
+    })
+
+    await page.goto('/')
+    const tabs = page.locator('[aria-label="按来源筛选"]').getByRole('button')
+    const count = await tabs.count()
+    expect(count).toBeGreaterThan(1)
+
+    // 逐个切换来源：修复前每次都会命中那个 effect
+    for (let i = 1; i < count; i++) {
+      await tabs.nth(i).click()
+    }
+    await page.waitForTimeout(1000)
+
+    const calls = await page.evaluate(
+      () => (window as unknown as { __sivCalls?: unknown[] }).__sivCalls ?? [],
+    )
+    expect(calls).toEqual([])
+  })
+})

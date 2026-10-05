@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { getAdminToken, setAdminToken, clearAdminToken, adminFetch } from '../../lib/admin-token'
 import Header from './Header'
 import SourceTabs from './SourceTabs'
@@ -25,6 +25,14 @@ interface TopicGroupMeta {
 }
 interface SourceCounts {
   total: number
+  unread: number
+}
+/** 来源标签栏的单项数据 */
+interface SourceTab {
+  id: string
+  label: string
+  icon: string
+  count: number
   unread: number
 }
 interface HomeViewProps {
@@ -363,29 +371,34 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
   // 使用真实计数
   const totalUnread = Object.values(counts).reduce((sum, c) => sum + c.unread, 0)
   // 来源统计（使用真实数据库计数，不受 limit 影响）
-  const sources = [
-    {
-      id: 'github',
-      label: 'GitHub',
-      icon: '🐙',
-      count: counts.github?.total || 0,
-      unread: counts.github?.unread || 0,
-    },
-    {
-      id: 'producthunt',
-      label: 'Product Hunt',
-      icon: '🚀',
-      count: counts.producthunt?.total || 0,
-      unread: counts.producthunt?.unread || 0,
-    },
-    {
-      id: 'twitter',
-      label: 'X / Twitter',
-      icon: '𝕏',
-      count: counts.twitter?.total || 0,
-      unread: counts.twitter?.unread || 0,
-    },
-  ]
+  // useMemo 稳定引用：数组字面量每次渲染都是新对象引用，子组件若把它放进
+  // effect 依赖，任意一次重渲染（展开主题组、标记已读…）都会让 effect 重跑。
+  const sources = useMemo<SourceTab[]>(
+    () => [
+      {
+        id: 'github',
+        label: 'GitHub',
+        icon: '🐙',
+        count: counts.github?.total || 0,
+        unread: counts.github?.unread || 0,
+      },
+      {
+        id: 'producthunt',
+        label: 'Product Hunt',
+        icon: '🚀',
+        count: counts.producthunt?.total || 0,
+        unread: counts.producthunt?.unread || 0,
+      },
+      {
+        id: 'twitter',
+        label: 'X / Twitter',
+        icon: '𝕏',
+        count: counts.twitter?.total || 0,
+        unread: counts.twitter?.unread || 0,
+      },
+    ],
+    [counts],
+  )
   // 当前数据源的主题组（元信息）——未勾选"显示已读"时过滤全已读组（与服务端行为一致）
   const currentTopicsAll =
     activeSource === 'all' ? Object.values(topics).flat() : topics[activeSource] || []
