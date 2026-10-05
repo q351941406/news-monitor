@@ -103,7 +103,12 @@ export default function TopicGroup({
   }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-stone-200 bg-white transition-shadow hover:shadow-sm">
+    // data-topic-id：HomeView 在整组被移出列表时靠它把焦点接回同类元素，
+    // 避免被点的按钮随 DOM 卸载后焦点掉回 <body>
+    <section
+      data-topic-id={id}
+      className="overflow-hidden rounded-xl border border-stone-200 bg-white transition-shadow hover:shadow-sm"
+    >
       {/* Group Header — 整行可点，同时支持键盘操作 */}
       <div
         role="button"

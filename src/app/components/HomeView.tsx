@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import { getAdminToken, setAdminToken, clearAdminToken, adminFetch } from '../../lib/admin-token'
 import Header from './Header'
 import SourceTabs from './SourceTabs'
@@ -175,7 +175,48 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
     },
     [groupItems],
   )
+  /** 写操作前记住「焦点当前属于哪一组」，用于操作后把焦点接回来 */
+  const focusTopicRef = useRef<string | null>(null)
+
+  const captureFocusTopic = useCallback(() => {
+    if (typeof document === 'undefined') return
+    const section = (document.activeElement as HTMLElement | null)?.closest?.(
+      'main section[data-topic-id]',
+    )
+    focusTopicRef.current = section?.getAttribute('data-topic-id') ?? null
+  }, [])
+
+  /**
+   * 焦点兜底：整组从列表消失时，被点的按钮会随 DOM 一起卸载，焦点掉回
+   * <body> —— 键盘用户下一次 Tab 会从页面开头开始，浏览器随之把页面滚上去。
+   *
+   * 这里把焦点接回该组剩下的同类元素（还能继续标下一条），组已不在则落到
+   * 列表里下一个组的标题。focus 必须显式 preventScroll：接管焦点本身不该
+   * 移动页面，否则等于换一种方式复现「点一下就跳」。
+   */
+  const restoreFocusTopic = useCallback(() => {
+    const topicId = focusTopicRef.current
+    focusTopicRef.current = null
+    // 只有焦点真的丢了才接管；焦点还在原处说明 DOM 没卸载，不该抢
+    if (!topicId || document.activeElement !== document.body) return
+    const pick = (sel: string) =>
+      document.querySelector<HTMLElement>(
+        `main section[data-topic-id="${CSS.escape(topicId)}"] ${sel}`,
+      )
+    const target =
+      pick('[aria-label="标记为未读"]') ??
+      pick('> div[role="button"]') ??
+      document.querySelector<HTMLElement>('main section[data-topic-id] > div[role="button"]')
+    target?.focus({ preventScroll: true })
+  }, [])
+
+  // 用 useLayoutEffect：必须在绘制前同步接管，否则用户会看到焦点环闪一下再跳。
+  // 服务端渲染时退化为 useEffect，避免 useLayoutEffect 的 SSR 告警。
+  const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
+  useIsomorphicLayoutEffect(restoreFocusTopic)
+
   const handleMarkRead = async (itemId: string) => {
+    captureFocusTopic()
     try {
       const res = await adminFetch('/api/news', {
         method: 'POST',
@@ -221,6 +262,7 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
     }
   }
   const handleMarkUnread = async (itemId: string) => {
+    captureFocusTopic()
     try {
       const res = await adminFetch('/api/news', {
         method: 'POST',
@@ -264,6 +306,7 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
   }
   /** 整组标记已读：后端单条 UPDATE，替代原前端逐条请求 */
   const handleMarkGroupRead = async (topicId: string) => {
+    captureFocusTopic()
     try {
       const res = await adminFetch('/api/news', {
         method: 'POST',
@@ -306,6 +349,7 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
     }
   }
   const handleMarkAllRead = async () => {
+    captureFocusTopic()
     try {
       const res = await adminFetch('/api/news', {
         method: 'POST',
@@ -341,6 +385,7 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
     }
   }
   const handleResetAllRead = async () => {
+    captureFocusTopic()
     try {
       const res = await adminFetch('/api/news', {
         method: 'POST',
