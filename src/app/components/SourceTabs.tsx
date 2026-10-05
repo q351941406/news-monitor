@@ -9,20 +9,41 @@ interface SourceTabsProps {
 
 export default function SourceTabs({ sources, activeSource, onSourceChange }: SourceTabsProps) {
   const activeRef = useRef<HTMLButtonElement>(null)
+  const stripRef = useRef<HTMLDivElement>(null)
 
   /**
-   * 选中项自动滚入可视区。
+   * 选中项自动滚入可视区 —— **只允许横向**。
    *
    * 窄屏下标签条是横向滚动的，用户点中右侧的「Product Hunt」后，
    * 该标签往往正好被顶到屏幕外 —— 页面看似"没反应"。
+   *
+   * 这里必须自己算 scrollLeft、只滚标签条自身，**不能**改用
+   * `el.scrollIntoView({ inline: 'center', block: 'nearest' })`：
+   * 那个 API 会滚动**所有**可滚动祖先，包括 <html>。而本 effect 曾把
+   * `sources` 列为依赖（父组件每次渲染都新建该数组），于是展开任意主题组、
+   * 标记已读、懒加载详情等任何一次重渲染都会触发它 —— 用户在页面下方点开
+   * 一组时，整个页面被「平滑滚回顶部」，被点的那行从屏幕 y=200 掉出视口，
+   * 看起来就像"点击后当前行跑了"。
+   *
+   * 依赖只留 activeSource：本 effect 的语义就是「选中项变化时对齐」，
+   * 与 sources 的内容/引用无关。
    */
   useEffect(() => {
     const el = activeRef.current
-    // jsdom 未实现 scrollIntoView，测试环境下直接跳过
-    if (typeof el?.scrollIntoView === 'function') {
-      el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    const strip = stripRef.current
+    // jsdom 既无布局也无 scrollTo，测试环境下直接跳过
+    if (!el || !strip || typeof strip.scrollTo !== 'function') return
+    // 用 rect 差值而非 offsetLeft：不依赖 offsetParent 是谁，嵌套定位上下文也不会算错
+    const elRect = el.getBoundingClientRect()
+    const delta =
+      elRect.left - strip.getBoundingClientRect().left - (strip.clientWidth - elRect.width) / 2
+    const max = Math.max(0, strip.scrollWidth - strip.clientWidth)
+    const left = Math.min(max, Math.max(0, strip.scrollLeft + delta))
+    // 已经居中就别动：避免每次切换都放一段无谓的平滑动画
+    if (Math.abs(strip.scrollLeft - left) > 1) {
+      strip.scrollTo({ left, behavior: 'smooth' })
     }
-  }, [activeSource, sources])
+  }, [activeSource])
 
   const tabClass = (active: boolean) =>
     `inline-flex shrink-0 snap-start items-center gap-2 rounded-full px-3.5 py-2.5 text-sm font-medium transition-colors sm:px-4 sm:py-2 ${
@@ -43,6 +64,7 @@ export default function SourceTabs({ sources, activeSource, onSourceChange }: So
       {/* scrollbar-hide 在 globals.css 中定义；此前只写了类名没定义样式，
           iOS 上会留下一条 6px 灰滚动条，白占移动端本就紧张的竖向空间 */}
       <div
+        ref={stripRef}
         className="scrollbar-hide flex snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain pb-1"
         aria-label="按来源筛选"
       >
