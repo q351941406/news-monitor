@@ -1,14 +1,38 @@
 import type { Metadata, Viewport } from 'next'
-import { Newsreader, Roboto } from 'next/font/google'
+import localFont from 'next/font/local'
 import './globals.css'
-const newsreader = Newsreader({
-  subsets: ['latin'],
+
+/**
+ * 字体用本地文件，不走 next/font/google。
+ *
+ * 曾存在的故障：`next/font/google` 在**构建时联网**去 fonts.googleapis.com /
+ * fonts.gstatic.com 拉字体。GitHub runner 只要那一刻出网抖一下（上游抖动、
+ * 出口被限流），整个 `npm run build` 就崩在
+ * `An error occurred in next/font. TypeError: Cannot read properties of null`，
+ * 表现为 CI 随机变红 —— 久而久之所有人都会习惯性重跑，门禁就形同虚设了
+ * （正是 docs/ops/branch-protection.md 里记的那类「静默失效」）。
+ *
+ * 代价是仓库多 ~166KB 二进制，且不再有 unicode-range 子集裁剪。但这两个字体
+ * 只用于标题与 UI 拉丁字符，中文本来就 fallback 到系统字体，实际影响可忽略。
+ * 换来的是：构建结果不再依赖任何外部网络。
+ *
+ * 两个文件均为可变字体（variable font）：
+ * - Newsreader 覆盖 wght 200–800
+ * - Roboto 覆盖 wght 100–900，一次满足原先 300/400/500/700 四个字重
+ */
+const newsreader = localFont({
+  src: './fonts/Newsreader-latin.woff2',
   variable: '--font-newsreader',
+  weight: '200 800',
+  display: 'swap',
+  fallback: ['Georgia', 'serif'],
 })
-const roboto = Roboto({
-  weight: ['300', '400', '500', '700'],
-  subsets: ['latin'],
+const roboto = localFont({
+  src: './fonts/Roboto-latin.woff2',
   variable: '--font-roboto',
+  weight: '100 900',
+  display: 'swap',
+  fallback: ['system-ui', 'sans-serif'],
 })
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://news.myaicode.qzz.io'),
