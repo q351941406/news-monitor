@@ -153,7 +153,15 @@ export default function PromptEditor() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setTestError((data as { error?: string }).error || `测试失败（HTTP ${res.status}）`)
+        // 服务端所有已知错误都带可读 error；拿不到 JSON 说明挂在网关层
+        // （函数超时/崩溃），给重试建议而不是秃状态码
+        const fallback =
+          res.status === 504
+            ? '请求超时：AI 调用超过网关时限，可简化模板（去掉 README 变量）后重试'
+            : res.status === 503
+              ? '服务暂不可用，请稍后重试'
+              : '网关无响应（函数可能超时），请重试；多次出现可简化模板后重试'
+        setTestError((data as { error?: string }).error || `${fallback}（HTTP ${res.status}）`)
         return
       }
       setTestResult(data as TestResult)

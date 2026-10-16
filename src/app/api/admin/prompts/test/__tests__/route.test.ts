@@ -50,8 +50,10 @@ const goodBody = {
 
 describe('POST /api/admin/prompts/test', () => {
   const originalToken = process.env.ADMIN_TOKEN
+  const originalAiKey = process.env.AI_API_KEY
   beforeEach(() => {
     process.env.ADMIN_TOKEN = TOKEN
+    process.env.AI_API_KEY = 'sk-test'
     vi.clearAllMocks()
     mocks.fetchRepoPreview.mockResolvedValue({
       owner: 'owner',
@@ -67,6 +69,18 @@ describe('POST /api/admin/prompts/test', () => {
   afterEach(() => {
     if (originalToken === undefined) delete process.env.ADMIN_TOKEN
     else process.env.ADMIN_TOKEN = originalToken
+    if (originalAiKey === undefined) delete process.env.AI_API_KEY
+    else process.env.AI_API_KEY = originalAiKey
+  })
+
+  it('未配 AI_API_KEY 时 503 明示，不碰外部', async () => {
+    delete process.env.AI_API_KEY
+    const res = await POST(postRequest(goodBody, TOKEN))
+    expect(res.status).toBe(503)
+    const data = await res.json()
+    expect(data.error).toContain('AI_API_KEY')
+    expect(mocks.fetchRepoPreview).not.toHaveBeenCalled()
+    expect(mocks.runSingleSummaryPrompt).not.toHaveBeenCalled()
   })
 
   it('无 token 时 403 且不调外部', async () => {
@@ -134,10 +148,10 @@ describe('POST /api/admin/prompts/test', () => {
     expect(data.repo).toMatchObject({ fullName: 'owner/repo', stars: 10 })
     expect(data.renderedPrompt).toContain('分析 owner/repo')
     expect(typeof data.durationMs).toBe('number')
-    // 测试走快速重试 + 独立用量归属
+    // 测试走快速重试 + 独立用量归属 + 超时熔断
     expect(mocks.runSingleSummaryPrompt).toHaveBeenCalledWith(
       expect.stringContaining('分析 owner/repo'),
-      { maxRetries: 2, operation: 'singleSummaryTest' },
+      { maxRetries: 2, operation: 'singleSummaryTest', timeoutMs: 55_000 },
     )
     expect(mocks.fetchRepoPreview).toHaveBeenCalledWith('owner', 'repo')
   })

@@ -35,6 +35,18 @@ export async function POST(request: NextRequest) {
   if (invalid) {
     return NextResponse.json({ error: invalid }, { status: 400 })
   }
+  // 预检：效果测试要在服务端直接调 AI，而 Vercel 生产环境默认没有 AI_* 变量
+  // （AI 平时只跑在 GitHub Actions 里）。没 key 时两次重试注定 401，
+  // 不如秒回 503 明示，避免用户对着秃秃的 502 干瞪眼。
+  if (!process.env.AI_API_KEY) {
+    return NextResponse.json(
+      {
+        error:
+          '服务器未配置 AI_API_KEY，效果测试暂不可用。请在 Vercel 生产环境变量中配好与 GitHub Actions 相同的 AI_API_KEY / AI_BASE_URL / AI_MODEL 后重试。',
+      },
+      { status: 503 },
+    )
+  }
   const parsed = typeof body.url === 'string' ? parseGithubRepoUrl(body.url) : null
   if (!parsed) {
     return NextResponse.json(
@@ -70,10 +82,12 @@ export async function POST(request: NextRequest) {
   )
   let result: Awaited<ReturnType<typeof runSingleSummaryPrompt>>
   try {
-    // 测试求快：2 次重试；用量记到 singleSummaryTest，与生产消耗分开看
+    // 测试求快：2 次重试；55s 熔断（serverless 下 hang 住也要回 JSON）；
+    // 用量记到 singleSummaryTest，与生产消耗分开看
     result = await runSingleSummaryPrompt(prompt, {
       maxRetries: 2,
       operation: 'singleSummaryTest',
+      timeoutMs: 55_000,
     })
   } catch (err) {
     console.error('[admin/prompts/test] AI 调用异常:', err)
