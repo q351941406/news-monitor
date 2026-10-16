@@ -64,7 +64,10 @@ describe('POST /api/admin/prompts/test', () => {
       stars: 10,
       readme: 'readme',
     })
-    mocks.runSingleSummaryPrompt.mockResolvedValue({ summary: 's', details: 'd' })
+    mocks.runSingleSummaryPrompt.mockResolvedValue({
+      result: { summary: 's', details: 'd' },
+      raw: '{"id":"owner/repo","summary":"s","details":"d"}',
+    })
   })
   afterEach(() => {
     if (originalToken === undefined) delete process.env.ADMIN_TOKEN
@@ -145,6 +148,7 @@ describe('POST /api/admin/prompts/test', () => {
     const data = await res.json()
     expect(data.summary).toBe('s')
     expect(data.details).toBe('d')
+    expect(data.raw).toBe('{"id":"owner/repo","summary":"s","details":"d"}')
     expect(data.repo).toMatchObject({ fullName: 'owner/repo', stars: 10 })
     expect(data.renderedPrompt).toContain('分析 owner/repo')
     expect(typeof data.durationMs).toBe('number')

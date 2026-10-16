@@ -291,6 +291,12 @@ itemIds 必须**原样照抄**条目中 ID: 后面引号内的完整值（如 "g
 {"groups":[{"topic":"主题名","summary":"完整概括","itemIds":["完整ID1","完整ID2"]}]}`
 }
 
+/** AI 单次调用的返回值：解析后的结构化数据 + 模型输出的原始文本 */
+export interface AICallResult<T> {
+  data: T
+  rawText: string
+}
+
 async function callAIWithRetry<T>(
   model: ReturnType<typeof createClient>,
   schema: z.ZodSchema<T>,
@@ -299,7 +305,7 @@ async function callAIWithRetry<T>(
   maxOutputTokens: number = 384000,
   operation: string = 'batchSummarize',
   abortSignal?: AbortSignal,
-): Promise<T | null> {
+): Promise<AICallResult<T> | null> {
   const startedAt = Date.now()
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -323,7 +329,8 @@ async function callAIWithRetry<T>(
         status: 'success',
         attempts: attempt,
       })
-      return result.output as T
+      // data 给生产消费（落盘/聚合），rawText 给效果测试展示"模型到底回了什么"
+      return { data: result.output as T, rawText: result.text }
     } catch (error) {
       // 调用方主动取消（超时熔断）：重试没有意义，直接记失败埋点后回 null。
       // 注意放最前：AbortError 不是"模型没给 JSON"，不能进下面的重试分支。
@@ -396,7 +403,7 @@ async function callAIWithRetry<T>(
 export async function runSingleSummaryPrompt(
   prompt: string,
   opts: { maxRetries?: number; operation?: string; timeoutMs?: number } = {},
-): Promise<BatchSummaryResult | null> {
+): Promise<{ result: BatchSummaryResult; raw: string } | null> {
   const { maxRetries = 3, operation = 'singleSummary', timeoutMs } = opts
   const model = createClient()
   // 超时熔断（给 serverless 用的）：AbortSignal 到时中断 generateText，
@@ -412,7 +419,7 @@ export async function runSingleSummaryPrompt(
     operation,
     abortSignal,
   )
-  return output || null
+  return output ? { result: output.data, raw: output.rawText } : null
 }
 
 // ─── Factory ────────────────────────────────────────────
@@ -440,8 +447,8 @@ export function createAIService(): AIService {
           MAX_OUTPUT_TOKENS,
           'batchSummarize',
         )
-        if (output?.results) {
-          allResults.push(...output.results)
+        if (output?.data.results) {
+          allResults.push(...output.data.results)
         }
       }
 
@@ -450,7 +457,7 @@ export function createAIService(): AIService {
 
     async generateSingleSummary(item) {
       const prompt = await buildSingleSummaryPrompt(item)
-      return runSingleSummaryPrompt(prompt)
+      return (await runSingleSummaryPrompt(prompt))?.result ?? null
     },
     async generateTopicAggregation(items, existingTopics) {
       if (items.length < 3) return []
@@ -463,7 +470,7 @@ export function createAIService(): AIService {
         MAX_OUTPUT_TOKENS,
         'topicAggregation',
       )
-      return output?.groups || []
+      return output?.data.groups || []
     },
   }
 }

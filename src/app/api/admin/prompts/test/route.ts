@@ -101,8 +101,10 @@ export async function POST(request: NextRequest) {
     )
   }
   return NextResponse.json({
-    summary: result.summary,
-    details: result.details,
+    summary: result.result.summary,
+    details: result.result.details,
+    // 模型返回的原始文本（通常就是 prompt 要求的 JSON）：调模板时对照看模型到底回了什么
+    raw: result.raw,
     renderedPrompt: prompt,
     repo: {
       fullName: preview.fullName,

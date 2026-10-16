@@ -26,6 +26,7 @@ const KEY_LABELS: Record<string, string> = {
 interface TestResult {
   summary: string
   details: string
+  raw: string
   renderedPrompt: string
   repo: { fullName: string; url: string; description: string; language: string; stars: number }
   durationMs: number
@@ -362,6 +363,16 @@ export default function PromptEditor() {
                       {testResult.details}
                     </p>
                   </>
+                )}
+                {testResult.raw && (
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-xs text-stone-500 hover:text-stone-700">
+                      查看模型返回的原始内容
+                    </summary>
+                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-stone-900 p-3 font-mono text-xs leading-relaxed text-stone-100">
+                      {testResult.raw}
+                    </pre>
+                  </details>
                 )}
                 <details className="mt-3">
                   <summary className="cursor-pointer text-xs text-stone-500 hover:text-stone-700">
