@@ -246,6 +246,28 @@ describe('PromptEditor', () => {
     })
   })
 
+  it('效果测试：网关无响应体时给重试建议而非秃状态码', async () => {
+    localStorage.setItem('news_monitor_admin_token', 't')
+    const fetchMock = vi.fn()
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(payload) })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: () => Promise.reject(new Error('not json')),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PromptEditor />)
+    await screen.findByLabelText(/模板正文/)
+    fireEvent.change(screen.getByLabelText('测试用 GitHub 仓库链接'), {
+      target: { value: 'https://github.com/owner/repo' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '测试' }))
+    await waitFor(() => {
+      expect(screen.getByText(/网关无响应.*HTTP 502/)).toBeInTheDocument()
+    })
+  })
+
   it('已定制时可恢复默认', async () => {
     localStorage.setItem('news_monitor_admin_token', 't')
     const custom = { ...payload, isCustom: true, template: '定制' }

@@ -211,6 +211,20 @@ describe('AIService - 提示词模板可配置', () => {
     expect(callArg.prompt).toContain('直接给的 prompt')
   })
 
+  it('超时中断（AbortError）直接回 null，不再重试', async () => {
+    const { runSingleSummaryPrompt } = await import('../ai-service')
+    const abortError = new Error('The operation was aborted')
+    abortError.name = 'AbortError'
+    vi.mocked(generateText).mockRejectedValueOnce(abortError)
+    const result = await runSingleSummaryPrompt('prompt', { maxRetries: 3, timeoutMs: 1000 })
+    expect(result).toBeNull()
+    // terminal：3 次机会只用 1 次
+    expect(vi.mocked(generateText)).toHaveBeenCalledTimes(1)
+    // 超时信号确实透传给了 AI 调用
+    const callArg = vi.mocked(generateText).mock.calls[0][0] as { abortSignal?: AbortSignal }
+    expect(callArg.abortSignal).toBeInstanceOf(AbortSignal)
+  })
+
   it('runSingleSummaryPrompt：失败返回 null', async () => {
     const { runSingleSummaryPrompt } = await import('../ai-service')
     vi.mocked(generateText).mockRejectedValueOnce(new Error('boom'))

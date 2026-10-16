@@ -298,6 +298,7 @@ async function callAIWithRetry<T>(
   maxRetries: number = 3,
   maxOutputTokens: number = 384000,
   operation: string = 'batchSummarize',
+  abortSignal?: AbortSignal,
 ): Promise<T | null> {
   const startedAt = Date.now()
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -307,6 +308,7 @@ async function callAIWithRetry<T>(
         output: Output.object({ schema }),
         maxOutputTokens,
         providerOptions: aiProviderOptions(),
+        ...(abortSignal ? { abortSignal } : {}),
         // OpenAI 兼容协议：json_object 模式要求 prompt 含 "json" 字样并给出结构样例
         // （DeepSeek JSON Output 的两条硬性要求）；思考模式的开关见 aiProviderOptions()
         prompt: `${prompt}\n\n严格以 JSON 格式输出，不要包含任何 JSON 以外的内容。`,
@@ -323,6 +325,20 @@ async function callAIWithRetry<T>(
       })
       return result.output as T
     } catch (error) {
+      // 调用方主动取消（超时熔断）：重试没有意义，直接记失败埋点后回 null。
+      // 注意放最前：AbortError 不是"模型没给 JSON"，不能进下面的重试分支。
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log(`  🛑 Aborted (attempt ${attempt}/${maxRetries})：调用超时，不再重试`)
+        void logAIUsage({
+          operation,
+          inputTokens: estimateTokens(prompt),
+          outputTokens: 0,
+          durationMs: Date.now() - startedAt,
+          status: 'failure',
+          attempts: attempt,
+        })
+        return null
+      }
       // 两类错误都表示"模型没能给出可用 JSON"：
       //   NoObjectGeneratedError —— 有响应但 JSON 解析/schema 校验失败
       //   NoOutputGeneratedError —— 根本没有输出（如被 maxOutputTokens 截断）
@@ -379,10 +395,14 @@ async function callAIWithRetry<T>(
  */
 export async function runSingleSummaryPrompt(
   prompt: string,
-  opts: { maxRetries?: number; operation?: string } = {},
+  opts: { maxRetries?: number; operation?: string; timeoutMs?: number } = {},
 ): Promise<BatchSummaryResult | null> {
-  const { maxRetries = 3, operation = 'singleSummary' } = opts
+  const { maxRetries = 3, operation = 'singleSummary', timeoutMs } = opts
   const model = createClient()
+  // 超时熔断（给 serverless 用的）：AbortSignal 到时中断 generateText，
+  // 中断错误在 callAIWithRetry 里视为 terminal（不再重试），最终回 null。
+  // 目的：hang 住也要回 JSON，不能让网关替我们报 502/504。
+  const abortSignal = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined
   const output = await callAIWithRetry(
     model,
     singleSchema,
@@ -390,6 +410,7 @@ export async function runSingleSummaryPrompt(
     maxRetries,
     MAX_OUTPUT_TOKENS,
     operation,
+    abortSignal,
   )
   return output || null
 }
