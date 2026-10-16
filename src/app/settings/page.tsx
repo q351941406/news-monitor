@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Clock, GitBranch, MessageCircle, Zap, ShieldCheck } from 'lucide-react'
 import { getWorkflowSchedules, describeCron } from '@/lib/schedules'
+import PromptEditor from './PromptEditor'
 
 /**
  * 定时任务配置页
@@ -74,6 +75,8 @@ export default function SettingsPage() {
             )
           })}
         </div>
+
+        <PromptEditor />
 
         <div className="mt-8 rounded-xl border border-stone-200 bg-white p-4 sm:p-6">
           <h2 className="mb-1 text-base font-semibold text-stone-900 sm:text-lg">

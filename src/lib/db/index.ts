@@ -43,8 +43,14 @@ export {
   markGroupAsRead,
 } from './topic-repo'
 export { getUnreadCount } from './stats-repo'
+export {
+  getCustomPromptTemplate,
+  saveCustomPromptTemplate,
+  deleteCustomPromptTemplate,
+} from './prompt-repo'
 export { logRun, getRecentRuns, getDailyStats, getSourceStats, getMetrics } from './run-log-repo'
 // 保留类型向后兼容
 export type { RawItem, NewRawItem } from '../schema'
+export type { AIPrompt, NewAIPrompt } from '../schema'
 export type { AIAnalysis, NewAIAnalysis } from '../schema'
 export type { RunLog, NewRunLog } from '../schema'

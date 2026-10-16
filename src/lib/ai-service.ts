@@ -6,6 +6,13 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { generateText, Output, NoObjectGeneratedError, NoOutputGeneratedError } from 'ai'
 import { logAIUsage } from './db/ai-usage-repo'
+import { getCustomPromptTemplate } from './db/prompt-repo'
+import {
+  GITHUB_SINGLE_SUMMARY_KEY,
+  DEFAULT_GITHUB_SINGLE_SUMMARY_TEMPLATE,
+  buildGithubSingleSummaryVars,
+  renderTemplate,
+} from './prompts'
 import { z } from 'zod'
 
 // ─── 类型定义 ───────────────────────────────────────────
@@ -156,36 +163,58 @@ function splitBatches<T>(
   return batches
 }
 
-function buildSingleSummaryPrompt(item: {
+/**
+ * GitHub 单条摘要 prompt：模板来自设置页定制（ai_prompts 表），
+ * 未定制时用默认模板（与历史硬编码逐字等价，零回归）。
+ *
+ * 进程内缓存 60s：ai-process 单次运行逐条调用（最多 50 条），
+ * 每条都查库是浪费；后台改完设置最多 60s 生效，可接受。
+ */
+let cachedSingleSummaryTemplate: { template: string; fetchedAt: number } | null = null
+const PROMPT_CACHE_TTL_MS = 60_000
+
+async function resolveSingleSummaryTemplate(): Promise<string> {
+  const now = Date.now()
+  if (
+    cachedSingleSummaryTemplate &&
+    now - cachedSingleSummaryTemplate.fetchedAt < PROMPT_CACHE_TTL_MS
+  ) {
+    return cachedSingleSummaryTemplate.template
+  }
+  // prompt-repo 读失败时返回 null（内部已吞错）；此处再兜一层，
+  // 任何异常都回退默认模板继续跑：提示词只是配置，读不到不用阻断 AI
+  let custom: string | null = null
+  try {
+    custom = await getCustomPromptTemplate(GITHUB_SINGLE_SUMMARY_KEY)
+  } catch (err) {
+    console.warn('[ai-service] 提示词模板读取失败，回退默认模板:', err)
+  }
+  const template = custom ?? DEFAULT_GITHUB_SINGLE_SUMMARY_TEMPLATE
+  cachedSingleSummaryTemplate = { template, fetchedAt: now }
+  return template
+}
+
+/** 测试用：清空提示词模板缓存（避免用例间互相污染） */
+export function __resetPromptCacheForTest(): void {
+  cachedSingleSummaryTemplate = null
+}
+
+async function buildSingleSummaryPrompt(item: {
   id: string
   title: string | null
   rawData: unknown
-}): string {
-  const data = item.rawData as Record<string, unknown>
-  let keyInfo = ''
-  if (data.description) keyInfo += `描述: ${data.description}\n`
-  if (data.language) keyInfo += `语言: ${data.language}\n`
-  if (data.stars) keyInfo += `Stars: ${data.stars}\n`
-  if (data.starsToday) keyInfo += `今日新增 Stars: ${data.starsToday}\n`
-  // README 可能极大（数十万字符），超出多数模型的上下文上限会导致整条失败；
-  // 故截取前 README_MAX_CHARS 字符，保留项目核心信息（开头通常含简介/特性/用法）。
-  const README_MAX_CHARS = 24_000
-  const rawReadme = typeof data.readme === 'string' ? data.readme : ''
-  const readmeBlock = rawReadme
-    ? `\nREADME 全文（可能含 HTML，忽略其中的图片/徽章/样式）：\n${rawReadme.slice(0, README_MAX_CHARS)}${rawReadme.length > README_MAX_CHARS ? '\n\n[README 过长，已截断至前 24000 字符]' : ''}\n`
-    : ''
-  return `请用中文详细分析以下 GitHub 仓库内容。
-ID: ${item.id}
-标题: ${item.title || '无'}
-${keyInfo}${readmeBlock}
-要求：
-- 摘要：详细概括仓库核心内容，包含关键背景和上下文
-- 重点：提取所有重要细节、技术要点、应用场景、特性
-严格按以下 JSON 结构输出：
-{"id":"${item.id}","summary":"一句话概括","details":"补充信息"}
-- id 必须原样返回，不要改动
-- 保留原文中的具体数据、技术术语、关键信息`
+}): Promise<string> {
+  const template = await resolveSingleSummaryTemplate()
+  return renderTemplate(
+    template,
+    buildGithubSingleSummaryVars({
+      id: item.id,
+      title: item.title,
+      rawData: item.rawData as Record<string, unknown>,
+    }),
+  )
 }
+
 function buildBatchPrompt(
   items: Array<{ id: string; title: string | null; rawData: unknown }>,
 ): string {
@@ -374,7 +403,7 @@ export function createAIService(): AIService {
     },
 
     async generateSingleSummary(item) {
-      const prompt = buildSingleSummaryPrompt(item)
+      const prompt = await buildSingleSummaryPrompt(item)
       const output = await callAIWithRetry(
         model,
         singleSchema,
