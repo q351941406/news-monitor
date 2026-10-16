@@ -146,6 +146,7 @@ describe('PromptEditor', () => {
           Promise.resolve({
             summary: '这是摘要',
             details: '这是详情',
+            raw: '{"id":"owner/repo","summary":"这是摘要","details":"这是详情"}',
             renderedPrompt: '完整 prompt…',
             repo: {
               fullName: 'owner/repo',
@@ -177,6 +178,9 @@ describe('PromptEditor', () => {
     )
     expect(screen.getByText('1.2s')).toBeInTheDocument()
     expect(screen.getByText('完整 prompt…')).toBeInTheDocument()
+    expect(
+      screen.getByText('{"id":"owner/repo","summary":"这是摘要","details":"这是详情"}'),
+    ).toBeInTheDocument()
     // 请求体里带的是当前草稿模板（未保存也可测）
     const sent = JSON.parse(fetchMock.mock.calls[1][1].body as string)
     expect(sent).toMatchObject({

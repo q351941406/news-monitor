@@ -36,10 +36,10 @@ import { createAIService, estimateTokens, __resetPromptCacheForTest } from '../a
 import { getCustomPromptTemplate } from '../db/prompt-repo'
 import { generateText, NoObjectGeneratedError, NoOutputGeneratedError } from 'ai'
 
-function mockGenTextResult(output: unknown) {
+function mockGenTextResult(output: unknown, text = '') {
   return {
     output,
-    text: '',
+    text,
     usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     experimental_providerMetadata: {},
     warnings: [],
@@ -202,11 +202,13 @@ describe('AIService - 提示词模板可配置', () => {
 
   it('runSingleSummaryPrompt：成功时透出结果', async () => {
     const { runSingleSummaryPrompt } = await import('../ai-service')
+    const rawJson = '{"id":"x","summary":"s","details":"d"}'
     vi.mocked(generateText).mockResolvedValueOnce(
-      mockGenTextResult({ id: 'x', summary: 's', details: 'd' }),
+      mockGenTextResult({ id: 'x', summary: 's', details: 'd' }, rawJson),
     )
     const result = await runSingleSummaryPrompt('直接给的 prompt', { maxRetries: 1 })
-    expect(result).toEqual({ id: 'x', summary: 's', details: 'd' })
+    // 解析后 + 原始文本同时带出
+    expect(result).toEqual({ result: { id: 'x', summary: 's', details: 'd' }, raw: rawJson })
     const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
     expect(callArg.prompt).toContain('直接给的 prompt')
   })
