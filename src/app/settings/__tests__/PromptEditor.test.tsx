@@ -134,6 +134,118 @@ describe('PromptEditor', () => {
     })
   })
 
+  it('效果测试：用草稿模板对仓库跑一次并展示结果', async () => {
+    localStorage.setItem('news_monitor_admin_token', 't')
+    const fetchMock = vi.fn()
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(payload) })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            summary: '这是摘要',
+            details: '这是详情',
+            renderedPrompt: '完整 prompt…',
+            repo: {
+              fullName: 'owner/repo',
+              url: 'https://github.com/owner/repo',
+              description: 'desc',
+              language: 'TypeScript',
+              stars: 10,
+            },
+            durationMs: 1234,
+          }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PromptEditor />)
+    await screen.findByLabelText(/模板正文/)
+    // 链接为空时测试按钮不可点
+    expect(screen.getByRole('button', { name: '测试' })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('测试用 GitHub 仓库链接'), {
+      target: { value: 'https://github.com/owner/repo' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '测试' }))
+    // 结果展示：摘要 + 详情 + 仓库链接 + 耗时 + 可展开的 prompt
+    await waitFor(() => {
+      expect(screen.getByText('这是摘要')).toBeInTheDocument()
+    })
+    expect(screen.getByText('这是详情')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'owner/repo' })).toHaveAttribute(
+      'href',
+      'https://github.com/owner/repo',
+    )
+    expect(screen.getByText('1.2s')).toBeInTheDocument()
+    expect(screen.getByText('完整 prompt…')).toBeInTheDocument()
+    // 请求体里带的是当前草稿模板（未保存也可测）
+    const sent = JSON.parse(fetchMock.mock.calls[1][1].body as string)
+    expect(sent).toMatchObject({
+      key: 'github-single-summary',
+      template: '默认模板正文 {{title}}',
+      url: 'https://github.com/owner/repo',
+    })
+  })
+
+  it('效果测试：改过的草稿会被送去测试（而非已保存版）', async () => {
+    localStorage.setItem('news_monitor_admin_token', 't')
+    const fetchMock = vi.fn()
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(payload) })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            summary: 's',
+            details: '',
+            renderedPrompt: 'p',
+            repo: {
+              fullName: 'o/r',
+              url: 'https://github.com/o/r',
+              description: '',
+              language: '',
+              stars: 0,
+            },
+            durationMs: 100,
+          }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PromptEditor />)
+    const textarea = await screen.findByLabelText(/模板正文/)
+    fireEvent.change(textarea, { target: { value: '草稿版 {{title}}' } })
+    fireEvent.change(screen.getByLabelText('测试用 GitHub 仓库链接'), {
+      target: { value: 'https://github.com/owner/repo' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '测试' }))
+    await waitFor(() => {
+      expect(screen.getByText('s')).toBeInTheDocument()
+    })
+    const sent = JSON.parse(fetchMock.mock.calls[1][1].body as string)
+    expect(sent.template).toBe('草稿版 {{title}}')
+  })
+
+  it('效果测试：服务端错误展示可读信息', async () => {
+    localStorage.setItem('news_monitor_admin_token', 't')
+    const fetchMock = vi.fn()
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(payload) })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: () => Promise.resolve({ error: '仓库不存在或为私有仓库，请检查链接' }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PromptEditor />)
+    await screen.findByLabelText(/模板正文/)
+    fireEvent.change(screen.getByLabelText('测试用 GitHub 仓库链接'), {
+      target: { value: 'https://github.com/owner/nope' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '测试' }))
+    await waitFor(() => {
+      expect(screen.getByText('仓库不存在或为私有仓库，请检查链接')).toBeInTheDocument()
+    })
+  })
+
   it('已定制时可恢复默认', async () => {
     localStorage.setItem('news_monitor_admin_token', 't')
     const custom = { ...payload, isCustom: true, template: '定制' }

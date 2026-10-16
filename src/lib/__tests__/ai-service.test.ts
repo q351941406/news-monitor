@@ -200,6 +200,24 @@ describe('AIService - 提示词模板可配置', () => {
     expect(generateText).toHaveBeenCalledTimes(2)
   })
 
+  it('runSingleSummaryPrompt：成功时透出结果', async () => {
+    const { runSingleSummaryPrompt } = await import('../ai-service')
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({ id: 'x', summary: 's', details: 'd' }),
+    )
+    const result = await runSingleSummaryPrompt('直接给的 prompt', { maxRetries: 1 })
+    expect(result).toEqual({ id: 'x', summary: 's', details: 'd' })
+    const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
+    expect(callArg.prompt).toContain('直接给的 prompt')
+  })
+
+  it('runSingleSummaryPrompt：失败返回 null', async () => {
+    const { runSingleSummaryPrompt } = await import('../ai-service')
+    vi.mocked(generateText).mockRejectedValueOnce(new Error('boom'))
+    const result = await runSingleSummaryPrompt('prompt', { maxRetries: 1 })
+    expect(result).toBeNull()
+  })
+
   it('读库失败时回退默认模板继续跑（配置读不到不阻断 AI）', async () => {
     vi.mocked(getCustomPromptTemplate).mockRejectedValueOnce(new Error('db down'))
     vi.mocked(generateText).mockResolvedValueOnce(

@@ -35,6 +35,21 @@
   用 `{{变量}}` 占位
 - **读不到模板时让任务失败**：提示词缺失不该有失败语义，默认模板永远可用
 
+## 效果测试（2026-10-16 追加）
+
+设置页的模板编辑器旁设「效果测试」区：粘贴 GitHub 仓库链接，
+用**当前草稿模板**（无需先保存）对真实仓库跑一次 AI，
+展示摘要 / 详情 + 实际渲染出的完整 prompt。
+
+- 取数：元数据走 GitHub REST API（未登录 60 次/小时，手动点测足够；
+  配 `GITHUB_TOKEN` 则用其额度），README 复用抓取侧的 raw.githubusercontent
+  逻辑（不占 API 额度）
+- 调用链与生产共用 `runSingleSummaryPrompt`（从 `generateSingleSummary` 抽出），
+  测到的就是跑出来的；用量记为独立 operation `singleSummaryTest`，
+  测试消耗在仪表盘 AI 卡片里单独可见
+- 链接只允许 `github.com/owner/repo`（段白名单校验），README 截断等
+  防超限逻辑与生产一致
+
 ## 后果
 
 - 批量摘要 / 主题聚合照此键扩展即可（`github-single-summary` 之外加 key + 默认模板）
