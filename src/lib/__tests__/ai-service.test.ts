@@ -5,6 +5,11 @@ vi.mock('../db/ai-usage-repo', () => ({
   logAIUsage: vi.fn(),
 }))
 
+// 模拟提示词模板仓库：同属 DB 边界；默认未定制（回退默认模板）
+vi.mock('../db/prompt-repo', () => ({
+  getCustomPromptTemplate: vi.fn(),
+}))
+
 // 模拟 generateText 模块
 vi.mock('ai', () => {
   const mockGenerateText = vi.fn()
@@ -27,7 +32,8 @@ vi.mock('ai', () => {
   }
 })
 
-import { createAIService, estimateTokens } from '../ai-service'
+import { createAIService, estimateTokens, __resetPromptCacheForTest } from '../ai-service'
+import { getCustomPromptTemplate } from '../db/prompt-repo'
 import { generateText, NoObjectGeneratedError, NoOutputGeneratedError } from 'ai'
 
 function mockGenTextResult(output: unknown) {
@@ -48,6 +54,8 @@ function mockGenTextResult(output: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  __resetPromptCacheForTest()
+  vi.mocked(getCustomPromptTemplate).mockResolvedValue(null)
 })
 
 describe('estimateTokens', () => {
@@ -156,6 +164,54 @@ describe('AIService - generateSingleSummary', () => {
     expect(result).toBeNull()
   }, 20000)
 })
+describe('AIService - 提示词模板可配置', () => {
+  const item = { id: 'github:o/r', title: 'o/r', rawData: { description: 'd' } }
+
+  it('未定制时用默认模板（与历史行为一致）', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({ id: 'github:o/r', summary: 's', details: 'd' }),
+    )
+    await createAIService().generateSingleSummary(item)
+    const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
+    expect(callArg.prompt).toContain('请用中文详细分析以下 GitHub 仓库内容。')
+    expect(callArg.prompt).toContain('描述: d')
+  })
+
+  it('已定制时用库里模板渲染', async () => {
+    vi.mocked(getCustomPromptTemplate).mockResolvedValue('定制指令：分析 {{title}}（{{id}}）')
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({ id: 'github:o/r', summary: 's', details: 'd' }),
+    )
+    await createAIService().generateSingleSummary(item)
+    const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
+    // callAIWithRetry 会在模板后追加 JSON 输出约定行，故用包含断言
+    expect(callArg.prompt).toContain('定制指令：分析 o/r（github:o/r）')
+    expect(callArg.prompt).not.toContain('请用中文详细分析')
+  })
+
+  it('模板被缓存：单次进程内只查一次库', async () => {
+    vi.mocked(generateText).mockResolvedValue(
+      mockGenTextResult({ id: 'x', summary: 's', details: 'd' }),
+    )
+    const service = createAIService()
+    await service.generateSingleSummary(item)
+    await service.generateSingleSummary(item)
+    expect(vi.mocked(getCustomPromptTemplate)).toHaveBeenCalledTimes(1)
+    expect(generateText).toHaveBeenCalledTimes(2)
+  })
+
+  it('读库失败时回退默认模板继续跑（配置读不到不阻断 AI）', async () => {
+    vi.mocked(getCustomPromptTemplate).mockRejectedValueOnce(new Error('db down'))
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({ id: 'github:o/r', summary: 's', details: 'd' }),
+    )
+    const result = await createAIService().generateSingleSummary(item)
+    expect(result).not.toBeNull()
+    const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
+    expect(callArg.prompt).toContain('请用中文详细分析')
+  })
+})
+
 describe('AIService - generateTopicAggregation', () => {
   it('items 少于 3 个返回空数组', async () => {
     const service = createAIService()
