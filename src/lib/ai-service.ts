@@ -369,6 +369,31 @@ async function callAIWithRetry<T>(
   }
   return null
 }
+/**
+ * 用给定 prompt 直接跑一次 GitHub 单条摘要。
+ *
+ * 生产路径（generateSingleSummary）与设置页效果测试共用它，
+ * 保证「测到的」就是「跑出来的」同一条调用链。
+ * operation 区分用量归属：测试调用记为 singleSummaryTest，
+ * 在运维仪表盘的 AI 卡片里可单独看到测试消耗。
+ */
+export async function runSingleSummaryPrompt(
+  prompt: string,
+  opts: { maxRetries?: number; operation?: string } = {},
+): Promise<BatchSummaryResult | null> {
+  const { maxRetries = 3, operation = 'singleSummary' } = opts
+  const model = createClient()
+  const output = await callAIWithRetry(
+    model,
+    singleSchema,
+    prompt,
+    maxRetries,
+    MAX_OUTPUT_TOKENS,
+    operation,
+  )
+  return output || null
+}
+
 // ─── Factory ────────────────────────────────────────────
 
 export function createAIService(): AIService {
@@ -404,15 +429,7 @@ export function createAIService(): AIService {
 
     async generateSingleSummary(item) {
       const prompt = await buildSingleSummaryPrompt(item)
-      const output = await callAIWithRetry(
-        model,
-        singleSchema,
-        prompt,
-        3,
-        MAX_OUTPUT_TOKENS,
-        'singleSummary',
-      )
-      return output || null
+      return runSingleSummaryPrompt(prompt)
     },
     async generateTopicAggregation(items, existingTopics) {
       if (items.length < 3) return []

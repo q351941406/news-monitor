@@ -76,7 +76,11 @@ export function parseTrendingHtml(html: string): TrendingRepo[] {
   return repos
 }
 
-async function fetchReadme(owner: string, repo: string): Promise<string> {
+/**
+ * 拉取仓库 README（main/master × 4 个候选文件名逐个试，全部命中不了返回空串）。
+ * 走 raw.githubusercontent.com，不占 GitHub API 额度，失败永不抛错。
+ */
+export async function fetchReadme(owner: string, repo: string): Promise<string> {
   const readmeNames = ['README.md', 'README.rst', 'README.txt', 'README']
   const branches = ['main', 'master']
   for (const name of readmeNames) {

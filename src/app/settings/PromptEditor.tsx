@@ -1,6 +1,6 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
-import { FlaskConical, Lock, RotateCcw, Save } from 'lucide-react'
+import { FlaskConical, Lock, Play, RotateCcw, Save } from 'lucide-react'
 import { getAdminToken, adminFetch } from '@/lib/admin-token'
 
 /**
@@ -23,6 +23,14 @@ const KEY_LABELS: Record<string, string> = {
   'github-single-summary': 'GitHub 单条摘要',
 }
 
+interface TestResult {
+  summary: string
+  details: string
+  renderedPrompt: string
+  repo: { fullName: string; url: string; description: string; language: string; stars: number }
+  durationMs: number
+}
+
 export default function PromptEditor() {
   const [token, setToken] = useState<string | null>(null)
   const [tokenInput, setTokenInput] = useState('')
@@ -32,6 +40,10 @@ export default function PromptEditor() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+  const [testUrl, setTestUrl] = useState('')
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<TestResult | null>(null)
+  const [testError, setTestError] = useState<string | null>(null)
 
   useEffect(() => {
     setToken(getAdminToken())
@@ -125,6 +137,30 @@ export default function PromptEditor() {
       setMessage({ kind: 'err', text: '恢复失败，请稍后重试' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  /** 效果测试：用当前文本框里的草稿模板（无需先保存）对真实仓库跑一次 AI */
+  const handleTest = async () => {
+    if (!payload || testing || !testUrl.trim()) return
+    setTesting(true)
+    setTestError(null)
+    setTestResult(null)
+    try {
+      const res = await adminFetch('/api/admin/prompts/test', {
+        method: 'POST',
+        body: JSON.stringify({ key: payload.key, template: draft, url: testUrl.trim() }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setTestError((data as { error?: string }).error || `测试失败（HTTP ${res.status}）`)
+        return
+      }
+      setTestResult(data as TestResult)
+    } catch {
+      setTestError('测试失败，请检查网络后重试')
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -247,6 +283,87 @@ export default function PromptEditor() {
             )}
             {!dirty && (
               <span className="text-xs text-stone-400">未改动时保存按钮不可点，避免空写库</span>
+            )}
+          </div>
+
+          <div className="mt-6 border-t border-stone-100 pt-4">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-stone-900">
+              <Play className="h-4 w-4" aria-hidden />
+              效果测试
+            </h3>
+            <p className="mt-1 text-xs text-stone-500">
+              用上方文本框里的模板（未保存也可测）对一个真实仓库跑一次 AI。 每次测试消耗一次 AI
+              调用， tokens 计入运维仪表盘的单条摘要测试项。
+            </p>
+            <div className="mt-3 flex gap-2">
+              <input
+                type="url"
+                value={testUrl}
+                onChange={(e) => setTestUrl(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void handleTest()}
+                placeholder="粘贴 GitHub 仓库链接，如 https://github.com/owner/repo"
+                aria-label="测试用 GitHub 仓库链接"
+                className="min-h-11 min-w-0 flex-1 rounded-lg border border-stone-300 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-red-500 sm:text-sm"
+              />
+              <button
+                onClick={() => void handleTest()}
+                disabled={!testUrl.trim() || testing}
+                className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-stone-700 disabled:opacity-40"
+              >
+                <Play className="h-4 w-4" aria-hidden />
+                {testing ? '测试中…' : '测试'}
+              </button>
+            </div>
+
+            {testing && (
+              <p className="mt-3 text-sm text-stone-500" role="status">
+                正在拉取仓库并调用 AI，约需十几秒…
+              </p>
+            )}
+            {testError && (
+              <p className="mt-3 text-sm text-red-600" role="alert">
+                {testError}
+              </p>
+            )}
+            {testResult && (
+              <div className="mt-3 rounded-lg border border-stone-200 bg-stone-50 p-3 sm:p-4">
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <a
+                    href={testResult.repo.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="break-all text-sm font-semibold text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-stone-500"
+                  >
+                    {testResult.repo.fullName}
+                  </a>
+                  <span className="text-xs tabular-nums text-stone-400">
+                    {(testResult.durationMs / 1000).toFixed(1)}s
+                  </span>
+                </div>
+                {testResult.repo.description && (
+                  <p className="mt-1 text-xs text-stone-500">{testResult.repo.description}</p>
+                )}
+                <p className="mt-3 text-sm font-medium text-stone-900">摘要</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-stone-700">
+                  {testResult.summary}
+                </p>
+                {testResult.details && (
+                  <>
+                    <p className="mt-3 text-sm font-medium text-stone-900">详情</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-stone-700">
+                      {testResult.details}
+                    </p>
+                  </>
+                )}
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-xs text-stone-500 hover:text-stone-700">
+                    查看实际发给 AI 的完整 prompt
+                  </summary>
+                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-stone-900 p-3 font-mono text-xs leading-relaxed text-stone-100">
+                    {testResult.renderedPrompt}
+                  </pre>
+                </details>
+              </div>
             )}
           </div>
         </div>
