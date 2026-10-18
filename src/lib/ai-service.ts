@@ -95,7 +95,6 @@ const batchSchema = z.object({
 })
 
 const singleSchema = z.object({
-  id: z.string().describe('原始数据的 ID'),
   summary: z.string().describe('一句话概括核心内容'),
   details: z.string().describe('补充重要信息，可以自由发挥'),
 })
@@ -403,7 +402,7 @@ async function callAIWithRetry<T>(
 export async function runSingleSummaryPrompt(
   prompt: string,
   opts: { maxRetries?: number; operation?: string; timeoutMs?: number } = {},
-): Promise<{ result: BatchSummaryResult; raw: string } | null> {
+): Promise<{ result: { summary: string; details: string }; raw: string } | null> {
   const { maxRetries = 3, operation = 'singleSummary', timeoutMs } = opts
   const model = createClient()
   // 超时熔断（给 serverless 用的）：AbortSignal 到时中断 generateText，
@@ -457,7 +456,10 @@ export function createAIService(): AIService {
 
     async generateSingleSummary(item) {
       const prompt = await buildSingleSummaryPrompt(item)
-      return (await runSingleSummaryPrompt(prompt))?.result ?? null
+      const output = await runSingleSummaryPrompt(prompt)
+      if (!output) return null
+      // 单条摘要：id 由调用方持有，不信任模型回显；summary/details 由模型生成
+      return { id: item.id, summary: output.result.summary, details: output.result.details }
     },
     async generateTopicAggregation(items, existingTopics) {
       if (items.length < 3) return []

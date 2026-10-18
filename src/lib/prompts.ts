@@ -28,15 +28,18 @@ export const PROMPT_README_MAX_CHARS = 24_000
  * 因此「未定制」时的 AI 行为与过去完全一致，零回归。
  */
 export const DEFAULT_GITHUB_SINGLE_SUMMARY_TEMPLATE = `请用中文详细分析以下 GitHub 仓库内容。
-ID: {{id}}
-标题: {{title}}
-{{key_info}}{{readme_block}}
+仓库: {{title}}
+仓库地址: {{url}}
+Stars: {{stars}}
+{{readme_block}}
 要求：
-- 摘要：详细概括仓库核心内容，包含关键背景和上下文
-- 重点：提取所有重要细节、技术要点、应用场景、特性
+- 摘要：详细概括仓库核心内容，包含关键背景和上下文，突出技术要点、应用场景与特性
+要求：同时输出摘要与详情
+- 摘要：一句话概括仓库核心内容
+- 详情：保留重要细节、技术要点、应用场景、特性
 严格按以下 JSON 结构输出：
-{"id":"{{id}}","summary":"一句话概括","details":"补充信息"}
-- id 必须原样返回，不要改动
+{"summary":"一句话概括","details":"补充信息"}
+- 不要编造原文未提供的信息
 - 保留原文中的具体数据、技术术语、关键信息`
 
 /** 模板变量说明（设置页展示给用户看） */
@@ -98,6 +101,12 @@ export function buildGithubSingleSummaryVars(
   const language = asText(data.language)
   const stars = asText(data.stars)
   const starsToday = asText(data.starsToday)
+  const url =
+    typeof data.url === 'string' && data.url
+      ? data.url
+      : item.title
+        ? `https://github.com/${item.title}`
+        : ''
 
   // 缺失项自动省略：判定用原始值（与历史硬编码一致，如 stars=0 时省略该行）
   let keyInfo = ''
@@ -117,6 +126,7 @@ export function buildGithubSingleSummaryVars(
   return {
     id: item.id,
     title: item.title || '无',
+    url,
     description,
     language,
     stars,
