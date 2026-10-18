@@ -119,7 +119,6 @@ describe('AIService - generateSingleSummary', () => {
   it('单条摘要成功且 prompt 包含完整 readme', async () => {
     vi.mocked(generateText).mockResolvedValueOnce(
       mockGenTextResult({
-        id: 'github:owner/repo',
         summary: '测试摘要',
         details: '测试详情',
       }),
@@ -140,13 +139,11 @@ describe('AIService - generateSingleSummary', () => {
     expect(result).toEqual({ id: 'github:owner/repo', summary: '测试摘要', details: '测试详情' })
     // 验证 prompt 把完整 readme 喂给了 AI
     const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
-    expect(callArg.prompt).toContain('标题: owner/repo')
+    expect(callArg.prompt).toContain('仓库: owner/repo')
     expect(callArg.prompt).toContain('This is the complete readme content.')
   })
   it('无 readme 时 prompt 不包含 README 段落', async () => {
-    vi.mocked(generateText).mockResolvedValueOnce(
-      mockGenTextResult({ id: 'x', summary: 's', details: 'd' }),
-    )
+    vi.mocked(generateText).mockResolvedValueOnce(mockGenTextResult({ summary: 's', details: 'd' }))
     const service = createAIService()
     await service.generateSingleSummary({ id: 'x', title: 'X', rawData: { description: 'd' } })
     const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
@@ -168,20 +165,16 @@ describe('AIService - 提示词模板可配置', () => {
   const item = { id: 'github:o/r', title: 'o/r', rawData: { description: 'd' } }
 
   it('未定制时用默认模板（与历史行为一致）', async () => {
-    vi.mocked(generateText).mockResolvedValueOnce(
-      mockGenTextResult({ id: 'github:o/r', summary: 's', details: 'd' }),
-    )
+    vi.mocked(generateText).mockResolvedValueOnce(mockGenTextResult({ summary: 's', details: 'd' }))
     await createAIService().generateSingleSummary(item)
     const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
     expect(callArg.prompt).toContain('请用中文详细分析以下 GitHub 仓库内容。')
-    expect(callArg.prompt).toContain('描述: d')
+    expect(callArg.prompt).toContain('仓库: o/r')
   })
 
   it('已定制时用库里模板渲染', async () => {
     vi.mocked(getCustomPromptTemplate).mockResolvedValue('定制指令：分析 {{title}}（{{id}}）')
-    vi.mocked(generateText).mockResolvedValueOnce(
-      mockGenTextResult({ id: 'github:o/r', summary: 's', details: 'd' }),
-    )
+    vi.mocked(generateText).mockResolvedValueOnce(mockGenTextResult({ summary: 's', details: 'd' }))
     await createAIService().generateSingleSummary(item)
     const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
     // callAIWithRetry 会在模板后追加 JSON 输出约定行，故用包含断言
@@ -190,9 +183,7 @@ describe('AIService - 提示词模板可配置', () => {
   })
 
   it('模板被缓存：单次进程内只查一次库', async () => {
-    vi.mocked(generateText).mockResolvedValue(
-      mockGenTextResult({ id: 'x', summary: 's', details: 'd' }),
-    )
+    vi.mocked(generateText).mockResolvedValue(mockGenTextResult({ summary: 's', details: 'd' }))
     const service = createAIService()
     await service.generateSingleSummary(item)
     await service.generateSingleSummary(item)
@@ -202,13 +193,13 @@ describe('AIService - 提示词模板可配置', () => {
 
   it('runSingleSummaryPrompt：成功时透出结果', async () => {
     const { runSingleSummaryPrompt } = await import('../ai-service')
-    const rawJson = '{"id":"x","summary":"s","details":"d"}'
+    const rawJson = '{"summary":"s","details":"d"}'
     vi.mocked(generateText).mockResolvedValueOnce(
-      mockGenTextResult({ id: 'x', summary: 's', details: 'd' }, rawJson),
+      mockGenTextResult({ summary: 's', details: 'd' }, rawJson),
     )
     const result = await runSingleSummaryPrompt('直接给的 prompt', { maxRetries: 1 })
     // 解析后 + 原始文本同时带出
-    expect(result).toEqual({ result: { id: 'x', summary: 's', details: 'd' }, raw: rawJson })
+    expect(result).toEqual({ result: { summary: 's', details: 'd' }, raw: rawJson })
     const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
     expect(callArg.prompt).toContain('直接给的 prompt')
   })
@@ -236,9 +227,7 @@ describe('AIService - 提示词模板可配置', () => {
 
   it('读库失败时回退默认模板继续跑（配置读不到不阻断 AI）', async () => {
     vi.mocked(getCustomPromptTemplate).mockRejectedValueOnce(new Error('db down'))
-    vi.mocked(generateText).mockResolvedValueOnce(
-      mockGenTextResult({ id: 'github:o/r', summary: 's', details: 'd' }),
-    )
+    vi.mocked(generateText).mockResolvedValueOnce(mockGenTextResult({ summary: 's', details: 'd' }))
     const result = await createAIService().generateSingleSummary(item)
     expect(result).not.toBeNull()
     const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
@@ -336,7 +325,7 @@ describe('AIService - 主题聚合补充分支', () => {
 describe('推理模型适配（DeepSeek 思考模式）', () => {
   it('默认关闭思考模式，避免思维链耗尽输出预算', async () => {
     vi.mocked(generateText).mockResolvedValueOnce(
-      mockGenTextResult({ id: 'x', summary: 's', details: 'd' }) as never,
+      mockGenTextResult({ summary: 's', details: 'd' }) as never,
     )
     const service = createAIService()
     await service.generateSingleSummary({ id: 'x', title: 't', rawData: {} })
@@ -353,7 +342,7 @@ describe('推理模型适配（DeepSeek 思考模式）', () => {
     process.env.AI_THINKING = 'enabled'
     try {
       vi.mocked(generateText).mockResolvedValueOnce(
-        mockGenTextResult({ id: 'x', summary: 's', details: 'd' }) as never,
+        mockGenTextResult({ summary: 's', details: 'd' }) as never,
       )
       const service = createAIService()
       await service.generateSingleSummary({ id: 'x', title: 't', rawData: {} })
@@ -369,7 +358,7 @@ describe('推理模型适配（DeepSeek 思考模式）', () => {
 
   it('输出上限不被人为压低：不再传 8192/16000 之类的小额度', async () => {
     vi.mocked(generateText).mockResolvedValueOnce(
-      mockGenTextResult({ id: 'x', summary: 's', details: 'd' }) as never,
+      mockGenTextResult({ summary: 's', details: 'd' }) as never,
     )
     const service = createAIService()
     await service.generateSingleSummary({ id: 'x', title: 't', rawData: {} })
@@ -382,7 +371,7 @@ describe('推理模型适配（DeepSeek 思考模式）', () => {
   it('NoOutputGeneratedError（JSON 被截断/无输出）也按可重试错误处理', async () => {
     vi.mocked(generateText)
       .mockRejectedValueOnce(new NoOutputGeneratedError('No output generated.'))
-      .mockResolvedValueOnce(mockGenTextResult({ id: 'x', summary: 's', details: 'd' }) as never)
+      .mockResolvedValueOnce(mockGenTextResult({ summary: 's', details: 'd' }) as never)
 
     const service = createAIService()
     const result = await service.generateSingleSummary({ id: 'x', title: 't', rawData: {} })

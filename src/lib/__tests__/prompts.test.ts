@@ -111,23 +111,21 @@ describe('默认模板', () => {
   it('键名稳定（存量数据与 API 共用）', () => {
     expect(GITHUB_SINGLE_SUMMARY_KEY).toBe('github-single-summary')
   })
-  it('渲染后与历史硬编码 prompt 关键内容一致（零回归）', () => {
+  it('渲染后与新模板关键内容一致', () => {
     const rendered = renderTemplate(
       DEFAULT_GITHUB_SINGLE_SUMMARY_TEMPLATE,
       buildGithubSingleSummaryVars({
         id: 'github:owner/repo',
         title: 'owner/repo',
-        rawData: { description: 'd', readme: '# readme' },
+        rawData: { description: 'd', stars: 100, readme: '# readme' },
       }),
     )
     expect(rendered).toContain('请用中文详细分析以下 GitHub 仓库内容。')
-    expect(rendered).toContain('ID: github:owner/repo')
-    expect(rendered).toContain('标题: owner/repo')
-    expect(rendered).toContain('描述: d')
+    expect(rendered).toContain('仓库: owner/repo')
+    expect(rendered).toContain('Stars: 100')
     expect(rendered).toContain('README 全文')
     expect(rendered).toContain('# readme')
-    expect(rendered).toContain('{"id":"github:owner/repo"')
-    expect(rendered).toContain('原样返回')
+    expect(rendered).toContain('{"summary"')
     // 无残留占位符
     expect(rendered).not.toMatch(/\{\{\s*[A-Za-z0-9_]+\s*\}\}/)
   })
