@@ -122,3 +122,36 @@ describe('SlidingWindowRateLimiter', () => {
     expect(DEFAULT_RATE_LIMIT.windowMs).toBe(15 * 60 * 1000)
   })
 })
+
+describe('SlidingWindowRateLimiter —— 内存上限淘汰', () => {
+  it('超过 maxTrackedKeys 时先淘汰未被封禁的 key', () => {
+    const limiter = new SlidingWindowRateLimiter({
+      maxFailures: 2,
+      windowMs: 60_000,
+      blockMs: 60_000,
+      maxTrackedKeys: 2,
+    })
+    const now = Date.now()
+    limiter.recordFailure('a', now)
+    limiter.recordFailure('b', now)
+    // 第三个 key 触发淘汰：a/b 都未封禁，先被清掉的那个记录归零
+    limiter.recordFailure('c', now)
+    limiter.recordFailure('a', now)
+    expect(limiter.inspect('a', now).remaining).toBe(1)
+  })
+
+  it('极端情况：剩下的全在封禁中也要淘汰，保证内存有界', () => {
+    const limiter = new SlidingWindowRateLimiter({
+      maxFailures: 1,
+      windowMs: 60_000,
+      blockMs: 600_000,
+      maxTrackedKeys: 1,
+    })
+    const now = Date.now()
+    limiter.recordFailure('blocked-1', now)
+    limiter.recordFailure('blocked-2', now)
+    limiter.recordFailure('blocked-3', now)
+    // 全部被封禁时也不能无限增长：最早的封禁记录已被淘汰
+    expect(limiter.inspect('blocked-1', now).blocked).toBe(false)
+  })
+})

@@ -5,6 +5,10 @@
  * 读取 coverage/unit + coverage/integration 的 coverage-final.json
  * 用 istanbul-lib-coverage 按语句/函数/分支/行做 union 合并，
  * 输出合并后的 coverage/coverage-summary.json 并检查 DevOps 门槛。
+ *
+ * 门槛 **90%**（四项全达标才算通过）是硬门禁：
+ * CI 的 coverage job 跑它，不达标 → 退出码 1 → workflow 红 →
+ * 分支保护的 required check 不通过 → **禁止合并**。
  */
 import fs from 'fs'
 import path from 'path'
@@ -49,8 +53,12 @@ function main() {
     `  branches:   ${t.branches.pct.toFixed(1)}%  (${t.branches.covered}/${t.branches.total})`,
   )
 
-  // DevOps 门槛
-  const thresholds = { lines: 80, statements: 80, functions: 80, branches: 80 }
+  // DevOps 门槛：四项全 ≥ 90%
+  //
+  // 为什么是 90 而不是更低：80 时 branches 实测只有 85.1%（勉强过线，
+  // 一行代码就能跌破），门槛形同虚设。补齐缺口后四项均在 92%+，
+  // 90 是既有缓冲、又不至于松到失去意义。
+  const thresholds = { lines: 90, statements: 90, functions: 90, branches: 90 }
   let pass = true
   const vals: Record<string, number> = {
     lines: t.lines.pct,
@@ -68,7 +76,7 @@ function main() {
     console.error('❌ 覆盖率低于 DevOps 门槛，请补充测试')
     process.exit(1)
   }
-  console.log('✅ 覆盖率达标 (lines/statements/functions/branches 全部 ≥80%)')
+  console.log('✅ 覆盖率达标 (lines/statements/functions/branches 全部 ≥90%)')
 }
 
 main()
