@@ -174,6 +174,37 @@ npm run ai-process -- --source=github
 npm run topic-aggregate -- --source=github
 ```
 
+## 常见问题：徽标有数字，列表却是空的
+
+**现象**：来源标签上显示「8」，点进去整页「暂无数据」。
+
+**原因**：徽标按 `raw_items` 的未读行数计数，列表按 `topic_groups` 渲染。
+内容已入库、但没挂上任何主题组时，两套口径脱钩，就出现这个现象
+（这类条目在归档页也看不到 —— 归档页只收已读条目）。
+
+**现在会怎么处理**（ADR-0012）：
+
+- 这批「未读且未归组」的内容会作为「待归组内容」显式渲染在列表里，
+  徽标上的每个数字都能在页面上找到对应物
+- 落组结果变成可观测的：只有真正挂进主题组的条目才算「已消费」，
+  漏掉的保持待聚合、下轮重试（不再被"假消费"后永久隐身）
+- 聚类阈值降到 1 条：低频源（如 GitHub 每天净增 2-4 条）不再被饿死
+- `Content Visibility Check` 巡检每天 3 次检查，有问题就红 + 通知
+
+**存量修复**（把已经悬空的未读内容放回聚合队列）：
+
+```bash
+# 预演（只统计，不改数据）
+npx tsx scripts/requeue-ungrouped.ts --dry-run
+
+# 实际重入队（默认只处理未读内容）
+npx tsx scripts/requeue-ungrouped.ts --source=github
+
+# 随后跑一轮富化 + 聚合，让它们归入主题
+npm run ai-process -- --source=github
+npm run topic-aggregate -- --source=github
+```
+
 ## 健康检查
 
 应用暴露 `GET /api/health` 端点，**默认只做进程存活检查（liveness），不触碰数据库**：
@@ -236,12 +267,19 @@ curl "http://localhost:3000/api/health?deep=1"   # readiness：真实查询 DB
 │   ├── ai-process.ts         # AI 处理脚本
 │   ├── topic-aggregate.ts    # 主题聚合脚本
 │   ├── migrate-ci.ts         # 幂等数据库迁移（CI/生产部署用）
-│   └── seed-dev.ts           # 开发种子数据
+│   ├── check-freshness.ts    # 数据新鲜度巡检（断流告警）
+│   ├── check-visibility.ts   # 可展示性巡检（"有数字、没内容"告警）
+│   ├── requeue-ungrouped.ts  # 未归组内容重入队（存量修复）
+│   ├── seed-dev.ts           # 开发种子数据
+│   └── seed-orphan-scenario.ts # 复现"徽标有数字、列表空白"的夹具
 ├── .github/workflows/
 │   ├── scrape-github.yml     # GitHub Trending 定时抓取
 │   ├── scrape-twitter.yml    # Twitter 定时抓取
 │   ├── scrape-producthunt.yml# Product Hunt 定时抓取
 │   ├── reaggregate.yml       # 主题手动重聚合
+│   ├── enrich.yml            # 摘要 + 主题聚合（每天一轮）
+│   ├── freshness-check.yml   # 数据新鲜度巡检
+│   ├── visibility-check.yml  # 可展示性巡检
 │   ├── test.yml              # 单元 + 集成测试 + 覆盖率门槛
 │   ├── security.yml          # Semgrep SAST + npm audit
 │   └── gitleaks.yml          # 密钥扫描

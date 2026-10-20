@@ -1,0 +1,47 @@
+name: Content Visibility Check
+# 可展示性巡检 —— 「徽标有数字、列表没内容」的唯一兜底
+#
+# 为什么需要（真实事故 2026-10）：
+# 徽标数字统计 raw_items 的未读行数，列表渲染 topic_groups。
+# 内容已入库、但没挂上任何主题组时，两套口径脱钩：
+# 用户看到 GitHub 徽标 8、列表整页空白，而这些内容全站无处可寻。
+# 新鲜度巡检看不见这件事（数据天天有入库，巡检永远绿）。
+#
+# 本巡检把「内容能不能被看到」变成主动推送的指标：
+# 某源有未读内容却一个主题组都没有 / 未读内容卡在未归组超过阈值
+# → 非 0 退出 → workflow 红 → 通知。
+on:
+  schedule:
+    # 每天 3 次：抓取 + 富化各跑一轮之后各查一次
+    - cron: '0 7,15,23 * * *'
+  workflow_dispatch:
+concurrency:
+  group: visibility-check
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Check content visibility
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx tsx scripts/check-visibility.ts
+      - name: Report failure to Sentry
+        if: failure()
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          npx --yes @sentry/cli send-event \
+            -m "🚨 可展示性巡检失败：存在「徽标有数字、列表没内容」的来源（run ${{ github.run_id }}）" \
+            --log-level error \
+            --fingerprint "news-monitor-visibility-$(date +%F)"

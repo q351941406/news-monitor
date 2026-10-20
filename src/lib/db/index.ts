@@ -19,12 +19,20 @@ export {
   getNewsCounts,
   getArchivedNews,
   getLastIngestedBySource,
+  type SourceCounts,
 } from './news-repo'
 export { storeAIAnalysis, getUnprocessedItems } from './ai-repo'
 export { markAsRead, markAsUnread, markAllAsRead, resetAllRead } from './read-repo'
 export {
   initDatabase,
   storeTopicGroups,
+  getUngroupedItems,
+  getUngroupedSummaryBySource,
+  getTopicGroupCountsBySource,
+  requeueUngroupedItems,
+  type StoreTopicGroupsResult,
+  type UngroupedItem,
+  type UngroupedSummary,
   deleteEmptyTopics,
   deleteReadEmptyTopics,
   deleteReadEmptyTopicsByItemId,
@@ -43,8 +51,14 @@ export {
   markGroupAsRead,
 } from './topic-repo'
 export { getUnreadCount } from './stats-repo'
+export {
+  getCustomPromptTemplate,
+  saveCustomPromptTemplate,
+  deleteCustomPromptTemplate,
+} from './prompt-repo'
 export { logRun, getRecentRuns, getDailyStats, getSourceStats, getMetrics } from './run-log-repo'
 // 保留类型向后兼容
 export type { RawItem, NewRawItem } from '../schema'
+export type { AIPrompt, NewAIPrompt } from '../schema'
 export type { AIAnalysis, NewAIAnalysis } from '../schema'
 export type { RunLog, NewRunLog } from '../schema'

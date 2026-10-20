@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { getTopicGroupMeta, getNewsCounts } from '@/lib/db'
+import { getTopicGroupMeta, getNewsCounts, getUngroupedItems } from '@/lib/db'
 import HomeView from './components/HomeView'
 
 /**
@@ -31,12 +31,22 @@ export const metadata: Metadata = {
 }
 
 export default async function Home() {
-  const [github, producthunt, twitter, counts] = await Promise.all([
+  const [github, producthunt, twitter, counts, pendingItems] = await Promise.all([
     getTopicGroupMeta('github', true),
     getTopicGroupMeta('producthunt', true),
     getTopicGroupMeta('twitter', true),
     getNewsCounts(),
+    // 待归组条目（未读且没挂上任何主题组）—— 必须随首屏一起渲染，
+    // 否则徽标上的未读数字在页面里找不到对应内容
+    getUngroupedItems('all', 100),
   ])
   const topics = { github, producthunt, twitter }
-  return <HomeView initialTopics={topics} initialCounts={counts} initialShowRead={true} />
+  return (
+    <HomeView
+      initialTopics={topics}
+      initialCounts={counts}
+      initialShowRead={true}
+      initialPendingItems={pendingItems}
+    />
+  )
 }

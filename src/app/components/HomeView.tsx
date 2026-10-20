@@ -4,6 +4,7 @@ import { getAdminToken, setAdminToken, clearAdminToken, adminFetch } from '../..
 import Header from './Header'
 import SourceTabs from './SourceTabs'
 import TopicGroup from './TopicGroup'
+import PendingItems, { type PendingItem } from './PendingItems'
 interface NewsItem {
   id: string
   source: string
@@ -25,7 +26,14 @@ interface TopicGroupMeta {
 }
 interface SourceCounts {
   total: number
+  /** 未读总数（徽标口径） */
   unread: number
+  /** 未读且已归入主题组（前台列表里看得见） */
+  groupedUnread: number
+  /** 未读但没归组（徽标在数、列表里看不见 —— 前台会渲染成「待归组内容」） */
+  ungroupedUnread: number
+  /** 未读且还没有 AI 摘要（富化流水线尚未处理到） */
+  pendingSummary: number
 }
 /** 来源标签栏的单项数据 */
 interface SourceTab {
@@ -42,8 +50,15 @@ interface HomeViewProps {
   initialCounts: Record<string, SourceCounts>
   /** 首屏是否显示已读（SEO 场景默认 true，展示全部内容） */
   initialShowRead: boolean
+  /** 服务端预取的待归组条目（未读且没挂上任何主题组） */
+  initialPendingItems?: PendingItem[]
 }
-export default function HomeView({ initialTopics, initialCounts, initialShowRead }: HomeViewProps) {
+export default function HomeView({
+  initialTopics,
+  initialCounts,
+  initialShowRead,
+  initialPendingItems = [],
+}: HomeViewProps) {
   const [topics, setTopics] = useState<Record<string, TopicGroupMeta[]>>(initialTopics)
   /** 已加载的主题组 items 缓存：{ topicId: NewsItem[] } */
   const [groupItems, setGroupItems] = useState<Record<string, NewsItem[]>>({})
@@ -54,8 +69,18 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
   const [showRead, setShowRead] = useState(initialShowRead)
   const [isAdmin, setIsAdmin] = useState(false)
   const [activeSource, setActiveSource] = useState('all')
+  /**
+   * 待归组条目：未读、且没挂上任何主题组的内容。
+   *
+   * 这批条目正是「徽标有数字、列表没内容」的元凶（线上：GitHub 徽标 8、
+   * 列表空白，全站无处可寻）。它们必须被显式渲染出来，
+   * 否则徽标上的数字在页面上找不到任何对应物。
+   */
+  const [pendingItems, setPendingItems] = useState<PendingItem[]>(initialPendingItems)
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null)
   const isFirstRender = useRef(true)
+  /** 待归组首屏专用：首屏用服务端预取，切换来源时才重新拉取 */
+  const isFirstPendingRender = useRef(true)
   const prevShowRead = useRef(showRead)
   useEffect(() => {
     setIsAdmin(!!getAdminToken())
@@ -129,6 +154,30 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
     }
     fetchData()
   }, [fetchData])
+  /**
+   * 拉取当前来源下的待归组条目（未读且没归组）。
+   * 与主题组列表分开请求：这个集合很小（线上共 71 条），但缺了它，
+   * 徽标上的数字就会变成无法解释的数字。
+   */
+  const fetchPending = useCallback(async (source: string) => {
+    try {
+      const res = await fetch(`/api/news/ungrouped?source=${encodeURIComponent(source)}&limit=100`)
+      const data = await res.json()
+      setPendingItems(data.data || [])
+    } catch (error) {
+      console.error('Failed to fetch pending items:', error)
+    }
+  }, [])
+
+  useEffect(() => {
+    // 首屏用服务端预取数据；切换来源时才重新拉取
+    if (isFirstPendingRender.current) {
+      isFirstPendingRender.current = false
+      return
+    }
+    void fetchPending(activeSource)
+  }, [activeSource, fetchPending])
+
   // showRead 切换后，items 缓存基于旧过滤条件，需要整体清空
   useEffect(() => {
     if (prevShowRead.current === showRead) return
@@ -164,16 +213,16 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
     },
     [groupItems],
   )
-  /** 找到某 item 的 source */
+  /** 找到某 item 的 source（主题组内 + 待归组列表都要找） */
   const findSourceOfItem = useCallback(
     (itemId: string): string | undefined => {
       for (const gid of Object.keys(groupItems)) {
         const item = groupItems[gid].find((i) => i.id === itemId)
         if (item) return item.source
       }
-      return undefined
+      return pendingItems.find((i) => i.id === itemId)?.source
     },
-    [groupItems],
+    [groupItems, pendingItems],
   )
   /** 写操作前记住「焦点当前属于哪一组」，用于操作后把焦点接回来 */
   const focusTopicRef = useRef<string | null>(null)
@@ -256,6 +305,20 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
           ...prev,
           [source]: { ...prev[source], unread: Math.max(0, prev[source].unread - 1) },
         }))
+      }
+      // 待归组条目：标记已读后即从「待归组内容」移除
+      // （后端只返回未读的未归组条目，已读即消失 —— 与「读完即消失」的产品语义一致）
+      if (pendingItems.some((i) => i.id === itemId)) {
+        setPendingItems((prev) => prev.filter((i) => i.id !== itemId))
+        if (source) {
+          setCounts((prev) => ({
+            ...prev,
+            [source]: {
+              ...prev[source],
+              ungroupedUnread: Math.max(0, (prev[source]?.ungroupedUnread || 0) - 1),
+            },
+          }))
+        }
       }
     } catch (error) {
       console.error('Failed to mark as read:', error)
@@ -376,10 +439,12 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
       setCounts((prev) => {
         const updated = { ...prev }
         for (const source of Object.keys(updated)) {
-          updated[source] = { ...updated[source], unread: 0 }
+          updated[source] = { ...updated[source], unread: 0, ungroupedUnread: 0 }
         }
         return updated
       })
+      // 全部已读 → 待归组内容（只含未读条目）随之清空
+      setPendingItems([])
     } catch (error) {
       console.error('Failed to mark all as read:', error)
     }
@@ -405,10 +470,16 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
       setCounts((prev) => {
         const updated = { ...prev }
         for (const source of Object.keys(updated)) {
+          // 未读数确实回到 total；ungroupedUnread 的真值要重新查
+          // （已读且**有组**的条目重置后也不该算「未归组」，
+          //   猜成 total 会让徽标上的待归组标记虚高）
           updated[source] = { ...updated[source], unread: updated[source].total }
         }
         return updated
       })
+      // 重置后已读条目重新变回未读 → 主题组与待归组集合都会变，重新拉一次
+      void fetchData()
+      void fetchPending(activeSource)
     } catch (error) {
       console.error('Failed to reset all read:', error)
     }
@@ -426,6 +497,7 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
         icon: '🐙',
         count: counts.github?.total || 0,
         unread: counts.github?.unread || 0,
+        pending: counts.github?.ungroupedUnread || 0,
       },
       {
         id: 'producthunt',
@@ -433,6 +505,7 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
         icon: '🚀',
         count: counts.producthunt?.total || 0,
         unread: counts.producthunt?.unread || 0,
+        pending: counts.producthunt?.ungroupedUnread || 0,
       },
       {
         id: 'twitter',
@@ -440,6 +513,7 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
         icon: '𝕏',
         count: counts.twitter?.total || 0,
         unread: counts.twitter?.unread || 0,
+        pending: counts.twitter?.ungroupedUnread || 0,
       },
     ],
     [counts],
@@ -477,7 +551,7 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
             <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin mb-4" />
             <p className="text-stone-500">加载中...</p>
           </div>
-        ) : currentTopics.length === 0 ? (
+        ) : currentTopics.length === 0 && pendingItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <p className="text-stone-400 text-lg">{showRead ? '暂无数据' : '没有未读内容 🎉'}</p>
           </div>
@@ -502,6 +576,12 @@ export default function HomeView({ initialTopics, initialCounts, initialShowRead
                 canOperate={isAdmin}
               />
             ))}
+            {/*
+              待归组内容：徽标在数、主题组列表里却没有的那部分。
+              没有它，徽标数字就成了页面上找不到对应物的"幽灵数字"
+              （线上事故：GitHub 徽标 8、列表空白）。
+            */}
+            <PendingItems items={pendingItems} onMarkRead={handleMarkRead} canOperate={isAdmin} />
           </div>
         )}
       </main>

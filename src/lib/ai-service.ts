@@ -6,6 +6,13 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { generateText, Output, NoObjectGeneratedError, NoOutputGeneratedError } from 'ai'
 import { logAIUsage } from './db/ai-usage-repo'
+import { getCustomPromptTemplate } from './db/prompt-repo'
+import {
+  GITHUB_SINGLE_SUMMARY_KEY,
+  DEFAULT_GITHUB_SINGLE_SUMMARY_TEMPLATE,
+  buildGithubSingleSummaryVars,
+  renderTemplate,
+} from './prompts'
 import { z } from 'zod'
 
 // ─── 类型定义 ───────────────────────────────────────────
@@ -88,7 +95,6 @@ const batchSchema = z.object({
 })
 
 const singleSchema = z.object({
-  id: z.string().describe('原始数据的 ID'),
   summary: z.string().describe('一句话概括核心内容'),
   details: z.string().describe('补充重要信息，可以自由发挥'),
 })
@@ -156,36 +162,58 @@ function splitBatches<T>(
   return batches
 }
 
-function buildSingleSummaryPrompt(item: {
+/**
+ * GitHub 单条摘要 prompt：模板来自设置页定制（ai_prompts 表），
+ * 未定制时用默认模板（与历史硬编码逐字等价，零回归）。
+ *
+ * 进程内缓存 60s：ai-process 单次运行逐条调用（最多 50 条），
+ * 每条都查库是浪费；后台改完设置最多 60s 生效，可接受。
+ */
+let cachedSingleSummaryTemplate: { template: string; fetchedAt: number } | null = null
+const PROMPT_CACHE_TTL_MS = 60_000
+
+async function resolveSingleSummaryTemplate(): Promise<string> {
+  const now = Date.now()
+  if (
+    cachedSingleSummaryTemplate &&
+    now - cachedSingleSummaryTemplate.fetchedAt < PROMPT_CACHE_TTL_MS
+  ) {
+    return cachedSingleSummaryTemplate.template
+  }
+  // prompt-repo 读失败时返回 null（内部已吞错）；此处再兜一层，
+  // 任何异常都回退默认模板继续跑：提示词只是配置，读不到不用阻断 AI
+  let custom: string | null = null
+  try {
+    custom = await getCustomPromptTemplate(GITHUB_SINGLE_SUMMARY_KEY)
+  } catch (err) {
+    console.warn('[ai-service] 提示词模板读取失败，回退默认模板:', err)
+  }
+  const template = custom ?? DEFAULT_GITHUB_SINGLE_SUMMARY_TEMPLATE
+  cachedSingleSummaryTemplate = { template, fetchedAt: now }
+  return template
+}
+
+/** 测试用：清空提示词模板缓存（避免用例间互相污染） */
+export function __resetPromptCacheForTest(): void {
+  cachedSingleSummaryTemplate = null
+}
+
+async function buildSingleSummaryPrompt(item: {
   id: string
   title: string | null
   rawData: unknown
-}): string {
-  const data = item.rawData as Record<string, unknown>
-  let keyInfo = ''
-  if (data.description) keyInfo += `描述: ${data.description}\n`
-  if (data.language) keyInfo += `语言: ${data.language}\n`
-  if (data.stars) keyInfo += `Stars: ${data.stars}\n`
-  if (data.starsToday) keyInfo += `今日新增 Stars: ${data.starsToday}\n`
-  // README 可能极大（数十万字符），超出多数模型的上下文上限会导致整条失败；
-  // 故截取前 README_MAX_CHARS 字符，保留项目核心信息（开头通常含简介/特性/用法）。
-  const README_MAX_CHARS = 24_000
-  const rawReadme = typeof data.readme === 'string' ? data.readme : ''
-  const readmeBlock = rawReadme
-    ? `\nREADME 全文（可能含 HTML，忽略其中的图片/徽章/样式）：\n${rawReadme.slice(0, README_MAX_CHARS)}${rawReadme.length > README_MAX_CHARS ? '\n\n[README 过长，已截断至前 24000 字符]' : ''}\n`
-    : ''
-  return `请用中文详细分析以下 GitHub 仓库内容。
-ID: ${item.id}
-标题: ${item.title || '无'}
-${keyInfo}${readmeBlock}
-要求：
-- 摘要：详细概括仓库核心内容，包含关键背景和上下文
-- 重点：提取所有重要细节、技术要点、应用场景、特性
-严格按以下 JSON 结构输出：
-{"id":"${item.id}","summary":"一句话概括","details":"补充信息"}
-- id 必须原样返回，不要改动
-- 保留原文中的具体数据、技术术语、关键信息`
+}): Promise<string> {
+  const template = await resolveSingleSummaryTemplate()
+  return renderTemplate(
+    template,
+    buildGithubSingleSummaryVars({
+      id: item.id,
+      title: item.title,
+      rawData: item.rawData as Record<string, unknown>,
+    }),
+  )
 }
+
 function buildBatchPrompt(
   items: Array<{ id: string; title: string | null; rawData: unknown }>,
 ): string {
@@ -253,6 +281,8 @@ ID: "${item.id}"
 - 只有确实无法归入任何已有主题的新方向，才创建新主题（数量尽量少）
 - 同类或相似内容最好合并为一个主题，禁止为同类内容重复建主题
 - 输出**全部相关主题**（包括你有把握的已有主题 + 新建主题），不要遗漏任何一条内容
+- **条目可能只有 1-2 条**（低频数据源每天就几条新内容）：此时也要为每条内容建立主题，
+  绝不允许返回空数组——每条内容都必须有归属，否则它不会出现在任何列表里
 ${content}
 每个主题包含：topic（主题名称，必须简洁：≤12字、无括号、无平台/工具细节）、summary（完整概括：平台/工具/细节全放这里）、itemIds（包含的新闻 ID）。
 规则：同类内容的 topic 名称必须完全一致（如「游戏作弊与外挂工具」），禁止用括号加细节区分。
@@ -262,6 +292,12 @@ itemIds 必须**原样照抄**条目中 ID: 后面引号内的完整值（如 "g
 {"groups":[{"topic":"主题名","summary":"完整概括","itemIds":["完整ID1","完整ID2"]}]}`
 }
 
+/** AI 单次调用的返回值：解析后的结构化数据 + 模型输出的原始文本 */
+export interface AICallResult<T> {
+  data: T
+  rawText: string
+}
+
 async function callAIWithRetry<T>(
   model: ReturnType<typeof createClient>,
   schema: z.ZodSchema<T>,
@@ -269,7 +305,8 @@ async function callAIWithRetry<T>(
   maxRetries: number = 3,
   maxOutputTokens: number = 384000,
   operation: string = 'batchSummarize',
-): Promise<T | null> {
+  abortSignal?: AbortSignal,
+): Promise<AICallResult<T> | null> {
   const startedAt = Date.now()
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -278,6 +315,7 @@ async function callAIWithRetry<T>(
         output: Output.object({ schema }),
         maxOutputTokens,
         providerOptions: aiProviderOptions(),
+        ...(abortSignal ? { abortSignal } : {}),
         // OpenAI 兼容协议：json_object 模式要求 prompt 含 "json" 字样并给出结构样例
         // （DeepSeek JSON Output 的两条硬性要求）；思考模式的开关见 aiProviderOptions()
         prompt: `${prompt}\n\n严格以 JSON 格式输出，不要包含任何 JSON 以外的内容。`,
@@ -292,8 +330,23 @@ async function callAIWithRetry<T>(
         status: 'success',
         attempts: attempt,
       })
-      return result.output as T
+      // data 给生产消费（落盘/聚合），rawText 给效果测试展示"模型到底回了什么"
+      return { data: result.output as T, rawText: result.text }
     } catch (error) {
+      // 调用方主动取消（超时熔断）：重试没有意义，直接记失败埋点后回 null。
+      // 注意放最前：AbortError 不是"模型没给 JSON"，不能进下面的重试分支。
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log(`  🛑 Aborted (attempt ${attempt}/${maxRetries})：调用超时，不再重试`)
+        void logAIUsage({
+          operation,
+          inputTokens: estimateTokens(prompt),
+          outputTokens: 0,
+          durationMs: Date.now() - startedAt,
+          status: 'failure',
+          attempts: attempt,
+        })
+        return null
+      }
       // 两类错误都表示"模型没能给出可用 JSON"：
       //   NoObjectGeneratedError —— 有响应但 JSON 解析/schema 校验失败
       //   NoOutputGeneratedError —— 根本没有输出（如被 maxOutputTokens 截断）
@@ -340,6 +393,36 @@ async function callAIWithRetry<T>(
   }
   return null
 }
+/**
+ * 用给定 prompt 直接跑一次 GitHub 单条摘要。
+ *
+ * 生产路径（generateSingleSummary）与设置页效果测试共用它，
+ * 保证「测到的」就是「跑出来的」同一条调用链。
+ * operation 区分用量归属：测试调用记为 singleSummaryTest，
+ * 在运维仪表盘的 AI 卡片里可单独看到测试消耗。
+ */
+export async function runSingleSummaryPrompt(
+  prompt: string,
+  opts: { maxRetries?: number; operation?: string; timeoutMs?: number } = {},
+): Promise<{ result: { summary: string; details: string }; raw: string } | null> {
+  const { maxRetries = 3, operation = 'singleSummary', timeoutMs } = opts
+  const model = createClient()
+  // 超时熔断（给 serverless 用的）：AbortSignal 到时中断 generateText，
+  // 中断错误在 callAIWithRetry 里视为 terminal（不再重试），最终回 null。
+  // 目的：hang 住也要回 JSON，不能让网关替我们报 502/504。
+  const abortSignal = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined
+  const output = await callAIWithRetry(
+    model,
+    singleSchema,
+    prompt,
+    maxRetries,
+    MAX_OUTPUT_TOKENS,
+    operation,
+    abortSignal,
+  )
+  return output ? { result: output.data, raw: output.rawText } : null
+}
+
 // ─── Factory ────────────────────────────────────────────
 
 export function createAIService(): AIService {
@@ -365,8 +448,8 @@ export function createAIService(): AIService {
           MAX_OUTPUT_TOKENS,
           'batchSummarize',
         )
-        if (output?.results) {
-          allResults.push(...output.results)
+        if (output?.data.results) {
+          allResults.push(...output.data.results)
         }
       }
 
@@ -374,19 +457,18 @@ export function createAIService(): AIService {
     },
 
     async generateSingleSummary(item) {
-      const prompt = buildSingleSummaryPrompt(item)
-      const output = await callAIWithRetry(
-        model,
-        singleSchema,
-        prompt,
-        3,
-        MAX_OUTPUT_TOKENS,
-        'singleSummary',
-      )
-      return output || null
+      const prompt = await buildSingleSummaryPrompt(item)
+      const output = await runSingleSummaryPrompt(prompt)
+      if (!output) return null
+      // 单条摘要：id 由调用方持有，不信任模型回显；summary/details 由模型生成
+      return { id: item.id, summary: output.result.summary, details: output.result.details }
     },
     async generateTopicAggregation(items, existingTopics) {
-      if (items.length < 3) return []
+      // 阈值曾为 3：低频数据源（GitHub 每天净增 2-4 条）永远凑不满，
+      // 于是永远产不出主题组 —— 线上实测 github 主题组长期为 0，
+      // 而条目照样入库、照样被徽标计数，形成"有数字、没内容"。
+      // 1 条也要聚类：让 AI 为它建一个主题，条目才有归属。
+      if (items.length < 1) return []
       const prompt = buildTopicPrompt(items, existingTopics)
       const output = await callAIWithRetry(
         model,
@@ -396,7 +478,7 @@ export function createAIService(): AIService {
         MAX_OUTPUT_TOKENS,
         'topicAggregation',
       )
-      return output?.groups || []
+      return output?.data.groups || []
     },
   }
 }

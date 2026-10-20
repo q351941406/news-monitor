@@ -16,5 +16,6 @@ export async function getUnreadCount(source?: string): Promise<number> {
     .select({ count: sql<number>`count(*)::int` })
     .from(rawItems)
     .where(condition)
+  // v8 ignore next -- COUNT 聚合恒返回一行，此处仅是类型兜底
   return result?.count ?? 0
 }

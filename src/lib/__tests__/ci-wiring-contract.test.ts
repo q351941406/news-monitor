@@ -125,3 +125,50 @@ describe('CI 接线契约：源码依赖必须在 workflow 中被满足', () => 
     })
   })
 })
+
+/**
+ * 覆盖率门禁的接线契约
+ *
+ * 为什么也要锁（真实风险）：
+ * 覆盖率门禁的代码在 scripts/merge-coverage.ts，而**执行它的是 CI 配置**。
+ * 契约的两半分处两个文件，review 同一个 diff 看不出矛盾 ——
+ * 和上面「凭据注入被剪断」是同一类事故：门禁被静默摘掉时，
+ * 仓库看起来一切正常，实际上再也没有东西拦得住覆盖率下滑。
+ *
+ * 本测试把「CI 必须真的执行门禁、门禁必须是 90%」变成断言。
+ */
+describe('CI 接线契约：覆盖率门禁不能被静默摘掉', () => {
+  const testWorkflow = fs.readFileSync(path.join(WORKFLOWS_DIR, 'test.yml'), 'utf-8')
+  const mergeScript = fs.readFileSync(path.join(ROOT, 'scripts/merge-coverage.ts'), 'utf-8')
+
+  it('CI 必须执行 merge-coverage（真正的那道门禁）', () => {
+    expect(testWorkflow).toContain('test:coverage:merge')
+  })
+
+  it('门禁必须是四项全 >= 90%（不是旧的 80）', () => {
+    const thresholds = mergeScript.match(/const thresholds = \{([^}]*)\}/)
+    expect(thresholds).not.toBeNull()
+    const body = thresholds![1]
+    for (const metric of ['lines', 'statements', 'functions', 'branches']) {
+      expect(body).toMatch(new RegExp(`${metric}: 90`))
+    }
+  })
+
+  it('覆盖率门禁必须是独立 job（失败要能被分支保护单独拦下）', () => {
+    expect(testWorkflow).toMatch(/^  coverage:\s*$/m)
+  })
+
+  it('unit 与 integration 的覆盖率报告都要传给门禁 job', () => {
+    expect(testWorkflow).toContain('coverage-unit')
+    expect(testWorkflow).toContain('coverage-integration')
+    expect(testWorkflow).toContain('download-artifact')
+  })
+
+  it('unit 配置不再设本地覆盖率阈值（避免两处数字打架）', () => {
+    const vitestConfig = fs.readFileSync(path.join(ROOT, 'vitest.config.mjs'), 'utf-8')
+    const thresholds = vitestConfig.match(/thresholds: \{([\s\S]*?)\}/)
+    expect(thresholds).not.toBeNull()
+    // 阈值一律为 0（关闭），真实门禁只在 merge-coverage
+    expect(thresholds![1]).not.toMatch(/(lines|branches|functions|statements):\s*[1-9]/)
+  })
+})

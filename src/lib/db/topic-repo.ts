@@ -6,7 +6,7 @@
  * - getTopicGroupItems: 点击展开时才拉单组 items，一条 JOIN
  * - markGroupAsRead: 整组标记已读，单条 UPDATE
  */
-import { eq, and } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import { rawItems, topicGroups, topicItems } from '../schema'
 import { getDb, getPgPool, type NewsItem } from './connection'
 /** 初始化数据库表 */
@@ -43,15 +43,77 @@ export async function initDatabase() {
   `)
 }
 /**
+ * 落组结果：**只有真正挂进某个主题组的条目**才算消费成功。
+ *
+ * 为什么要显式返回（2026-10 修复「徽标有数字、列表没内容」）：
+ * 此前本函数返回 void，调用方（scripts/topic-aggregate.ts）只能把**整批**都标记成
+ * 「已聚合」—— 于是 AI 漏掉的、或 id 对不上的条目被"假消费"：
+ * 它们不在任何主题组里（前台看不见），却已被 aggregated_at 标记为已消费；
+ * 而聚合队列只捞 aggregated_at IS NULL 的条目，于是这些内容永久隐身。
+ * 线上实测：github 365 条全部不在任何主题组（徽标显示 8 条未读，列表却为空）。
+ */
+export interface StoreTopicGroupsResult {
+  /** 成功关联到主题组的 item id（已存在关联也算 —— 它确实在某个组里） */
+  linked: string[]
+  /** 未关联的 item id（AI 返回了，但库里找不到对应条目） */
+  skipped: string[]
+}
+
+/**
+ * id 候选：原值 → 补前缀 → 两者的全小写变体。
+ *
+ * 全小写变体是必需的：GitHub 的 id 已按 ADR-0006 归一化为小写
+ * （github:owner/repo），而 AI 常照抄标题里的原始大小写
+ * （github:deepseek-ai/DeepGEMM）—— 旧实现大小写敏感，这类条目 100% 对不上，
+ * 被静默跳过（线上日志：⚠️ Skipping invalid itemId），最终永久隐身。
+ */
+export function buildIdCandidates(source: string, itemId: string): string[] {
+  const prefix = SOURCE_PREFIX[source] ?? `${source}:`
+  const base = itemId.includes(':') ? [itemId] : [itemId, `${prefix}${itemId}`]
+  const out: string[] = []
+  for (const c of base) {
+    for (const variant of [c, c.toLowerCase()]) {
+      if (!out.includes(variant)) out.push(variant)
+    }
+  }
+  return out
+}
+
+/**
+ * 按标题回退匹配：AI 照抄标题（owner/repo 原始大小写）时，id 候选全部落空。
+ *
+ * 只在**标题唯一命中**时才采用（PH 的标题是产品名，可能重名，
+ * 重名时宁可放弃，也不能把内容挂到错误的条目上）。
+ */
+async function resolveByTitle(
+  db: ReturnType<typeof getDb>,
+  source: string,
+  itemId: string,
+): Promise<string | null> {
+  const bare = itemId.replace(/^[a-z]+:/i, '').trim()
+  if (!bare) return null
+  const rows = await db
+    .select({ id: rawItems.id })
+    .from(rawItems)
+    .where(and(eq(rawItems.source, source), sql`lower(${rawItems.title}) = lower(${bare})`))
+    .limit(2)
+  return rows.length === 1 ? rows[0].id : null
+}
+
+/**
  * 增量 upsert 主题聚合（不再全删重建）
  * - AI 返回的组按 topic 名归并：已有同名主题 → 追加成员；新主题 → 新建组
  * - 幂等：item 已存在于该主题下则跳过
+ * - 返回落组结果：调用方据此决定哪些条目可以标记为「已聚合」
  */
 export async function storeTopicGroups(
   source: string,
   groups: Array<{ topic: string; summary: string; itemIds: string[] }>,
-): Promise<void> {
+): Promise<StoreTopicGroupsResult> {
   const db = getDb()
+  const linked: string[] = []
+  const linkedSet = new Set<string>()
+  const skipped: string[] = []
   // 取该 source 已有主题，建立 topic名 → id 映射（复用同名主题，避免主题漂移）
   const existing = await db
     .select({ id: topicGroups.id, topic: topicGroups.topic })
@@ -78,12 +140,9 @@ export async function storeTopicGroups(
     }
     for (const itemId of group.itemIds) {
       // 容错：AI 可能省略 source 前缀（如返回 "owner/repo" 而非 "github:owner/repo"），
-      // 依次尝试 原值 → 补前缀值，命中的才做关联
-      const candidates = itemId.includes(':')
-        ? [itemId]
-        : [itemId, `${SOURCE_PREFIX[source] ?? `${source}:`}${itemId}`]
+      // 也可能照抄标题里的原始大小写 —— 依次尝试候选，命中的才做关联
       let linkedItemId: string | null = null
-      for (const candidate of candidates) {
+      for (const candidate of buildIdCandidates(source, itemId)) {
         const exists = await db
           .select({ id: rawItems.id })
           .from(rawItems)
@@ -94,22 +153,33 @@ export async function storeTopicGroups(
           break
         }
       }
+      // id 全不命中 → 按标题回退（唯一命中才采用）
+      if (!linkedItemId) {
+        linkedItemId = await resolveByTitle(db, source, itemId)
+      }
       if (!linkedItemId) {
         console.log(`  ⚠️ Skipping invalid itemId: ${itemId}`)
+        skipped.push(itemId)
         continue
       }
       // 幂等：已存在关联则跳过
-      const linked = await db
+      const already = await db
         .select({ topicId: topicItems.topicId })
         .from(topicItems)
         .where(and(eq(topicItems.topicId, topicId), eq(topicItems.itemId, linkedItemId)))
         .limit(1)
-      if (linked.length === 0) {
+      if (already.length === 0) {
         await db.insert(topicItems).values({ topicId, itemId: linkedItemId })
+      }
+      if (!linkedSet.has(linkedItemId)) {
+        linkedSet.add(linkedItemId)
+        linked.push(linkedItemId)
       }
     }
   }
+  return { linked, skipped }
 }
+
 /** 删除该 source 下已无任何 items 的空主题（主题组不再保留空壳） */
 export async function deleteEmptyTopics(source: string): Promise<number> {
   const pool = getPgPool()
@@ -119,6 +189,7 @@ export async function deleteEmptyTopics(source: string): Promise<number> {
        AND NOT EXISTS (SELECT 1 FROM topic_items ti WHERE ti.topic_id = tg.id)`,
     [source],
   )
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 
@@ -141,6 +212,7 @@ export async function deleteReadEmptyTopicsByItemId(itemId: string): Promise<num
        )`,
     [itemId],
   )
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 
@@ -157,6 +229,7 @@ export async function deleteReadEmptyTopics(topicIds: string[]): Promise<number>
        )`,
     [topicIds],
   )
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 
@@ -174,6 +247,7 @@ export async function deleteReadEmptyTopicsBySource(source: string): Promise<num
        )`,
     [source],
   )
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 
@@ -195,6 +269,7 @@ export async function getExistingTopics(
   return rows.map((r) => ({
     topic: r.topic as string,
     summary: r.summary as string,
+    // v8 ignore next -- SQL 侧 COUNT(...)::int 恒非 null，此处仅是类型兜底
     itemCount: (r.item_count as number) ?? 0,
   }))
 }
@@ -255,6 +330,7 @@ export async function getPendingItemCount(source: string): Promise<number> {
      WHERE ri.source = $1 AND ri.aggregated_at IS NULL AND aa.summary IS NOT NULL`,
     [source],
   )
+  // v8 ignore next -- COUNT 聚合恒返回一行，此处仅是类型兜底
   return rows[0]?.cnt ?? 0
 }
 /** 标记一批 item 已聚合（队列消费完成，时间戳=现在，相当于挪到队尾） */
@@ -264,6 +340,7 @@ export async function resetAggregationMarks(source: string): Promise<number> {
   const result = await pool.query('UPDATE raw_items SET aggregated_at = NULL WHERE source = $1', [
     source,
   ])
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 export async function markItemsAggregated(itemIds: string[]): Promise<void> {
@@ -278,6 +355,7 @@ export async function markItemsAggregated(itemIds: string[]): Promise<void> {
 export async function deleteAllTopics(source: string): Promise<number> {
   const pool = getPgPool()
   const result = await pool.query('DELETE FROM topic_groups WHERE source = $1', [source])
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 /** 主题组元信息（不含 items，列表轻量加载用） */
@@ -316,6 +394,162 @@ export async function getTopicGroupMeta(
   // 未勾选"显示已读"时，过滤掉全已读的组
   return showAll ? groups : groups.filter((g) => g.unreadCount > 0)
 }
+/**
+ * 未归组条目：**未读 且 不在任何主题组里**。
+ *
+ * 为什么需要这个查询（2026-10 修复「徽标有数字、列表没内容」）：
+ * 徽标数字来自 raw_items 的未读行数，而列表渲染的是 topic_groups。
+ * 两套口径一旦脱钩（条目已入库但没挂上任何主题组），就会出现
+ * "GitHub 8"却整页空白 —— 线上 github 365 条全部如此。
+ * 前台必须能把这些条目显式渲染出来（否则用户只看到一个无法解释的数字），
+ * 所以需要一个稳定入口把它们捞出来。
+ */
+export interface UngroupedItem {
+  id: string
+  source: string
+  title: string | null
+  url: string
+  summary: string | null
+  fetchedAt: number
+  isRead: boolean
+  /** 还缺 AI 摘要（富化流水线尚未处理到） */
+  pendingSummary: boolean
+}
+
+/** 查某源（或全部源）下未读且未归组的条目，按抓取时间倒序 */
+export async function getUngroupedItems(
+  source: string = 'all',
+  limit: number = 50,
+): Promise<UngroupedItem[]> {
+  const pool = getPgPool()
+  const { rows } = await pool.query(
+    `SELECT ri.id, ri.source, ri.title, ri.url, ri.fetched_at, ri.is_read,
+       aa.summary,
+       (aa.summary IS NULL) AS pending_summary
+     FROM raw_items ri
+     LEFT JOIN ai_analysis aa ON aa.item_id = ri.id
+     WHERE ($1 = 'all' OR ri.source = $1)
+       AND ri.is_read = FALSE
+       AND NOT EXISTS (SELECT 1 FROM topic_items ti WHERE ti.item_id = ri.id)
+     ORDER BY ri.fetched_at DESC
+     LIMIT $2`,
+    [source, limit],
+  )
+  return rows.map((r) => ({
+    id: r.id as string,
+    source: r.source as string,
+    title: r.title as string | null,
+    url: r.url as string,
+    summary: (r.summary as string | null) ?? null,
+    fetchedAt: Number(r.fetched_at),
+    isRead: r.is_read as boolean,
+    pendingSummary: Boolean(r.pending_summary),
+  }))
+}
+
+/**
+ * 把「没归组」的条目放回聚合队列（aggregated_at 置回 NULL）。
+ *
+ * 用途：修复存量孤儿 —— 条目被标记成「已聚合」，却没挂上任何主题组。
+ * 它们不会自己恢复：聚合队列只捞 aggregated_at IS NULL 的条目，
+ * 于是这些内容永久悬空（徽标在数、列表里看不见）。
+ *
+ * 默认**只处理未读**：已读条目按产品语义「读完即消失」，
+ * 不该重新冒出来（已读的 357 条 github 内容不算孤儿，是「读完了」）。
+ *
+ * 注意：没有 AI 摘要的条目无法直接进聚类（队列要求 summary 非空），
+ * 它们会先由富化流程补摘要，随后自然进入聚合队列。
+ */
+export async function requeueUngroupedItems(options: {
+  source?: string
+  includeRead?: boolean
+  limit?: number
+}): Promise<{ requeued: number; ids: string[]; withoutSummary: number }> {
+  const pool = getPgPool()
+  const source = options.source ?? 'all'
+  const includeRead = options.includeRead ?? false
+  const limit = options.limit ?? 500
+  const { rows } = await pool.query(
+    `WITH candidates AS (
+       SELECT ri.id,
+              EXISTS (SELECT 1 FROM ai_analysis aa WHERE aa.item_id = ri.id) AS has_summary
+       FROM raw_items ri
+       WHERE ($1 = 'all' OR ri.source = $1)
+         AND ($2 = TRUE OR ri.is_read = FALSE)
+         AND NOT EXISTS (SELECT 1 FROM topic_items ti WHERE ti.item_id = ri.id)
+       ORDER BY ri.fetched_at ASC
+       LIMIT $3
+     )
+     UPDATE raw_items ri
+     SET aggregated_at = NULL
+     FROM candidates c
+     WHERE ri.id = c.id
+     RETURNING ri.id, c.has_summary`,
+    [source, includeRead, limit],
+  )
+  return {
+    requeued: rows.length,
+    ids: rows.map((r) => r.id as string),
+    withoutSummary: rows.filter((r) => !r.has_summary).length,
+  }
+}
+
+/**
+ * 各源的主题组数量（可展示性巡检用）。
+ *
+ * 某源「有未读内容却一个组都没有」= 列表整页空白，
+ * 而徽标仍在显示未读数 —— 这正是 2026-10 线上事故的形态。
+ */
+export async function getTopicGroupCountsBySource(): Promise<Record<string, number>> {
+  const pool = getPgPool()
+  const { rows } = await pool.query(
+    `SELECT source, COUNT(*)::int AS cnt FROM topic_groups GROUP BY source`,
+  )
+  const result: Record<string, number> = { github: 0, producthunt: 0, twitter: 0 }
+  for (const r of rows) {
+    result[r.source as string] = r.cnt as number
+  }
+  return result
+}
+
+/**
+ * 每个源的「未归组」概况：数量 + 最早一条的抓取时间。
+ *
+ * 巡检用：只有当最早一条已经**卡住超过阈值**（默认 24h）才算异常 ——
+ * 刚抓取、还没轮到富化的条目属于正常在途状态，不该报警。
+ */
+export interface UngroupedSummary {
+  source: string
+  /** 未读且未归组的条目数 */
+  count: number
+  /** 其中还缺 AI 摘要的数量 */
+  pendingSummary: number
+  /** 最早一条未归组条目的抓取时间（毫秒）；无则 null */
+  oldestFetchedAt: number | null
+}
+
+export async function getUngroupedSummaryBySource(): Promise<UngroupedSummary[]> {
+  const pool = getPgPool()
+  const { rows } = await pool.query(
+    `SELECT ri.source,
+       COUNT(*)::int AS cnt,
+       COUNT(*) FILTER (WHERE aa.summary IS NULL)::int AS pending_summary,
+       MIN(ri.fetched_at) AS oldest_fetched_at
+     FROM raw_items ri
+     LEFT JOIN ai_analysis aa ON aa.item_id = ri.id
+     WHERE ri.is_read = FALSE
+       AND NOT EXISTS (SELECT 1 FROM topic_items ti WHERE ti.item_id = ri.id)
+     GROUP BY ri.source
+     ORDER BY ri.source`,
+  )
+  return rows.map((r) => ({
+    source: r.source as string,
+    count: r.cnt as number,
+    pendingSummary: r.pending_summary as number,
+    oldestFetchedAt: r.oldest_fetched_at === null ? null : Number(r.oldest_fetched_at),
+  }))
+}
+
 /** 列表用轻量条目（不含原文 readme / AI details，最重的字段在 getItemDetail 才取） */
 export interface TopicItem {
   id: string
@@ -386,6 +620,7 @@ export async function markGroupAsRead(topicId: string): Promise<number> {
      WHERE ti.topic_id = $1 AND ti.item_id = ri.id AND ri.is_read = FALSE`,
     [topicId],
   )
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 

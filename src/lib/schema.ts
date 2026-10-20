@@ -58,6 +58,15 @@ export type NewAIAnalysis = typeof aiAnalysis.$inferInsert
 export type RunLog = typeof runLogs.$inferSelect
 export type NewRunLog = typeof runLogs.$inferInsert
 
+/** AI 提示词模板（设置页可配，key 参见 src/lib/prompts.ts） */
+export const aiPrompts = pgTable('ai_prompts', {
+  key: text('key').primaryKey(), // 模板键，如 github-single-summary
+  template: text('template').notNull(), // 带 {{变量}} 占位符的模板正文
+  updatedAt: timestamp('updated_at').defaultNow().notNull(), // 最近一次手动修改时间
+})
+export type AIPrompt = typeof aiPrompts.$inferSelect
+export type NewAIPrompt = typeof aiPrompts.$inferInsert
+
 /** AI 调用用量记录（token 统计，供运维仪表盘展示） */
 export const aiUsageLogs = pgTable('ai_usage_logs', {
   id: text('id').primaryKey(), // UUID
