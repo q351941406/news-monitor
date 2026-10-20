@@ -89,7 +89,7 @@ jobs:
         run: npm run db:migrate
       - name: Integration tests (with coverage)
         env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/news_monitor_test
+          DATABASE_URL: postgresql://test:test@localhost:5432/news_monitor_test
         run: npm run test:coverage:integration
       - name: Upload integration coverage report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
