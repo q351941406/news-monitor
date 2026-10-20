@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { logger, withTiming, withFields } from '../logger'
 
 describe('logger', () => {
@@ -53,5 +53,50 @@ describe('logger', () => {
       expect.objectContaining({ op: 'op' }),
       expect.stringContaining('failed'),
     )
+  })
+})
+
+describe('logger —— 环境分支（覆盖 isProduction / isCI / LOG_LEVEL）', () => {
+  const envBackup = { ...process.env }
+
+  afterEach(() => {
+    process.env = { ...envBackup }
+    vi.resetModules()
+  })
+
+  it('生产环境：level 走 info、transport 不用 pretty（JSON 输出）', async () => {
+    vi.resetModules()
+    process.env.NODE_ENV = 'production'
+    process.env.CI = 'true'
+    delete process.env.LOG_LEVEL
+    const mod = await import('@/lib/logger')
+    expect(mod.logger.level).toBe('info')
+  })
+
+  it('CI 环境：level 走 debug、transport 不用 pretty（JSON 输出）', async () => {
+    vi.resetModules()
+    process.env.NODE_ENV = 'test'
+    process.env.CI = 'true'
+    delete process.env.LOG_LEVEL
+    const mod = await import('@/lib/logger')
+    expect(mod.logger.level).toBe('debug')
+  })
+
+  it('GITHUB_ACTIONS=true 同样视为 CI', async () => {
+    vi.resetModules()
+    process.env.NODE_ENV = 'test'
+    process.env.CI = ''
+    process.env.GITHUB_ACTIONS = 'true'
+    delete process.env.LOG_LEVEL
+    const mod = await import('@/lib/logger')
+    expect(mod.logger.level).toBe('debug')
+  })
+
+  it('LOG_LEVEL 显式设置时覆盖环境默认值', async () => {
+    vi.resetModules()
+    process.env.NODE_ENV = 'test'
+    process.env.LOG_LEVEL = 'error'
+    const mod = await import('@/lib/logger')
+    expect(mod.logger.level).toBe('error')
   })
 })

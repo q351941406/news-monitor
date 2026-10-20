@@ -124,3 +124,20 @@ describe('fetchRepoPreview', () => {
     expect(headers.Authorization).toBe('Bearer ghp_test')
   })
 })
+
+describe('parseGithubRepoUrl —— 路径字符白名单', () => {
+  it('owner 含非法字符时返回 null', () => {
+    expect(parseGithubRepoUrl('https://github.com/own%20er/repo')).toBeNull()
+  })
+
+  it('repo 含非法字符时返回 null', () => {
+    expect(parseGithubRepoUrl('https://github.com/owner/re%2Fpo')).toBeNull()
+  })
+
+  it('仓库名以 .git 结尾时去掉后缀', () => {
+    expect(parseGithubRepoUrl('https://github.com/owner/repo.git')).toEqual({
+      owner: 'owner',
+      repo: 'repo',
+    })
+  })
+})

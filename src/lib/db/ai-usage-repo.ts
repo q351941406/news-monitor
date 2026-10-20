@@ -119,9 +119,13 @@ export async function getAIUsageStats(days = 7): Promise<AIUsageStats> {
   ])
 
   const pick = (r: { calls: number; input: number; output: number; failures: number }) => ({
+    // v8 ignore next -- SQL 侧 count(*)/coalesce(...) 恒非 null，此处仅是类型兜底
     calls: r.calls ?? 0,
+    // v8 ignore next -- SQL 侧 count(*)/coalesce(...) 恒非 null，此处仅是类型兜底
     inputTokens: r.input ?? 0,
+    // v8 ignore next -- SQL 侧 count(*)/coalesce(...) 恒非 null，此处仅是类型兜底
     outputTokens: r.output ?? 0,
+    // v8 ignore next -- SQL 侧 count(*)/coalesce(...) 恒非 null，此处仅是类型兜底
     failures: r.failures ?? 0,
   })
   const totalRow = pick(total[0] ?? { calls: 0, input: 0, output: 0, failures: 0 })
@@ -138,17 +142,26 @@ export async function getAIUsageStats(days = 7): Promise<AIUsageStats> {
     totalFailures: totalRow.failures,
     byOperation: byOp.map((r) => ({
       operation: r.operation,
+      // v8 ignore next -- SQL 侧 count(*)/coalesce(...) 恒非 null，此处仅是类型兜底
       calls: r.calls ?? 0,
+      // v8 ignore next -- SQL 侧 count(*)/coalesce(...) 恒非 null，此处仅是类型兜底
       inputTokens: r.input ?? 0,
+      // v8 ignore next -- SQL 侧 count(*)/coalesce(...) 恒非 null，此处仅是类型兜底
       outputTokens: r.output ?? 0,
+      // v8 ignore next -- SQL 侧 count(*)/coalesce(...) 恒非 null，此处仅是类型兜底
       failures: r.failures ?? 0,
+      // v8 ignore next -- SQL 聚合恒非 null；r.calls=0 只在无数据行时出现（同样由 SQL 保证有行）
       successRate: r.calls ? Math.round(((r.calls - (r.failures ?? 0)) / r.calls) * 100) : 100,
     })),
     daily: daily.map((r) => ({
       date: String(r.date),
+      // v8 ignore next -- SQL 侧 count(*)/coalesce(...) 恒非 null，此处仅是类型兜底
       calls: r.calls ?? 0,
+      // v8 ignore next -- SQL 侧 count(*)/coalesce(...) 恒非 null，此处仅是类型兜底
       inputTokens: r.input ?? 0,
+      // v8 ignore next -- SQL 侧 count(*)/coalesce(...) 恒非 null，此处仅是类型兜底
       outputTokens: r.output ?? 0,
+      // v8 ignore next -- SQL 侧 count(*)/coalesce(...) 恒非 null，此处仅是类型兜底
       failures: r.failures ?? 0,
     })),
   }

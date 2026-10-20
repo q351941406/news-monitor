@@ -54,3 +54,9 @@ describe('assertNonEmptyFetch', () => {
     expect(() => assertNonEmptyFetch('twitter', 'X / Twitter', 0)).not.toThrow()
   })
 })
+
+describe('assertNonEmptyFetch —— 未知源的 skipFlag 兜底', () => {
+  it('未登记的源用 SKIP_SOURCE_<大写> 作为跳过开关名', () => {
+    expect(() => assertNonEmptyFetch('unknownsrc', '未知源', 0)).toThrow(/SKIP_SOURCE_UNKNOWNSRC/)
+  })
+})

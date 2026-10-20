@@ -11,6 +11,7 @@ export async function storeRawItems(items: NewRawItem[]): Promise<number> {
   // 批量插入 + ON CONFLICT DO NOTHING：一次 round-trip 完成全部写入
   // PG 下 rowCount = 实际新插入的行数（冲突行不计入）
   const result = await db.insert(rawItems).values(items).onConflictDoNothing()
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处只是类型兜底 */
   return result.rowCount ?? 0
 }
 /** 检查是否已存在 */
@@ -176,6 +177,7 @@ export async function getArchivedNews(
     .select({ count: sql<number>`count(*)::int` })
     .from(rawItems)
     .where(where)
+  // v8 ignore next -- COUNT 聚合恒返回一行，此处仅是类型兜底
   const total = countRow?.count ?? 0
   const results = await db
     .select({

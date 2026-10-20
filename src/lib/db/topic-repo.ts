@@ -189,6 +189,7 @@ export async function deleteEmptyTopics(source: string): Promise<number> {
        AND NOT EXISTS (SELECT 1 FROM topic_items ti WHERE ti.topic_id = tg.id)`,
     [source],
   )
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 
@@ -211,6 +212,7 @@ export async function deleteReadEmptyTopicsByItemId(itemId: string): Promise<num
        )`,
     [itemId],
   )
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 
@@ -227,6 +229,7 @@ export async function deleteReadEmptyTopics(topicIds: string[]): Promise<number>
        )`,
     [topicIds],
   )
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 
@@ -244,6 +247,7 @@ export async function deleteReadEmptyTopicsBySource(source: string): Promise<num
        )`,
     [source],
   )
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 
@@ -265,6 +269,7 @@ export async function getExistingTopics(
   return rows.map((r) => ({
     topic: r.topic as string,
     summary: r.summary as string,
+    // v8 ignore next -- SQL 侧 COUNT(...)::int 恒非 null，此处仅是类型兜底
     itemCount: (r.item_count as number) ?? 0,
   }))
 }
@@ -325,6 +330,7 @@ export async function getPendingItemCount(source: string): Promise<number> {
      WHERE ri.source = $1 AND ri.aggregated_at IS NULL AND aa.summary IS NOT NULL`,
     [source],
   )
+  // v8 ignore next -- COUNT 聚合恒返回一行，此处仅是类型兜底
   return rows[0]?.cnt ?? 0
 }
 /** 标记一批 item 已聚合（队列消费完成，时间戳=现在，相当于挪到队尾） */
@@ -334,6 +340,7 @@ export async function resetAggregationMarks(source: string): Promise<number> {
   const result = await pool.query('UPDATE raw_items SET aggregated_at = NULL WHERE source = $1', [
     source,
   ])
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 export async function markItemsAggregated(itemIds: string[]): Promise<void> {
@@ -348,6 +355,7 @@ export async function markItemsAggregated(itemIds: string[]): Promise<void> {
 export async function deleteAllTopics(source: string): Promise<number> {
   const pool = getPgPool()
   const result = await pool.query('DELETE FROM topic_groups WHERE source = $1', [source])
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 /** 主题组元信息（不含 items，列表轻量加载用） */
@@ -612,6 +620,7 @@ export async function markGroupAsRead(topicId: string): Promise<number> {
      WHERE ti.topic_id = $1 AND ti.item_id = ri.id AND ri.is_read = FALSE`,
     [topicId],
   )
+  /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0
 }
 
