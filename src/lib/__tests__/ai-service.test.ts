@@ -236,13 +236,42 @@ describe('AIService - 提示词模板可配置', () => {
 })
 
 describe('AIService - generateTopicAggregation', () => {
-  it('items 少于 3 个返回空数组', async () => {
+  it('items 为空时返回空数组且不调用 LLM', async () => {
+    const service = createAIService()
+    const result = await service.generateTopicAggregation([])
+    expect(result).toEqual([])
+    expect(generateText).not.toHaveBeenCalled()
+  })
+
+  it('回归防线：只有 1 条也必须调用 LLM 聚类（不能被「少于 3 条」阈值饿死）', async () => {
+    // 真实事故（2026-10）：阈值曾为 3，而 GitHub 每天净增只有 2-4 条，
+    // 于是它永远凑不满 3 条 → 主题组长期为 0 → 条目入库、徽标计数，
+    // 列表整页空白（GitHub 365 条全部不在任何主题组）。
+    // 现在 1 条也要聚类：每条内容都必须有归属。
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({
+        groups: [{ topic: '单一主题', summary: '概括', itemIds: ['1'] }],
+      }),
+    )
     const service = createAIService()
     const result = await service.generateTopicAggregation([
       { id: '1', title: 'a', summary: 's', details: 'd' },
     ])
-    expect(result).toEqual([])
-    expect(generateText).not.toHaveBeenCalled()
+    expect(generateText).toHaveBeenCalledTimes(1)
+    expect(result).toHaveLength(1)
+    expect(result[0].itemIds).toEqual(['1'])
+  })
+
+  it('小批量时 prompt 明确要求「不得返回空数组」', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({
+        groups: [{ topic: '单一主题', summary: '概括', itemIds: ['1'] }],
+      }),
+    )
+    const service = createAIService()
+    await service.generateTopicAggregation([{ id: '1', title: 'a', summary: 's', details: 'd' }])
+    const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
+    expect(callArg.prompt).toContain('绝不允许返回空数组')
   })
 
   it('正常返回主题分组', async () => {
@@ -380,4 +409,123 @@ describe('推理模型适配（DeepSeek 思考模式）', () => {
     expect(result).not.toBeNull()
     // 无输出类错误的退避基准为 5s，故放宽该用例超时
   }, 20_000)
+})
+
+/**
+ * prompt 组装与错误诊断的分支覆盖
+ *
+ * 这些分支对应「AI 输入的字段可能缺失」与「AI 可能以各种形态报错」——
+ * 解析层必须把它们各自落到明确的文案上，而不是拼出半截 prompt 或吞掉原因。
+ */
+describe('AIService —— prompt 字段缺失的降级', () => {
+  it('批量摘要：rawData 各字段缺一不可，缺的不进 prompt', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({ results: [{ id: 'ph:1', summary: 's', details: 'd' }] }),
+    )
+    const service = createAIService()
+    await service.generateBatchSummary([
+      {
+        id: 'ph:1',
+        title: '标题',
+        rawData: { description: '描述', tagline: '标语', text: '正文', language: 'TS', stars: 42 },
+      },
+    ])
+    const prompt = (vi.mocked(generateText).mock.calls[0][0] as { prompt: string }).prompt
+    expect(prompt).toContain('描述: 描述')
+    expect(prompt).toContain('标语: 标语')
+    expect(prompt).toContain('内容: 正文')
+    expect(prompt).toContain('语言: TS')
+    expect(prompt).toContain('Stars: 42')
+  })
+
+  it('批量摘要：rawData 全空时不产生任何 key_info 行，title 缺失显示「无」', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({ results: [{ id: 'ph:2', summary: 's', details: 'd' }] }),
+    )
+    const service = createAIService()
+    await service.generateBatchSummary([{ id: 'ph:2', title: null, rawData: {} }])
+    const prompt = (vi.mocked(generateText).mock.calls[0][0] as { prompt: string }).prompt
+    expect(prompt).toContain('标题: 无')
+    expect(prompt).not.toContain('描述:')
+    expect(prompt).not.toContain('内容:')
+  })
+
+  it('主题聚类：title / summary / details 缺失时各自降级为「无」', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({ groups: [{ topic: 'T', summary: 'S', itemIds: ['x:1'] }] }),
+    )
+    const service = createAIService()
+    await service.generateTopicAggregation([
+      { id: 'x:1', title: null, summary: null, details: null },
+    ])
+    const prompt = (vi.mocked(generateText).mock.calls[0][0] as { prompt: string }).prompt
+    expect(prompt).toContain('标题: 无')
+    expect(prompt).toContain('摘要: 无')
+    expect(prompt).toContain('重点: 无')
+  })
+
+  it('主题聚类：已有主题没有概括时显示「无概括」', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({ groups: [{ topic: 'T', summary: 'S', itemIds: ['x:1'] }] }),
+    )
+    const service = createAIService()
+    await service.generateTopicAggregation(
+      [{ id: 'x:1', title: 't', summary: 's', details: 'd' }],
+      [{ topic: '旧主题', summary: '', itemCount: 3 }],
+    )
+    const prompt = (vi.mocked(generateText).mock.calls[0][0] as { prompt: string }).prompt
+    expect(prompt).toContain('旧主题：无概括（当前 3 条）')
+  })
+})
+
+describe('AIService —— 错误诊断分支', () => {
+  /**
+   * 每个用例都让**第一次**调用失败（错误诊断分支在这里被走到）、
+   * 第二次成功 —— 这样不必等满 3 次重试退避（约 6s/次）。
+   */
+  const item = { id: 'github:o/r', title: 't', rawData: { readme: 'x' } }
+  const okResult = { id: 'github:o/r', summary: 's', details: 'd' }
+
+  it('NoObjectGeneratedError 走 isNoOutput 分支并打印其 cause', async () => {
+    const err = new NoObjectGeneratedError('bad json')
+    err.cause = '原始响应片段'
+    vi.mocked(generateText)
+      .mockRejectedValueOnce(err)
+      .mockResolvedValueOnce(mockGenTextResult({ summary: 's', details: 'd' }))
+    const service = createAIService()
+    const result = await service.generateSingleSummary(item)
+    expect(result).toEqual(okResult)
+  }, 20000)
+
+  it('普通错误带字符串 cause 时原样展开', async () => {
+    const err = new Error('boom')
+    err.cause = '原始原因'
+    vi.mocked(generateText)
+      .mockRejectedValueOnce(err)
+      .mockResolvedValueOnce(mockGenTextResult({ summary: 's', details: 'd' }))
+    const service = createAIService()
+    const result = await service.generateSingleSummary(item)
+    expect(result).toEqual(okResult)
+  }, 20000)
+
+  it('普通错误带对象 cause 时转成 JSON 展开', async () => {
+    const err = new Error('boom')
+    err.cause = { detail: 'x' }
+    vi.mocked(generateText)
+      .mockRejectedValueOnce(err)
+      .mockResolvedValueOnce(mockGenTextResult({ summary: 's', details: 'd' }))
+    const service = createAIService()
+    const result = await service.generateSingleSummary(item)
+    expect(result).toEqual(okResult)
+  }, 20000)
+
+  it('没有 message 的错误也能安全诊断并重试成功', async () => {
+    const err = new Error('')
+    vi.mocked(generateText)
+      .mockRejectedValueOnce(err)
+      .mockResolvedValueOnce(mockGenTextResult({ summary: 's', details: 'd' }))
+    const service = createAIService()
+    const result = await service.generateSingleSummary(item)
+    expect(result).toEqual(okResult)
+  }, 20000)
 })

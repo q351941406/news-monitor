@@ -292,3 +292,194 @@ describe('PromptEditor', () => {
     expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'DELETE' })
   })
 })
+
+/**
+ * 分支覆盖：把「错误怎么呈现」「哪些操作会被拦下」钉死
+ *
+ * 这些分支的共同点是**静默失败风险**：比如 token 为空时若不拦下，
+ * 就会发出一个必然 403 的请求；效果测试拿不到可读错误时若直接显示状态码，
+ * 用户会看到「502」这种没法行动的裸数字。
+ */
+describe('PromptEditor —— 分支覆盖', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+    localStorage.clear()
+  })
+
+  it('加载返回 500（��� 403）时提示加载失败', async () => {
+    localStorage.setItem('news_monitor_admin_token', 't')
+    mockFetchOnce(500, { error: 'boom' })
+    render(<PromptEditor />)
+    await waitFor(() => {
+      expect(screen.getByText('模板加载失败，请稍后重试')).toBeInTheDocument()
+    })
+  })
+
+  it('token 为空时点登录不发出任何请求', () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    render(<PromptEditor />)
+    fireEvent.click(screen.getByRole('button', { name: '解锁' }))
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('在 token 输入框按回车可触发登录', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(payload),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PromptEditor />)
+    const input = screen.getByLabelText('管理员 Token')
+    fireEvent.change(input, { target: { value: 't' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled()
+    })
+  })
+
+  it('在非回车键上不触发登录', () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+    render(<PromptEditor />)
+    const input = screen.getByLabelText('管理员 Token')
+    fireEvent.change(input, { target: { value: 't' } })
+    fireEvent.keyDown(input, { key: 'a' })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('保存失败时优先展示服务端给出的错误文案', async () => {
+    localStorage.setItem('news_monitor_admin_token', 't')
+    const fetchMock = vi.fn()
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(payload) })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: () => Promise.resolve({ error: '模板超过长度上限' }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PromptEditor />)
+    await screen.findByLabelText(/模板正文/)
+    fireEvent.change(screen.getByLabelText(/模板正文/), { target: { value: '改过的模板' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存模板' }))
+    await waitFor(() => {
+      expect(screen.getByText('模板超过长度上限')).toBeInTheDocument()
+    })
+  })
+
+  it('保存失败且服务端没给错误文案时，给出带状态码的兜底提示', async () => {
+    localStorage.setItem('news_monitor_admin_token', 't')
+    const fetchMock = vi.fn()
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(payload) })
+      .mockResolvedValueOnce({ ok: false, status: 500, json: () => Promise.resolve({}) })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PromptEditor />)
+    await screen.findByLabelText(/模板正文/)
+    fireEvent.change(screen.getByLabelText(/模板正文/), { target: { value: '改过的模板' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存模板' }))
+    await waitFor(() => {
+      expect(screen.getByText(/保存失败（HTTP 500）/)).toBeInTheDocument()
+    })
+  })
+
+  it('恢复默认失败时提示错误', async () => {
+    localStorage.setItem('news_monitor_admin_token', 't')
+    const custom = { ...payload, isCustom: true, template: '定制' }
+    const fetchMock = vi.fn()
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(custom) })
+      .mockResolvedValueOnce({ ok: false, status: 500, json: () => Promise.resolve({}) })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PromptEditor />)
+    await screen.findByLabelText(/模板正文/)
+    fireEvent.click(screen.getByRole('button', { name: /恢复默认/ }))
+    await waitFor(() => {
+      expect(screen.getByText('恢复失败，请稍后重试')).toBeInTheDocument()
+    })
+  })
+
+  it('测试链接为空时「测试」按钮不可用（不会发出无意义请求）', async () => {
+    localStorage.setItem('news_monitor_admin_token', 't')
+    const fetchMock = vi.fn()
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(payload) })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PromptEditor />)
+    await screen.findByLabelText(/模板正文/)
+    expect(screen.getByRole('button', { name: '测试' })).toBeDisabled()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('效果测试 504 时给出超时建议', async () => {
+    localStorage.setItem('news_monitor_admin_token', 't')
+    const fetchMock = vi.fn()
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(payload) })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 504,
+        json: () => Promise.resolve({}),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PromptEditor />)
+    await screen.findByLabelText(/模板正文/)
+    fireEvent.change(screen.getByLabelText('测试用 GitHub 仓库链接'), {
+      target: { value: 'https://github.com/owner/repo' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '测试' }))
+    await waitFor(() => {
+      expect(screen.getByText(/请求超时/)).toBeInTheDocument()
+    })
+  })
+
+  it('效果测试 503 时给出服务不可用提示', async () => {
+    localStorage.setItem('news_monitor_admin_token', 't')
+    const fetchMock = vi.fn()
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(payload) })
+      .mockResolvedValueOnce({ ok: false, status: 503, json: () => Promise.resolve({}) })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PromptEditor />)
+    await screen.findByLabelText(/模板正文/)
+    fireEvent.change(screen.getByLabelText('测试用 GitHub 仓库链接'), {
+      target: { value: 'https://github.com/owner/repo' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '测试' }))
+    await waitFor(() => {
+      expect(screen.getByText(/服务暂不可用/)).toBeInTheDocument()
+    })
+  })
+
+  it('效果测试请求在链接框按回车可触发', async () => {
+    localStorage.setItem('news_monitor_admin_token', 't')
+    const fetchMock = vi.fn()
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(payload) })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({ repo: { url: 'https://github.com/owner/repo' }, summary: 's' }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PromptEditor />)
+    await screen.findByLabelText(/模板正文/)
+    const input = screen.getByLabelText('测试用 GitHub 仓库链接')
+    fireEvent.change(input, { target: { value: 'https://github.com/owner/repo' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('未登记的提示词 key 直接显示 key 本身', async () => {
+    localStorage.setItem('news_monitor_admin_token', 't')
+    mockFetchOnce(200, { ...payload, key: 'unknown-key' })
+    render(<PromptEditor />)
+    await waitFor(() => {
+      expect(screen.getByText('unknown-key')).toBeInTheDocument()
+    })
+  })
+})

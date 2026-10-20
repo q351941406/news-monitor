@@ -130,3 +130,43 @@ describe('默认模板', () => {
     expect(rendered).not.toMatch(/\{\{\s*[A-Za-z0-9_]+\s*\}\}/)
   })
 })
+
+describe('buildGithubSingleSummaryVars —— url 回退分支', () => {
+  it('rawData.url 缺失时用 title 拼 GitHub 链接', () => {
+    const vars = buildGithubSingleSummaryVars({
+      id: 'github:owner/repo',
+      title: 'owner/repo',
+      rawData: { description: 'd', language: 'TypeScript' },
+    })
+    expect(vars.url).toBe('https://github.com/owner/repo')
+  })
+
+  it('rawData.url 不是字符串时同样回退 title', () => {
+    const vars = buildGithubSingleSummaryVars({
+      id: 'github:owner/repo',
+      title: 'owner/repo',
+      rawData: { url: 123 as unknown as string },
+    })
+    expect(vars.url).toBe('https://github.com/owner/repo')
+  })
+
+  it('url 与 title 都缺失时为空串（不拼出坏链接）', () => {
+    const vars = buildGithubSingleSummaryVars({
+      id: 'github:unknown',
+      title: null,
+      rawData: {},
+    })
+    expect(vars.url).toBe('')
+  })
+})
+
+describe('buildGithubSingleSummaryVars —— url 为空串', () => {
+  it('url 是空字符串时同样回退 title（空串不算有效链接）', () => {
+    const vars = buildGithubSingleSummaryVars({
+      id: 'github:owner/repo',
+      title: 'owner/repo',
+      rawData: { url: '' },
+    })
+    expect(vars.url).toBe('https://github.com/owner/repo')
+  })
+})

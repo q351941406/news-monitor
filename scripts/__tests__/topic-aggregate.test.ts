@@ -12,7 +12,12 @@ vi.mock('@/lib/ai-service', () => ({ createAIService: vi.fn() }))
 vi.mock('@/lib/logger', () => ({ logger: { child: () => ({ error: vi.fn(), info: vi.fn() }) } }))
 vi.mock('@/lib/run-logger', () => ({ withRunLog: vi.fn() }))
 
-import { splitByPromptLen, itemPromptLen, hasAggregatableBatch } from '../topic-aggregate'
+import {
+  splitByPromptLen,
+  itemPromptLen,
+  hasAggregatableBatch,
+  buildFallbackGroup,
+} from '../topic-aggregate'
 
 interface TestItem {
   id: string
@@ -95,9 +100,14 @@ describe('hasAggregatableBatch - 是否存在可聚合子批', () => {
     ).toBe(true)
   })
 
-  it('子批均 < 3 条 → 不可聚合（AI 无法聚类，属正常降级）', () => {
-    expect(hasAggregatableBatch([['a'], ['b', 'c']])).toBe(false)
+  it('回归防线：只有 1 条也算「可聚合」（阈值曾为 3，把低频源饿死）', () => {
+    // 真实事故（2026-10）：阈值 3 + GitHub 每天净增 2-4 条
+    // → 永远凑不满 → 主题组长期为 0 → 徽标计数、列表空白。
+    // 现在 1 条即可聚合；空批才是真的没有可聚合内容。
+    expect(hasAggregatableBatch([['a'], ['b', 'c']])).toBe(true)
+    expect(hasAggregatableBatch([['a']])).toBe(true)
     expect(hasAggregatableBatch([])).toBe(false)
+    expect(hasAggregatableBatch([[], []])).toBe(false)
   })
 
   it('回归防线：可聚合却 0 组产出时应判定失败（配合 shouldFailRun）', () => {
@@ -109,5 +119,33 @@ describe('hasAggregatableBatch - 是否存在可聚合子批', () => {
       ['e', 'f', 'g'],
     ]
     expect(hasAggregatableBatch(subBatches)).toBe(true)
+  })
+})
+
+describe('buildFallbackGroup - 小批量兜底成组', () => {
+  it('条目为空时返回空数组', () => {
+    expect(buildFallbackGroup([])).toEqual([])
+  })
+
+  it('用首条标题作主题名、各条摘要拼接概括', () => {
+    const groups = buildFallbackGroup([
+      { id: 'github:a/b', title: 'a/b', summary: '摘要一' },
+      { id: 'github:c/d', title: 'c/d', summary: '摘要二' },
+    ])
+    expect(groups).toHaveLength(1)
+    expect(groups[0].topic).toBe('a/b')
+    expect(groups[0].summary).toContain('摘要一')
+    expect(groups[0].summary).toContain('摘要二')
+    expect(groups[0].itemIds).toEqual(['github:a/b', 'github:c/d'])
+  })
+
+  it('缺摘要时给出占位概括（不留空串）', () => {
+    const groups = buildFallbackGroup([{ id: 'x:1', title: '标题', summary: null }])
+    expect(groups[0].summary.length).toBeGreaterThan(0)
+  })
+
+  it('缺标题时给出兜底主题名', () => {
+    const groups = buildFallbackGroup([{ id: 'x:1', title: null, summary: null }])
+    expect(groups[0].topic.length).toBeGreaterThan(0)
   })
 })

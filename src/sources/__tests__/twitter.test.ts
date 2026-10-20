@@ -269,3 +269,126 @@ data:
     expect(tweets[0].text).toContain('天气')
   })
 })
+
+/**
+ * 解析容错分支 —— 覆盖「上游形态异常」时的每条降级路径
+ *
+ * 这些分支对应真实事故的教训：解析器对畸形输出必须**明确降级或明确报错**，
+ * 不能静默变成「0 条推文」（历史上正是静默解析导致 X 断流 57 天无人察觉）。
+ */
+describe('parseTwitterCliOutput —— 容错与降级分支', () => {
+  it('YAML 顶层不是对象时明确报错（数字 / 字符串 / null）', () => {
+    expect(() => parseTwitterCliOutput('123')).toThrow(/不是预期的 YAML 对象/)
+    expect(() => parseTwitterCliOutput('"just a string"')).toThrow(/不是预期的 YAML 对象/)
+    expect(() => parseTwitterCliOutput('null')).toThrow(/不是预期的 YAML 对象/)
+  })
+
+  it('ok:false 且没有 error 字段时，错误码降级为 unknown', () => {
+    expect(() => parseTwitterCliOutput('ok: false')).toThrow(/报告失败 \(unknown\)/)
+  })
+
+  it('ok:false 且 error.code 不是字符串时同样降级为 unknown', () => {
+    expect(() => parseTwitterCliOutput('ok: false\nerror:\n  code: 42')).toThrow(
+      /报告失败 \(unknown\)/,
+    )
+  })
+
+  it('ok:false 且错误码不是 not_authenticated 时不给凭据提示', () => {
+    let msg = ''
+    try {
+      parseTwitterCliOutput("ok: false\nerror:\n  code: rate_limited\n  message: 'too many'")
+    } catch (e) {
+      msg = (e as Error).message
+    }
+    expect(msg).toContain('rate_limited')
+    expect(msg).not.toContain('TWITTER_AUTH_TOKEN')
+  })
+
+  it('ok:false 且 message 不是字符串时消息为空', () => {
+    expect(() => parseTwitterCliOutput('ok: false\nerror:\n  code: oops\n  message: 123')).toThrow(
+      /报告失败 \(oops\):\s*$/,
+    )
+  })
+
+  it('丢弃非对象条目、缺 id 的条目、缺 text 的条目', () => {
+    const yaml = `
+- 'not-an-object'
+- text: 'no id here'
+- id: '999'
+- id: '100'
+  text: 'valid tweet about AI'
+`
+    const tweets = parseTwitterCliOutput(yaml)
+    expect(tweets).toHaveLength(1)
+    expect(tweets[0].id).toBe('100')
+  })
+
+  it('id 为数字时转成字符串', () => {
+    const tweets = parseTwitterCliOutput("- id: 42\n  text: 'hello'")
+    expect(tweets[0].id).toBe('42')
+  })
+
+  it('username 缺失时依次回退到 displayName、再回退到 unknown', () => {
+    const withName = parseTwitterCliOutput("- id: '1'\n  text: 't'\n  name: 'Only Name'")
+    expect(withName[0].username).toBe('Only Name')
+    const withNothing = parseTwitterCliOutput("- id: '2'\n  text: 't'")
+    expect(withNothing[0].username).toBe('unknown')
+  })
+
+  it('media 各项畸形时逐条丢弃，不影响整条推文', () => {
+    const yaml = `
+- id: '1'
+  text: 't'
+  media:
+    - 'not-an-object'
+    - type: photo
+    - url: 'https://example.com/a.jpg'
+    - type: video
+      url: 'https://example.com/a.mp4'
+`
+    const tweets = parseTwitterCliOutput(yaml)
+    expect(tweets).toHaveLength(1)
+    // type/url 缺一不可：只剩 url 的那条被丢弃
+    expect(tweets[0].media).toEqual([{ type: 'video', url: 'https://example.com/a.mp4' }])
+  })
+
+  it('点赞数是非数字字符串时归零，数字字符串则解析', () => {
+    const bad = parseTwitterCliOutput("- id: '1'\n  text: 't'\n  likes: 'abc'")
+    expect(bad[0].likes).toBe(0)
+    const good = parseTwitterCliOutput("- id: '1'\n  text: 't'\n  likes: '42'")
+    expect(good[0].likes).toBe(42)
+  })
+})
+
+describe('TwitterSource —— execSync 失败的错误形态', () => {
+  beforeEach(() => {
+    vi.mocked(execSync).mockReset()
+    process.env.TWITTER_AUTH_TOKEN = 'token'
+    process.env.TWITTER_CT0 = 'ct0'
+  })
+  afterEach(() => {
+    delete process.env.TWITTER_AUTH_TOKEN
+    delete process.env.TWITTER_CT0
+  })
+
+  it('execSync 抛出非 Error 值时也能带出信息', async () => {
+    vi.mocked(execSync).mockImplementation(() => {
+      throw 'plain string failure'
+    })
+    await expect(twitterSource.fetch()).rejects.toThrow(/twitter-cli 执行失败/)
+  })
+
+  it('找不到 twitter-cli 时给出安装提示', async () => {
+    vi.mocked(execSync).mockImplementation(() => {
+      const err = new Error('spawn twitter ENOENT')
+      throw err
+    })
+    let msg = ''
+    try {
+      await twitterSource.fetch()
+    } catch (e) {
+      msg = (e as Error).message
+    }
+    expect(msg).toContain('找不到 twitter-cli')
+  })
+})
