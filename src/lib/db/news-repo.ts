@@ -66,8 +66,34 @@ export async function getAllNews(
   )
   return results
 }
+/**
+ * 每个数据源的计数。
+ *
+ * `unread` 是**徽标口径**（raw_items 的未读行数）；`groupedUnread` /
+ * `ungroupedUnread` 把它拆成「已归入主题组（前台列表里看得见）」与
+ * 「没归组（徽标在数、列表里看不见）」。
+ *
+ * 为什么要拆（2026-10 修复「徽标 8、列表空白」）：
+ * 徽标按 raw_items 数，列表按 topic_groups 渲染，两套口径一旦脱钩，
+ * 用户看到的数字就无法在页面里找到对应内容。线上实测 github 365 条
+ * 全部未归组（8 条未读）—— 徽标有数字、列表却一个字都没有。
+ * 拆开后前端可以既标明差在哪，也能决定徽标该显示哪一个口径。
+ */
+export interface SourceCounts {
+  /** raw_items 总行数 */
+  total: number
+  /** 未读行数（徽标口径） */
+  unread: number
+  /** 未读且已归入主题组（前台可见） */
+  groupedUnread: number
+  /** 未读但没归组（前台列表里看不到） */
+  ungroupedUnread: number
+  /** 未读且还没有 AI 摘要（富化流水线尚未处理到） */
+  pendingSummary: number
+}
+
 /** 获取每个数据源的真实总数和未读数（不受 limit 影响） */
-export async function getNewsCounts(): Promise<Record<string, { total: number; unread: number }>> {
+export async function getNewsCounts(): Promise<Record<string, SourceCounts>> {
   const db = getDb()
   // 一次 GROUP BY 查询拿到全部来源的 total/unread，替代 3×2 次串行查询
   const rows = await db
@@ -75,17 +101,29 @@ export async function getNewsCounts(): Promise<Record<string, { total: number; u
       source: rawItems.source,
       total: sql<number>`count(*)::int`,
       unread: sql<number>`count(*) FILTER (WHERE ${rawItems.isRead} = false)::int`,
+      // 已归组 = 存在 topic_items 关联
+      groupedUnread: sql<number>`count(*) FILTER (WHERE ${rawItems.isRead} = false AND EXISTS (SELECT 1 FROM topic_items ti WHERE ti.item_id = ${rawItems.id}))::int`,
+      // 未归组 = 没有任何主题组关联
+      ungroupedUnread: sql<number>`count(*) FILTER (WHERE ${rawItems.isRead} = false AND NOT EXISTS (SELECT 1 FROM topic_items ti WHERE ti.item_id = ${rawItems.id}))::int`,
+      // 还缺 AI 摘要
+      pendingSummary: sql<number>`count(*) FILTER (WHERE ${rawItems.isRead} = false AND NOT EXISTS (SELECT 1 FROM ai_analysis aa WHERE aa.item_id = ${rawItems.id}))::int`,
     })
     .from(rawItems)
     .groupBy(rawItems.source)
-  const result: Record<string, { total: number; unread: number }> = {
-    github: { total: 0, unread: 0 },
-    producthunt: { total: 0, unread: 0 },
-    twitter: { total: 0, unread: 0 },
+  const result: Record<string, SourceCounts> = {
+    github: { total: 0, unread: 0, groupedUnread: 0, ungroupedUnread: 0, pendingSummary: 0 },
+    producthunt: { total: 0, unread: 0, groupedUnread: 0, ungroupedUnread: 0, pendingSummary: 0 },
+    twitter: { total: 0, unread: 0, groupedUnread: 0, ungroupedUnread: 0, pendingSummary: 0 },
   }
   for (const row of rows) {
     if (row.source in result) {
-      result[row.source] = { total: row.total, unread: row.unread }
+      result[row.source] = {
+        total: row.total,
+        unread: row.unread,
+        groupedUnread: row.groupedUnread,
+        ungroupedUnread: row.ungroupedUnread,
+        pendingSummary: row.pendingSummary,
+      }
     }
   }
   return result

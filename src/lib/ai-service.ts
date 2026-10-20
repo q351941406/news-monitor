@@ -281,6 +281,8 @@ ID: "${item.id}"
 - 只有确实无法归入任何已有主题的新方向，才创建新主题（数量尽量少）
 - 同类或相似内容最好合并为一个主题，禁止为同类内容重复建主题
 - 输出**全部相关主题**（包括你有把握的已有主题 + 新建主题），不要遗漏任何一条内容
+- **条目可能只有 1-2 条**（低频数据源每天就几条新内容）：此时也要为每条内容建立主题，
+  绝不允许返回空数组——每条内容都必须有归属，否则它不会出现在任何列表里
 ${content}
 每个主题包含：topic（主题名称，必须简洁：≤12字、无括号、无平台/工具细节）、summary（完整概括：平台/工具/细节全放这里）、itemIds（包含的新闻 ID）。
 规则：同类内容的 topic 名称必须完全一致（如「游戏作弊与外挂工具」），禁止用括号加细节区分。
@@ -462,7 +464,11 @@ export function createAIService(): AIService {
       return { id: item.id, summary: output.result.summary, details: output.result.details }
     },
     async generateTopicAggregation(items, existingTopics) {
-      if (items.length < 3) return []
+      // 阈值曾为 3：低频数据源（GitHub 每天净增 2-4 条）永远凑不满，
+      // 于是永远产不出主题组 —— 线上实测 github 主题组长期为 0，
+      // 而条目照样入库、照样被徽标计数，形成"有数字、没内容"。
+      // 1 条也要聚类：让 AI 为它建一个主题，条目才有归属。
+      if (items.length < 1) return []
       const prompt = buildTopicPrompt(items, existingTopics)
       const output = await callAIWithRetry(
         model,

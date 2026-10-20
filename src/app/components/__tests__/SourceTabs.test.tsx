@@ -35,6 +35,35 @@ describe('SourceTabs', () => {
     expect(onChange).toHaveBeenCalledWith('producthunt')
   })
 
+  it('有待归组条目时在标签上标明（徽标数字不再是无法解释的数字）', () => {
+    render(
+      <SourceTabs
+        sources={[
+          { id: 'github', label: 'GitHub', icon: '🐙', count: 365, unread: 8, pending: 8 },
+          { id: 'producthunt', label: 'Product Hunt', icon: '🚀', count: 2119, unread: 851 },
+        ]}
+        activeSource="all"
+        onSourceChange={() => {}}
+      />,
+    )
+    const gh = screen.getByRole('button', { name: /GitHub/ })
+    // title 里写明数字构成
+    expect(gh.getAttribute('title')).toContain('8 条未读')
+    expect(gh.getAttribute('title')).toContain('8 条待归组')
+  })
+
+  it('没有待归组内容时不做额外标明', () => {
+    render(
+      <SourceTabs
+        sources={[{ id: 'github', label: 'GitHub', icon: '🐙', count: 365, unread: 8, pending: 0 }]}
+        activeSource="all"
+        onSourceChange={() => {}}
+      />,
+    )
+    const gh = screen.getByRole('button', { name: /GitHub/ })
+    expect(gh.getAttribute('title')).toBe('GitHub：8 条未读')
+  })
+
   it('激活态来源有高亮样式类', () => {
     render(<SourceTabs sources={sources} activeSource="github" onSourceChange={() => {}} />)
     const activeBtn = screen.getByRole('button', { name: /GitHub/ })

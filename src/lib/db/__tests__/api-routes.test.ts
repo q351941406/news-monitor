@@ -61,6 +61,32 @@ describe('API Routes', () => {
     expect(JSON.stringify(json)).toContain('producthunt')
   })
 
+  it('GET /api/news/ungrouped 返回未读且未归组的条目（徽标数字的对应物）', async () => {
+    const { GET: ungroupedGET } = await import('@/app/api/news/ungrouped/route')
+    await storeRawItems([
+      insertTestItem({
+        id: 'test:api:orphan1',
+        source: 'github',
+        title: 'Orphan Repo',
+        isRead: false,
+      }) as NewRawItem,
+      insertTestItem({
+        id: 'test:api:orphan2',
+        source: 'github',
+        title: 'Read Orphan',
+        isRead: true,
+      }) as NewRawItem,
+    ])
+    const req = new NextRequest('http://localhost/api/news/ungrouped?source=github')
+    const res = await ungroupedGET(req)
+    const json = await res.json()
+    expect(res.status).toBe(200)
+    const ids = (json.data ?? []).map((i: { id: string }) => i.id)
+    expect(ids).toContain('test:api:orphan1')
+    // 已读的「读完即消失」，不属于待处理内容
+    expect(ids).not.toContain('test:api:orphan2')
+  })
+
   it('GET /api/news/counts 返回各源统计', async () => {
     const res = await countsGET()
     const json = await res.json()

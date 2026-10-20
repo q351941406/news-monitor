@@ -236,13 +236,42 @@ describe('AIService - 提示词模板可配置', () => {
 })
 
 describe('AIService - generateTopicAggregation', () => {
-  it('items 少于 3 个返回空数组', async () => {
+  it('items 为空时返回空数组且不调用 LLM', async () => {
+    const service = createAIService()
+    const result = await service.generateTopicAggregation([])
+    expect(result).toEqual([])
+    expect(generateText).not.toHaveBeenCalled()
+  })
+
+  it('回归防线：只有 1 条也必须调用 LLM 聚类（不能被「少于 3 条」阈值饿死）', async () => {
+    // 真实事故（2026-10）：阈值曾为 3，而 GitHub 每天净增只有 2-4 条，
+    // 于是它永远凑不满 3 条 → 主题组长期为 0 → 条目入库、徽标计数，
+    // 列表整页空白（GitHub 365 条全部不在任何主题组）。
+    // 现在 1 条也要聚类：每条内容都必须有归属。
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({
+        groups: [{ topic: '单一主题', summary: '概括', itemIds: ['1'] }],
+      }),
+    )
     const service = createAIService()
     const result = await service.generateTopicAggregation([
       { id: '1', title: 'a', summary: 's', details: 'd' },
     ])
-    expect(result).toEqual([])
-    expect(generateText).not.toHaveBeenCalled()
+    expect(generateText).toHaveBeenCalledTimes(1)
+    expect(result).toHaveLength(1)
+    expect(result[0].itemIds).toEqual(['1'])
+  })
+
+  it('小批量时 prompt 明确要求「不得返回空数组」', async () => {
+    vi.mocked(generateText).mockResolvedValueOnce(
+      mockGenTextResult({
+        groups: [{ topic: '单一主题', summary: '概括', itemIds: ['1'] }],
+      }),
+    )
+    const service = createAIService()
+    await service.generateTopicAggregation([{ id: '1', title: 'a', summary: 's', details: 'd' }])
+    const callArg = vi.mocked(generateText).mock.calls[0][0] as { prompt: string }
+    expect(callArg.prompt).toContain('绝不允许返回空数组')
   })
 
   it('正常返回主题分组', async () => {

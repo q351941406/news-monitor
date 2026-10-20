@@ -19,12 +19,20 @@ export {
   getNewsCounts,
   getArchivedNews,
   getLastIngestedBySource,
+  type SourceCounts,
 } from './news-repo'
 export { storeAIAnalysis, getUnprocessedItems } from './ai-repo'
 export { markAsRead, markAsUnread, markAllAsRead, resetAllRead } from './read-repo'
 export {
   initDatabase,
   storeTopicGroups,
+  getUngroupedItems,
+  getUngroupedSummaryBySource,
+  getTopicGroupCountsBySource,
+  requeueUngroupedItems,
+  type StoreTopicGroupsResult,
+  type UngroupedItem,
+  type UngroupedSummary,
   deleteEmptyTopics,
   deleteReadEmptyTopics,
   deleteReadEmptyTopicsByItemId,

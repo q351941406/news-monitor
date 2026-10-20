@@ -59,13 +59,36 @@ export function splitByPromptLen<
 }
 /** 单批聚合：取一批 → 按字符数切分子批 → 逐子批 AI 聚合 → 增量 upsert → 标记已聚合 */
 /**
- * 是否存在「可聚合子批」：AI 聚类至少需要 3 条才有意义，
- * 少于 3 条的子批跳过属正常降级，不算失败。
+ * 是否存在「可聚合子批」：只要有 1 条待聚合就算存在。
  *
- * 与 shouldFailRun 配合使用：存在可聚合子批却 0 组产出 = AI 侧不可用。
+ * 阈值曾为 3 —— 于是「少于 3 条」被当成正常降级直接跳过，
+ * 而低频数据源（GitHub 每天净增 2-4 条）**永远**凑不满 3 条，
+ * 主题组因此长期为 0：条目照样入库、照样被徽标计数，列表却是空的。
+ * 现在 1 条也要聚类，「有内容却无组」不再是常态。
  */
 export function hasAggregatableBatch(batches: unknown[][]): boolean {
-  return batches.some((b) => b.length >= 3)
+  return batches.some((b) => b.length >= 1)
+}
+
+/**
+ * 小批量兜底成组：AI 偶尔对 1-2 条内容返回空数组（"内容太少，无法聚类"）。
+ *
+ * 不兜底的后果很严重：这些条目既不在主题组里、又永远 pending，
+ * 于是「不在任何列表里，但徽标在数」—— 正是本次事故的形态。
+ * 兜底策略：把该子批的条目收进一个组，主题名取首条标题，概括取各条摘要。
+ */
+export function buildFallbackGroup(
+  items: Array<{ id: string; title: string | null; summary: string | null }>,
+): Array<{ topic: string; summary: string; itemIds: string[] }> {
+  if (items.length === 0) return []
+  const topic = (items[0].title || '待归组内容').trim().slice(0, 40)
+  const summary =
+    items
+      .map((i) => i.summary)
+      .filter((s): s is string => !!s)
+      .join('；')
+      .slice(0, 500) || '（AI 尚未生成概括）'
+  return [{ topic, summary, itemIds: items.map((i) => i.id) }]
 }
 
 async function aggregateOneBatch(
@@ -75,8 +98,8 @@ async function aggregateOneBatch(
   // 1. 取该 source 的待聚合批次（新数据优先 + 最旧补足）
   const items = await getAggregationBatch(source, 50)
   console.log(`  Found ${items.length} pending items`)
-  if (items.length < 3) {
-    console.log('  Not enough items to aggregate (< 3), skip')
+  if (items.length < 1) {
+    console.log('  No pending items to aggregate, skip')
     return 0
   }
   // 2. 取该 source 已有主题（作 AI 历史上下文）
@@ -94,22 +117,37 @@ async function aggregateOneBatch(
   for (let si = 0; si < subBatches.length; si++) {
     const sub = subBatches[si]
     console.log(`  --- Sub-batch ${si + 1}/${subBatches.length} (${sub.length} items) ---`)
-    // 子批不足 3 条时，AI 无法聚类（generateTopicAggregation 返回空是正常降级），跳过即可
-    if (sub.length < 3) {
-      console.log(`  Sub-batch ${si + 1} has ${sub.length} item(s) < 3, keep pending`)
-      continue
-    }
     const groups = await aiService.generateTopicAggregation(sub, existingTopics)
+    let effectiveGroups = groups
     if (!groups || groups.length === 0) {
-      // [FIX-C] 不再 throw：AI 返回空时保留 pending，避免整批数据被"假消费"后永久隐身
-      console.log(
-        `  ⚠️ AI returned no topics for sub-batch ${si + 1} (${sub.length} items), keep pending`,
-      )
-      continue
+      if (sub.length <= 2) {
+        // 小批量：AI 返回空是"内容太少"的常见响应，兜底建组，
+        // 避免条目永远悬空（不在组里、也不在列表里，徽标却在数）
+        effectiveGroups = buildFallbackGroup(sub)
+        console.log(
+          `  ⚠️ AI returned no topics for sub-batch ${si + 1} (${sub.length} items), fallback group created`,
+        )
+      } else {
+        // [FIX-C] 不再 throw：AI 返回空时保留 pending，避免整批数据被"假消费"后永久隐身
+        console.log(
+          `  ⚠️ AI returned no topics for sub-batch ${si + 1} (${sub.length} items), keep pending`,
+        )
+        continue
+      }
     }
-    await storeTopicGroups(source, groups)
-    totalGroups += groups.length
-    consumedIds.push(...sub.map((i) => i.id))
+    const stored = await storeTopicGroups(source, effectiveGroups)
+    totalGroups += effectiveGroups.length
+    // 只把**真正落进主题组**的条目标记为已消费。
+    // 此前是整批都标记：AI 漏掉的、或 id 对不上的条目被"假消费"——
+    // 它们不在任何组里（前台看不见），却已被 aggregated_at 标记，
+    // 而聚合队列只捞 aggregated_at IS NULL 的条目 → 永久隐身。
+    // 线上实测：github 365 条全部不在任何主题组，PH/Twitter 另有 63 条同类。
+    consumedIds.push(...stored.linked)
+    if (stored.skipped.length > 0) {
+      console.log(
+        `  ⚠️ ${stored.skipped.length} item(s) not linked to any group, keep pending: ${stored.skipped.slice(0, 3).join(', ')}`,
+      )
+    }
   }
   // 4. 清理"已读空组"（物理删除：空壳组 + 全已读组，级联删关联，防止主题组无限膨胀）
   const deleted = await deleteReadEmptyTopicsBySource(source)

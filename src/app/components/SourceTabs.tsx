@@ -2,7 +2,15 @@
 import { useEffect, useRef } from 'react'
 
 interface SourceTabsProps {
-  sources: { id: string; label: string; icon: string; count: number; unread: number }[]
+  sources: {
+    id: string
+    label: string
+    icon: string
+    count: number
+    unread: number
+    /** 未读但还没归入主题组的条数（徽标在数、列表里暂时看不到的那部分） */
+    pending?: number
+  }[]
   activeSource: string
   onSourceChange: (source: string) => void
 }
@@ -92,6 +100,13 @@ export default function SourceTabs({ sources, activeSource, onSourceChange }: So
             onClick={() => onSourceChange(source.id)}
             className={tabClass(activeSource === source.id)}
             aria-pressed={activeSource === source.id}
+            // 徽标数字的构成写进 title：未读数里有一部分还没归入主题，
+            // 用户点进来看到空列表时，才知道数字意味着什么
+            title={
+              source.pending
+                ? `${source.label}：${source.unread} 条未读，其中 ${source.pending} 条待归组`
+                : `${source.label}：${source.unread} 条未读`
+            }
           >
             <span aria-hidden>{source.icon}</span>
             {source.label}
@@ -102,6 +117,16 @@ export default function SourceTabs({ sources, activeSource, onSourceChange }: So
             >
               {source.unread}
             </span>
+            {/* 待归组标记：徽标里有一部分数字在页面的主题组列表里看不到 */}
+            {source.pending ? (
+              <span
+                aria-hidden
+                title={`${source.pending} 条待归组`}
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  activeSource === source.id ? 'bg-amber-300' : 'bg-amber-500'
+                }`}
+              />
+            ) : null}
           </button>
         ))}
       </div>
