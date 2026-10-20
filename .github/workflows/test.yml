@@ -110,6 +110,9 @@ jobs:
   # （唯一事实源：scripts/merge-coverage.ts）
   # ---------------------------------------------------------------------
   coverage:
+    # 必须等两份覆盖率报告产出：没有 needs 的话本 job 会与 unit/integration
+    # 并行启动，artifact 还不存在就直接 download 失败
+    needs: [unit, integration]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
