@@ -26,6 +26,7 @@ export async function initDatabase() {
       url TEXT NOT NULL,
       raw_data JSONB NOT NULL,
       is_read BOOLEAN DEFAULT FALSE NOT NULL,
+      read_at BIGINT,
       fetched_at BIGINT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
@@ -615,10 +616,10 @@ export async function getItemDetail(itemId: string): Promise<NewsItem | null> {
 export async function markGroupAsRead(topicId: string): Promise<number> {
   const pool = getPgPool()
   const result = await pool.query(
-    `UPDATE raw_items ri SET is_read = TRUE
+    `UPDATE raw_items ri SET is_read = TRUE, read_at = $2
      FROM topic_items ti
      WHERE ti.topic_id = $1 AND ti.item_id = ri.id AND ri.is_read = FALSE`,
-    [topicId],
+    [topicId, Date.now()],
   )
   /* v8 ignore next -- PG 驱动对 INSERT/UPDATE/DELETE 始终返回 rowCount，此处仅是类型兜底 */
   return result.rowCount ?? 0

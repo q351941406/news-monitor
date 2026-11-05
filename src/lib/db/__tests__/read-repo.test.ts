@@ -3,6 +3,7 @@ import { createTestTables, insertTestItem, dropTestSchema } from './db-test-help
 import { storeRawItems } from '../news-repo'
 import { markAsRead, markAsUnread, markAllAsRead, resetAllRead } from '../read-repo'
 import { getUnreadCount } from '../stats-repo'
+import { getPgPool } from '../connection'
 import type { NewRawItem } from '../../schema'
 
 describe('ReadRepo', () => {
@@ -20,6 +21,45 @@ describe('ReadRepo', () => {
     await markAsRead('test:read:1')
     const after = await getUnreadCount()
     expect(after).toBe(Math.max(0, before - 1))
+  })
+
+  it('标记已读写入 read_at，恢复未读时清空', async () => {
+    await storeRawItems([insertTestItem({ id: 'test:readat:1' }) as NewRawItem])
+    const before = Date.now()
+    await markAsRead('test:readat:1')
+
+    const read = await getPgPool().query('SELECT is_read, read_at FROM raw_items WHERE id = $1', [
+      'test:readat:1',
+    ])
+    expect(read.rows[0].is_read).toBe(true)
+    expect(Number(read.rows[0].read_at)).toBeGreaterThanOrEqual(before)
+
+    await markAsUnread('test:readat:1')
+    const unread = await getPgPool().query('SELECT is_read, read_at FROM raw_items WHERE id = $1', [
+      'test:readat:1',
+    ])
+    expect(unread.rows[0].is_read).toBe(false)
+    expect(unread.rows[0].read_at).toBeNull()
+  })
+
+  it('批量标记已读同样写入 read_at', async () => {
+    await storeRawItems([
+      insertTestItem({ id: 'test:readat:batch:1', source: 'github' }) as NewRawItem,
+      insertTestItem({ id: 'test:readat:batch:2', source: 'github' }) as NewRawItem,
+    ])
+    await markAllAsRead('github')
+    const { rows } = await getPgPool().query(
+      `SELECT COUNT(*)::int AS missing FROM raw_items
+       WHERE id LIKE 'test:readat:batch:%' AND read_at IS NULL`,
+    )
+    expect(rows[0].missing).toBe(0)
+
+    await resetAllRead('github')
+    const after = await getPgPool().query(
+      `SELECT COUNT(*)::int AS stale FROM raw_items
+       WHERE id LIKE 'test:readat:batch:%' AND read_at IS NOT NULL`,
+    )
+    expect(after.rows[0].stale).toBe(0)
   })
 
   it('标记未读后未读计数增加', async () => {

@@ -49,6 +49,7 @@ describe('getWorkflowSchedules —— 与真实 workflow 对齐', () => {
   const schedules = getWorkflowSchedules()
   it('解析出全部计划任务', () => {
     expect(schedules.map((s) => s.workflow).sort()).toEqual([
+      'cleanup.yml',
       'enrich.yml',
       'freshness-check.yml',
       'scrape-github.yml',

@@ -1,0 +1,65 @@
+name: Cleanup Read Items
+
+# 已读内容保留期清理（默认 30 天），与抓取/富化分开：
+# 删除是破坏性操作，独立 workflow 便于单独观察与手动触发。
+on:
+  schedule:
+    # UTC 20:00（北京 04:00）—— 在 enrich（19:00 UTC）之后，避免与 AI 队列争锁
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: '保留天数（默认 30）'
+        required: false
+        default: '30'
+        type: string
+
+concurrency:
+  group: cleanup-read-items
+  # 清理不能并发：两个 DELETE 同时跑只会互相等锁
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run db:migrate:ci
+
+      - name: Purge read items past retention
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          READ_RETENTION_DAYS: ${{ inputs.days || '30' }}
+          REVALIDATE_URL: https://news.myaicode.qzz.io/api/admin/revalidate
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: npx tsx scripts/cleanup.ts
+
+      - name: Report failure to Sentry
+        if: failure()
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          # 不用 `${{ }}` 直接插进 run：GitHub 上下文可能含不可信输入，
+          # Semgrep 的 run-shell-injection 规则会拦（这是对的）。
+          RUN_ID: ${{ github.run_id }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          npx --yes @sentry/cli send-event \
+            -m "🚨 Cleanup read items failed (run #$RUN_ID, branch $REF_NAME)" \
+            --log-level error \
+            --fingerprint "news-monitor-cleanup-$(date +%F)"
