@@ -210,8 +210,10 @@ export default function TopicGroup({
                 }
                 const getDescription = () => {
                   switch (item.source) {
+                    // 只展示仓库简介；README 原文不再呈现（内容长且含大量
+                    // 徽章/HTML，AI 摘要已经提炼过要点）
                     case 'github':
-                      return (rawData.readme as string) || (rawData.description as string)
+                      return (rawData.description as string) || ''
                     case 'producthunt':
                       return (rawData.description as string) || (rawData.tagline as string)
                     case 'twitter':

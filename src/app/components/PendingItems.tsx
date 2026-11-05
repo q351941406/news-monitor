@@ -159,9 +159,11 @@ export default function PendingItems({
               const detail = detailCache[item.id]
               const isLoadingDetail = detailLoading[item.id]
               const rawData = detail?.rawData || {}
+              // GitHub 只展示仓库简介：README 原文不再呈现（长且含徽章/HTML，
+              // 要点已由 AI 摘要提炼）
               const description =
                 item.source === 'github'
-                  ? (rawData.readme as string) || (rawData.description as string) || ''
+                  ? (rawData.description as string) || ''
                   : item.source === 'producthunt'
                     ? (rawData.description as string) || (rawData.tagline as string) || ''
                     : item.source === 'twitter'
