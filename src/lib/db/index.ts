@@ -24,6 +24,13 @@ export {
 export { storeAIAnalysis, getUnprocessedItems } from './ai-repo'
 export { markAsRead, markAsUnread, markAllAsRead, resetAllRead } from './read-repo'
 export {
+  countReadItemsBefore,
+  purgeReadItemsBefore,
+  deleteEmptyTopicGroups,
+  type PurgeReadItemsResult,
+  type PurgeReadItemsOptions,
+} from './retention-repo'
+export {
   initDatabase,
   storeTopicGroups,
   getUngroupedItems,

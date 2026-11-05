@@ -8,6 +8,7 @@ export const rawItems = pgTable('raw_items', {
   url: text('url').notNull(), // 原文链接
   rawData: jsonb('raw_data').notNull(), // 原始数据
   isRead: boolean('is_read').default(false).notNull(), // 已读状态
+  readAt: bigint('read_at', { mode: 'number' }), // 首次标记已读的时间戳（清理保留期用，未读为 NULL）
   fetchedAt: bigint('fetched_at', { mode: 'number' }).notNull(), // 抓取时间戳
   createdAt: timestamp('created_at').defaultNow(),
   aggregatedAt: timestamp('aggregated_at'), // 主题聚合时间（NULL=尚未聚合，队列按此消费）

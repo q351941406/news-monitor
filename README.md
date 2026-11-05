@@ -278,6 +278,7 @@ curl "http://localhost:3000/api/health?deep=1"   # readiness：真实查询 DB
 │   ├── scrape-producthunt.yml# Product Hunt 定时抓取
 │   ├── reaggregate.yml       # 主题手动重聚合
 │   ├── enrich.yml            # 摘要 + 主题聚合（每天一轮）
+│   ├── cleanup.yml           # 已读内容保留期清理（30 天）
 │   ├── freshness-check.yml   # 数据新鲜度巡检
 │   ├── visibility-check.yml  # 可展示性巡检
 │   ├── test.yml              # 单元 + 集成测试 + 覆盖率门槛
@@ -297,6 +298,7 @@ curl "http://localhost:3000/api/health?deep=1"   # readiness：真实查询 DB
 | X / Twitter     | 每天 11:30 (北京时间) | `30 3 * * *`（UTC）   |
 | Product Hunt    | 每 6 小时             | `30 */6 * * *`（UTC） |
 | 内容富化        | 每天 03:00 (北京时间) | `0 19 * * *`（UTC）   |
+| 已读内容清理    | 每天 04:00 (北京时间) | `0 20 * * *`（UTC）   |
 
 > **抓取与富化是分开的两件事**（[ADR-0009](docs/adr/0009-split-scrape-and-enrich.md)）：
 > `scrape-*.yml` 只把原始内容写进 `raw_items`；`enrich.yml` 每天一次统一生成 AI 摘要与主题聚合。
@@ -305,6 +307,14 @@ curl "http://localhost:3000/api/health?deep=1"   # readiness：真实查询 DB
 
 > ⚠️ 上表以 `.github/workflows/*.yml` 为**唯一事实源**。设置页（`/settings`）会在构建期
 > 解析这些 workflow 并展示，`src/lib/__tests__/schedules.test.ts` 固化了这条契约 —— 抄错即红。
+
+## 数据保留
+
+- **未读内容**：永久保留，不参与清理。
+- **已读内容**：标记已读后保留 **30 天**，到期由 `cleanup.yml`（每天 04:00 北京时间）物理删除；
+  `raw_items` 删除时会级联清掉 `ai_analysis` / `topic_items`，随后清理空主题组。
+- 保留期可用 workflow 手动输入的 `days` 或环境变量 `READ_RETENTION_DAYS` 覆盖（默认 30，上限 3650）。
+- 恢复为未读会清空 `read_at`，保留期重新计时。
 
 ## 📦 数据库迁移
 
