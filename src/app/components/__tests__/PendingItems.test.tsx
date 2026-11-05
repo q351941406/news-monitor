@@ -83,6 +83,28 @@ describe('PendingItems — 待归组内容', () => {
     expect(screen.queryByRole('button', { name: '标记为已读' })).not.toBeInTheDocument()
   })
 
+  it('GitHub 条目只展示仓库简介，不展示 README 原文', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: {
+          id: items[0].id,
+          details: '这是 AI 详情',
+          rawData: {
+            description: '仓库简介一句话',
+            readme: '# README 原文标题\n\n这段 README 原文不该出现在页面上',
+          },
+        },
+      }),
+    } as unknown as Response)
+    render(<PendingItems items={items} onMarkRead={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: /待归组内容/ }))
+    fireEvent.click(screen.getByText('这是 AI 生成的摘要'))
+
+    await waitFor(() => expect(screen.getByText('仓库简介一句话')).toBeInTheDocument())
+    expect(screen.queryByText(/这段 README 原文不该出现在页面上/)).not.toBeInTheDocument()
+  })
+
   it('展开某条时懒加载详情', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
